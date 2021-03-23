@@ -29,3 +29,15 @@ public key (via /v2/sync/share).
 A malicious server _could_ replace the contact's User ID and public key with
 someone else's, and make the user think they're sharing with their friend while
 actually sharing with an attacker.
+
+## How to run the server
+
+The server doesn't depend on an external database. It stores all its data on a local filesystem.
+
+Simply build it, and run it.
+
+```bash
+$ cd stingle-server
+$ go build .
+$ ./stingle-server -h
+```
