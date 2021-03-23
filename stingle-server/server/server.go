@@ -4,6 +4,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -129,7 +130,7 @@ func (s *Server) noauth(f func(*http.Request) *StingleResponse) http.HandlerFunc
 // checkToken validates the signed token that was given to the client when it
 // logged in. The client presents this token with most API requests.
 // Returns the decoded token, and the authenticated user.
-func (s *Server) checkToken(tok string) (crypto.Token, database.User, error) {
+func (s *Server) checkToken(tok, scope string) (crypto.Token, database.User, error) {
 	token, err := crypto.DecodeToken(tok)
 	if err != nil {
 		return crypto.Token{}, database.User{}, err
@@ -141,6 +142,12 @@ func (s *Server) checkToken(tok string) (crypto.Token, database.User, error) {
 	if err := crypto.ValidateToken(user.ServerSignKey, token); err != nil {
 		return token, database.User{}, err
 	}
+	if token.Seq != user.TokenSeq {
+		return token, user, fmt.Errorf("unexpected token Seq (%d != %d)", token.Seq, user.TokenSeq)
+	}
+	if token.Scope != scope {
+		return token, user, fmt.Errorf("unexpected token Scope (%q != %q)", token.Scope, scope)
+	}
 	return token, user, nil
 }
 
@@ -150,8 +157,8 @@ func (s *Server) auth(f func(database.User, *http.Request) *StingleResponse) htt
 	return func(w http.ResponseWriter, req *http.Request) {
 		req.ParseForm()
 
-		token, user, err := s.checkToken(req.PostFormValue("token"))
-		if err != nil || token.Scope != "session" || token.Seq != user.TokenSeq {
+		_, user, err := s.checkToken(req.PostFormValue("token"), "session")
+		if err != nil {
 			log.Errorf("%s %s (INVALID TOKEN: %v)", req.Method, req.URL, err)
 			if err := NewResponse("ok").AddPart("logout", "1").Send(w); err != nil {
 				log.Errorf("Send: %v", err)

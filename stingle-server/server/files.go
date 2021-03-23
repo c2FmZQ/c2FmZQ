@@ -40,8 +40,8 @@ func (s *Server) handleUpload(req *http.Request) *StingleResponse {
 		log.Errorf("receiveUpload: %v", err)
 		return NewResponse("nok")
 	}
-	token, user, err := s.checkToken(up.Token)
-	if err != nil || token.Scope != "session" || token.Seq != user.TokenSeq {
+	_, user, err := s.checkToken(up.Token, "session")
+	if err != nil {
 		return NewResponse("nok")
 	}
 
@@ -218,8 +218,8 @@ func (s *Server) handleDelete(user database.User, req *http.Request) *StingleRes
 func (s *Server) handleDownload(w http.ResponseWriter, req *http.Request) {
 	req.ParseForm()
 
-	token, user, err := s.checkToken(req.PostFormValue("token"))
-	if err != nil || token.Scope != "session" {
+	_, user, err := s.checkToken(req.PostFormValue("token"), "session")
+	if err != nil {
 		log.Errorf("%s %s (INVALID TOKEN: %v)", req.Method, req.URL, err)
 		NewResponse("ok").AddPart("logout", "1").Send(w)
 		return
@@ -281,8 +281,8 @@ func (s *Server) tryToHandleRange(w http.ResponseWriter, rangeHdr string, f *os.
 //   - The content of the file is streamed.
 func (s *Server) handleSignedDownload(w http.ResponseWriter, req *http.Request) {
 	_, tok := path.Split(req.URL.RequestURI())
-	token, user, err := s.checkToken(tok)
-	if err != nil || token.Scope != "download" || token.Seq != user.TokenSeq {
+	token, user, err := s.checkToken(tok, "download")
+	if err != nil {
 		log.Errorf("%s %s (INVALID TOKEN: %v)", req.Method, req.URL, err)
 		w.WriteHeader(http.StatusUnauthorized)
 		return
