@@ -215,20 +215,47 @@ type MoveFileParams struct {
 	Headers     []string
 }
 
-func (d *Database) MoveFile(user User, p MoveFileParams) (retErr error) {
-	done1, fsTo, err := d.fileSetForUpdate(user, p.SetTo, p.AlbumIDTo)
-	if err != nil {
-		log.Errorf("fileSetForUpdate(%q, %q, %q) failed: %v", user.Email, p.SetTo, p.AlbumIDTo, err)
-		return err
+// openFileSetPairForUpdate opens two filesets in the right order to avoid
+// deadlocks.
+func (d *Database) openFileSetPairForUpdate(user User, set1, album1, set2, album2 string) (done func(*error), fs1 *FileSet, fs2 *FileSet, err error) {
+	var done1, done2 func(*error) error
+	if set1 < set2 || (set1 == set2 && album1 < album2) {
+		// Open fs1 first, then fs2.
+		if done1, fs1, err = d.fileSetForUpdate(user, set1, album1); err != nil {
+			return
+		}
+		if done2, fs2, err = d.fileSetForUpdate(user, set2, album2); err != nil {
+			done1(&err)
+			return
+		}
+	} else {
+		// Open fs2 first, then fs1.
+		if done2, fs2, err = d.fileSetForUpdate(user, set2, album2); err != nil {
+			return
+		}
+		if done1, fs1, err = d.fileSetForUpdate(user, set1, album1); err != nil {
+			done2(&err)
+			return
+		}
 	}
-	defer done1(&retErr)
+	done = func(errp *error) {
+		done1(errp)
+		done2(errp)
+	}
+	return
+}
 
-	done2, fsFrom, err := d.fileSetForUpdate(user, p.SetFrom, p.AlbumIDFrom)
+func (d *Database) MoveFile(user User, p MoveFileParams) (retErr error) {
+	if p.SetTo == p.SetFrom && p.AlbumIDTo == p.AlbumIDFrom {
+		return errors.New("src and dest are the same")
+	}
+	done, fsTo, fsFrom, err := d.openFileSetPairForUpdate(user, p.SetTo, p.AlbumIDTo, p.SetFrom, p.AlbumIDFrom)
 	if err != nil {
-		log.Errorf("fileSetForUpdate(%q, %q, %q) failed: %v", user.Email, p.SetFrom, p.AlbumIDFrom, err)
+		log.Errorf("openFileSetPairForUpdate(%q, %q, %q, %q, %q) failed: %v",
+			user.Email, p.SetTo, p.AlbumIDTo, p.SetFrom, p.AlbumIDFrom, err)
 		return err
 	}
-	defer done2(&retErr)
+	defer done(&retErr)
 
 	for i := range p.Filenames {
 		fn := p.Filenames[i]

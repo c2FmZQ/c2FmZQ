@@ -148,6 +148,10 @@ func (d *Database) DeleteAlbum(owner User, albumID string) error {
 	if err != nil {
 		return err
 	}
+	if err := lock(albumRef.File); err != nil {
+		return err
+	}
+	defer unlock(albumRef.File)
 	if err := os.Remove(albumRef.File); err != nil {
 		log.Errorf("os.Remove(%q) failed: %v", albumRef.File, err)
 	}
@@ -248,7 +252,8 @@ func (d *Database) AlbumUpdates(user User, ts int64) ([]StingleAlbum, error) {
 	for _, v := range albumRefs {
 		fs, err := d.FileSet(user, AlbumSet, v.AlbumID)
 		if err != nil {
-			return nil, err
+			log.Errorf("d.FileSet(%q, %q, %q) failed: %v", user.Email, AlbumSet, v.AlbumID, err)
+			continue
 		}
 		if fs.Album.DateModified > ts {
 			sa := convertAlbumSpecToStingleAlbum(fs.Album)
@@ -275,18 +280,21 @@ func (d *Database) ShareAlbum(user User, sharing *StingleAlbum, sharingKeys map[
 		return err
 	}
 	defer done(&retErr)
+	if fs.Album.Members == nil {
+		fs.Album.Members = make(map[int]bool)
+	}
+	if fs.Album.SharingKeys == nil {
+		fs.Album.SharingKeys = make(map[int]string)
+	}
+	if fs.Album.OwnerID != user.UserID && (!fs.Album.IsShared || !fs.Album.Members[user.UserID] || !fs.Album.Permissions.AllowAdd()) {
+		return fmt.Errorf("user %d is not allow to share this album", user.UserID)
+	}
 	if fs.Album.OwnerID == user.UserID {
 		fs.Album.IsShared = sharing.IsShared == "1"
 		fs.Album.IsHidden = sharing.IsHidden == "1"
 		fs.Album.IsLocked = sharing.IsLocked == "1"
 		fs.Album.SyncLocal = sharing.SyncLocal == "1"
 		fs.Album.Permissions = SharingPermissions(sharing.Permissions)
-	}
-	if fs.Album.Members == nil {
-		fs.Album.Members = make(map[int]bool)
-	}
-	if fs.Album.SharingKeys == nil {
-		fs.Album.SharingKeys = make(map[int]string)
 	}
 	for _, m := range strings.Split(sharing.Members, ",") {
 		id, err := strconv.ParseInt(m, 10, 32)
@@ -427,12 +435,16 @@ func (d *Database) UpdatePerms(owner User, albumID string, permissions SharingPe
 
 // RemoveAlbumMember removes a member from the album.
 func (d *Database) RemoveAlbumMember(owner User, albumID string, memberID int) (retErr error) {
+	if owner.UserID == memberID {
+		return nil
+	}
 	done, fs, err := d.fileSetForUpdate(owner, AlbumSet, albumID)
 	if err != nil {
 		return err
 	}
 	defer done(&retErr)
 	delete(fs.Album.Members, memberID)
+	delete(fs.Album.SharingKeys, memberID)
 	fs.Album.DateModified = nowInMS()
 	return d.removeAlbumRef(memberID, albumID)
 }
