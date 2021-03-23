@@ -286,8 +286,8 @@ func (d *Database) ShareAlbum(user User, sharing *StingleAlbum, sharingKeys map[
 	if fs.Album.SharingKeys == nil {
 		fs.Album.SharingKeys = make(map[int]string)
 	}
-	if fs.Album.OwnerID != user.UserID && (!fs.Album.IsShared || !fs.Album.Members[user.UserID] || !fs.Album.Permissions.AllowAdd()) {
-		return fmt.Errorf("user %d is not allow to share this album", user.UserID)
+	if fs.Album.OwnerID != user.UserID && (!fs.Album.IsShared || !fs.Album.Members[user.UserID] || !fs.Album.Permissions.AllowShare()) {
+		return fmt.Errorf("user %d is not allowed to share this album", user.UserID)
 	}
 	if fs.Album.OwnerID == user.UserID {
 		fs.Album.IsShared = sharing.IsShared == "1"
@@ -297,36 +297,35 @@ func (d *Database) ShareAlbum(user User, sharing *StingleAlbum, sharingKeys map[
 		fs.Album.Permissions = SharingPermissions(sharing.Permissions)
 	}
 	for _, m := range strings.Split(sharing.Members, ",") {
-		id, err := strconv.ParseInt(m, 10, 32)
+		sid, err := strconv.ParseInt(m, 10, 32)
 		if err != nil {
 			log.Errorf("Invalid members: %q", sharing.Members)
 			continue
 		}
-		if int(id) != fs.Album.OwnerID && sharingKeys[m] == "" {
+		id := int(sid)
+		if id != fs.Album.OwnerID && sharingKeys[m] == "" {
 			log.Errorf("Sharing album with %d but no sharing key", id)
 			continue
 		}
-		fs.Album.Members[int(id)] = true
-	}
-	for k, v := range sharingKeys {
-		id, err := strconv.ParseInt(k, 10, 32)
-		if err != nil {
-			log.Errorf("Invalid sharingKeys: %v", sharingKeys)
-			continue
-		}
-		if _, ok := fs.Album.SharingKeys[int(id)]; ok && fs.Album.OwnerID != user.UserID {
-			log.Errorf("Non-owner %d trying to overwrite sharing key for %d", user.UserID, id)
-			continue
-		}
-		fs.Album.SharingKeys[int(id)] = v
-	}
-	for id, _ := range fs.Album.Members {
+		fs.Album.Members[id] = true
 		if err := d.addAlbumRef(id, fs.Album.AlbumID, albumRef.File); err != nil {
 			log.Errorf("addAlbumRef(%d, %q, %q) failed: %v", id, fs.Album.AlbumID, albumRef.File, err)
 		}
 	}
+	for k, v := range sharingKeys {
+		sid, err := strconv.ParseInt(k, 10, 32)
+		if err != nil {
+			log.Errorf("Invalid sharingKeys: %v", sharingKeys)
+			continue
+		}
+		id := int(sid)
+		if _, ok := fs.Album.SharingKeys[id]; ok && fs.Album.OwnerID != user.UserID {
+			log.Errorf("Non-owner %d trying to overwrite sharing key for %d", user.UserID, id)
+			continue
+		}
+		fs.Album.SharingKeys[id] = v
+	}
 	fs.Album.DateModified = nowInMS()
-
 	d.addCrossContacts(d.lookupContacts(fs.Album.Members))
 	return nil
 }
