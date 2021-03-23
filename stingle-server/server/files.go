@@ -224,7 +224,7 @@ func (s *Server) handleDownload(w http.ResponseWriter, req *http.Request) {
 		NewResponse("ok").AddPart("logout", "1").Send(w)
 		return
 	}
-	log.Infof("%s %s from %s (UserID:%d)", req.Method, req.URL, req.RemoteAddr, user.UserID)
+	log.Infof("%s %s (UserID:%d)", req.Method, req.URL, user.UserID)
 	filename := req.PostFormValue("file")
 	set := req.PostFormValue("set")
 	thumb := req.PostFormValue("thumb") == "1"
@@ -287,7 +287,7 @@ func (s *Server) handleSignedDownload(w http.ResponseWriter, req *http.Request) 
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
-	log.Infof("%s %s from %s (UserID:%d)", req.Method, req.URL, req.RemoteAddr, user.UserID)
+	log.Infof("%s %s (UserID:%d)", req.Method, req.URL, user.UserID)
 
 	f, err := s.db.DownloadFile(user, token.Set, token.File, token.Thumb)
 	if err != nil {
