@@ -98,14 +98,14 @@ func (s *Server) handleLogin(req *http.Request) *StingleResponse {
 		AddPart("keyBundle", u.KeyBundle).
 		AddPart("serverPublicKey", u.ServerPublicKeyForExport()).
 		AddPart("token", crypto.MintToken(u.ServerSignKey,
-			crypto.Token{Scope: "session", Subject: u.Email}, 30*24*time.Hour)).
+			crypto.Token{Scope: "session", Subject: u.Email, Seq: u.TokenSeq},
+			180*24*time.Hour)).
 		AddPart("userId", fmt.Sprintf("%d", u.UserID)).
 		AddPart("isKeyBackedUp", u.IsBackup).
 		AddPart("homeFolder", u.HomeFolder)
 }
 
-// handleLogout handles the /v2/login/logout endpoint. This server doesn't
-// actually do anything with it.
+// handleLogout handles the /v2/login/logout endpoint.
 //
 // Arguments:
 //  - user: The authenticated user.
@@ -114,7 +114,12 @@ func (s *Server) handleLogin(req *http.Request) *StingleResponse {
 // Returns:
 //  - StringleResponse(ok)
 func (s *Server) handleLogout(user database.User, req *http.Request) *StingleResponse {
-	return NewResponse("ok")
+	user.TokenSeq++
+	if err := s.db.UpdateUser(user); err != nil {
+		log.Errorf("UpdateUser: %v", err)
+		return NewResponse("nok")
+	}
+	return NewResponse("ok").AddPart("logout", "1")
 }
 
 // handleChangePass handles the /v2/login/changePass endpoint.
@@ -141,6 +146,7 @@ func (s *Server) handleChangePass(user database.User, req *http.Request) *Stingl
 	user.Password = params["newPassword"]
 	user.Salt = params["newSalt"]
 	user.KeyBundle = params["keyBundle"]
+	user.TokenSeq++
 	pk, err := crypto.DecodeKeyBundle(user.KeyBundle)
 	if err != nil {
 		log.Errorf("DecodeKeyBundle: %v", err)
@@ -154,7 +160,8 @@ func (s *Server) handleChangePass(user database.User, req *http.Request) *Stingl
 	}
 	return NewResponse("ok").
 		AddPart("token", crypto.MintToken(s.db.SignKeyForUser(user.Email),
-			crypto.Token{Scope: "session", Subject: user.Email}, 30*24*time.Hour))
+			crypto.Token{Scope: "session", Subject: user.Email, Seq: user.TokenSeq},
+			180*24*time.Hour))
 }
 
 // handleGetServerPK handles the /v2/login/getServerPK endpoint. The server's
@@ -234,6 +241,7 @@ func (s *Server) handleRecoverAccount(req *http.Request) *StingleResponse {
 	user.Password = params["newPassword"]
 	user.Salt = params["newSalt"]
 	user.KeyBundle = params["keyBundle"]
+	user.TokenSeq++
 	pk, err := crypto.DecodeKeyBundle(user.KeyBundle)
 	if err != nil {
 		log.Errorf("DecodeKeyBundle: %v", err)

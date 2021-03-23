@@ -151,7 +151,7 @@ func (s *Server) auth(f func(database.User, *http.Request) *StingleResponse) htt
 		req.ParseForm()
 
 		token, user, err := s.checkToken(req.PostFormValue("token"))
-		if err != nil || token.Scope != "session" {
+		if err != nil || token.Scope != "session" || token.Seq != user.TokenSeq {
 			log.Errorf("%s %s (INVALID TOKEN: %v)", req.Method, req.URL, err)
 			if err := NewResponse("ok").AddPart("logout", "1").Send(w); err != nil {
 				log.Errorf("Send: %v", err)

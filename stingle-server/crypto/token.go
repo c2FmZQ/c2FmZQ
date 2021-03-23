@@ -14,6 +14,8 @@ import (
 type Token struct {
 	// Who this token was issued to.
 	Subject string `json:"sub"`
+	// The user's current token seq number.
+	Seq int `json:"seq"`
 	// The reason/purpose of the token.
 	Scope string `json:"scope"`
 	// When the token was issued.

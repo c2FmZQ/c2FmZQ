@@ -36,6 +36,7 @@ type User struct {
 	ServerKey     crypto.SecretKey     `json:"serverKey"`
 	ServerSignKey crypto.SignSecretKey `json:"serverSignKey"`
 	PublicKey     crypto.PublicKey     `json:"publicKey"`
+	TokenSeq      int                  `json:"tokenSeq"`
 }
 
 // Encapsulates the information about a user's contact (another user).
@@ -112,6 +113,7 @@ func (d *Database) AddUser(u User) (retErr error) {
 	u.HomeFolder = hf
 	u.ServerKey = crypto.MakeSecretKey()
 	u.ServerSignKey = crypto.MakeSignSecretKey()
+	u.TokenSeq = 1
 	return saveJSON(filepath.Join(home, userFile), u)
 }
 

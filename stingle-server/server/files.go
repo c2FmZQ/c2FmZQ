@@ -41,7 +41,7 @@ func (s *Server) handleUpload(req *http.Request) *StingleResponse {
 		return NewResponse("nok")
 	}
 	token, user, err := s.checkToken(up.Token)
-	if err != nil || token.Scope != "session" {
+	if err != nil || token.Scope != "session" || token.Seq != user.TokenSeq {
 		return NewResponse("nok")
 	}
 
@@ -282,7 +282,7 @@ func (s *Server) tryToHandleRange(w http.ResponseWriter, rangeHdr string, f *os.
 func (s *Server) handleSignedDownload(w http.ResponseWriter, req *http.Request) {
 	_, tok := path.Split(req.URL.RequestURI())
 	token, user, err := s.checkToken(tok)
-	if err != nil || token.Scope != "download" {
+	if err != nil || token.Scope != "download" || token.Seq != user.TokenSeq {
 		log.Errorf("%s %s (INVALID TOKEN: %v)", req.Method, req.URL, err)
 		w.WriteHeader(http.StatusUnauthorized)
 		return
@@ -313,6 +313,7 @@ func (s *Server) makeDownloadURL(user database.User, host, file, set string, isT
 		crypto.Token{
 			Scope:   "download",
 			Subject: user.Email,
+			Seq:     user.TokenSeq,
 			Set:     set,
 			File:    file,
 			Thumb:   isThumb,
