@@ -52,7 +52,7 @@ func New(db *database.Database, addr string) *Server {
 	s.mux.HandleFunc("/v2/sync/download", s.handleDownload)
 	s.mux.HandleFunc("/v2/signedDownload/", s.handleSignedDownload)
 	s.mux.HandleFunc("/v2/sync/getDownloadUrls", s.auth(s.handleGetDownloadUrls))
-	s.mux.HandleFunc("/v2/sync/getUrl", s.auth(s.handleGetUrl))
+	s.mux.HandleFunc("/v2/sync/getUrl", s.auth(s.handleGetURL))
 
 	s.mux.HandleFunc("/v2/sync/addAlbum", s.auth(s.handleAddAlbum))
 	s.mux.HandleFunc("/v2/sync/deleteAlbum", s.auth(s.handleDeleteAlbum))

@@ -12,11 +12,23 @@ import (
 	"stingle-server/crypto"
 )
 
+func createAccountAndLogin(sock, email string) (*client, error) {
+	c := newClient(sock)
+
+	if err := c.createAccount(email); err != nil {
+		return nil, fmt.Errorf("c.createAccount failed: %v", err)
+	}
+	if err := c.login(); err != nil {
+		return nil, fmt.Errorf("c.login failed: %v", err)
+	}
+	return c, nil
+}
+
 func TestLogin(t *testing.T) {
 	sock, shutdown := startServer(t)
 	defer shutdown()
 
-	c := newClient(t, sock)
+	c := newClient(sock)
 	if err := c.createAccount("alice"); err != nil {
 		t.Fatalf("c.createAccount failed: %v", err)
 	}
@@ -42,25 +54,25 @@ func TestLogin(t *testing.T) {
 	// Negative tests.
 	c.password = "WrongPassword"
 	if err := c.login(); err == nil {
-		t.Fatal("c.login should have failed but succeeded")
+		t.Error("c.login should have failed but succeeded")
 	}
 	c.token = "BadToken"
 	if err := c.changePass(); err == nil {
-		t.Fatal("c.changePass should have failed but succeeded")
+		t.Error("c.changePass should have failed but succeeded")
 	}
 	c.secretKey = crypto.MakeSecretKey()
 	if err := c.recoverAccount(); err == nil {
-		t.Fatal("c.recoverAccount should have failed but succeeded")
+		t.Error("c.recoverAccount should have failed but succeeded")
 	}
 	if err := c.checkKey(); err == nil {
-		t.Fatal("c.checkKey should have failed but succeeded")
+		t.Error("c.checkKey should have failed but succeeded")
 	}
 	c.email = "bob"
 	if err := c.preLogin(); err == nil {
-		t.Fatal("c.preLogin should have failed but succeeded")
+		t.Error("c.preLogin should have failed but succeeded")
 	}
 	if err := c.getServerPK(); err == nil {
-		t.Fatal("c.getServerPK should have failed but succeeded")
+		t.Error("c.getServerPK should have failed but succeeded")
 	}
 }
 
@@ -98,7 +110,7 @@ func (c *client) preLogin() error {
 		return fmt.Errorf("status:nok %+v", sr)
 	}
 	if want, got := c.salt, sr.Parts["salt"]; want != got {
-		c.t.Errorf("preLogin: unexpected salt: want %q, got %q", want, got)
+		return fmt.Errorf("preLogin: unexpected salt: want %q, got %q", want, got)
 	}
 	return nil
 }
@@ -115,10 +127,10 @@ func (c *client) login() error {
 		return fmt.Errorf("status:nok %+v", sr)
 	}
 	if want, got := c.keyBundle, sr.Parts["keyBundle"]; want != got {
-		c.t.Errorf("login: unexpected keyBundle: want %q, got %q", want, got)
+		return fmt.Errorf("login: unexpected keyBundle: want %q, got %q", want, got)
 	}
 	if want, got := c.isBackup, sr.Parts["isKeyBackedUp"]; want != got {
-		c.t.Errorf("login: unexpected isKeyBackedUp: want %q, got %q", want, got)
+		return fmt.Errorf("login: unexpected isKeyBackedUp: want %q, got %q", want, got)
 	}
 	id, err := strconv.ParseInt(sr.Parts["userId"].(string), 10, 32)
 	if err != nil {
@@ -156,7 +168,7 @@ func (c *client) getServerPK() error {
 		return err
 	}
 	if want, got := []byte(c.serverPublicKey.Bytes), pk; !reflect.DeepEqual(want, got) {
-		c.t.Errorf("login: unexpected serverPK: want %#v, got %#v", want, got)
+		return fmt.Errorf("login: unexpected serverPK: want %#v, got %#v", want, got)
 	}
 	return nil
 }
@@ -172,14 +184,14 @@ func (c *client) checkKey() error {
 		return fmt.Errorf("status:nok %+v", sr)
 	}
 	if want, got := c.isBackup, sr.Parts["isKeyBackedUp"]; want != got {
-		c.t.Errorf("checkKey: unexpected isKeyBackedUp: want %q, got %q", want, got)
+		return fmt.Errorf("checkKey: unexpected isKeyBackedUp: want %q, got %q", want, got)
 	}
 	pk, err := base64.StdEncoding.DecodeString(sr.Parts["serverPK"].(string))
 	if err != nil {
 		return err
 	}
 	if want, got := []byte(c.serverPublicKey.Bytes), pk; !reflect.DeepEqual(want, got) {
-		c.t.Errorf("checkKey: unexpected serverPK: want %#v, got %#v", want, got)
+		return fmt.Errorf("checkKey: unexpected serverPK: want %#v, got %#v", want, got)
 	}
 	dec, err := crypto.SealBoxOpen(sr.Parts["challenge"].(string), c.secretKey)
 	if err != nil {
@@ -234,7 +246,7 @@ func (c *client) recoverAccount() error {
 		return fmt.Errorf("status:nok %+v", sr)
 	}
 	if want, got := "OK", sr.Parts["result"]; want != got {
-		c.t.Errorf("recoverAccount: unexpected result: want %v, got %v", want, got)
+		return fmt.Errorf("recoverAccount: unexpected result: want %v, got %v", want, got)
 	}
 	return nil
 }

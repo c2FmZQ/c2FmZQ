@@ -291,7 +291,7 @@ func (s *Server) handleSignedDownload(w http.ResponseWriter, req *http.Request) 
 
 	f, err := s.db.DownloadFile(user, token.Set, token.File, token.Thumb)
 	if err != nil {
-		log.Errorf("DownloadFile failed: %v", err)
+		log.Errorf("DownloadFile(%q, %q, %q, %v) failed: %v", user.Email, token.Set, token.File, token.Thumb, err)
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
@@ -357,7 +357,7 @@ func (s *Server) handleGetDownloadUrls(user database.User, req *http.Request) *S
 	return NewResponse("ok").AddPart("urls", urls)
 }
 
-// handleGetUrl handles the /v2/sync/getUrl endpoint. It is used to created
+// handleGetURL handles the /v2/sync/getUrl endpoint. It is used to created
 // a single signed URL to download a file.
 //
 // Arguments:
@@ -371,7 +371,7 @@ func (s *Server) handleGetDownloadUrls(user database.User, req *http.Request) *S
 // Returns:
 //   - StringleResponse(ok).
 //        Parts("url", signed url)
-func (s *Server) handleGetUrl(user database.User, req *http.Request) *StingleResponse {
+func (s *Server) handleGetURL(user database.User, req *http.Request) *StingleResponse {
 	return NewResponse("ok").
 		AddPart("url", s.makeDownloadURL(user, req.Host, req.PostFormValue("file"), req.PostFormValue("set"), false))
 }
