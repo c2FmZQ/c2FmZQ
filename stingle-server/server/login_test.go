@@ -1,0 +1,240 @@
+package server_test
+
+import (
+	"bytes"
+	"encoding/base64"
+	"fmt"
+	"net/url"
+	"reflect"
+	"strconv"
+	"testing"
+
+	"stingle-server/crypto"
+)
+
+func TestLogin(t *testing.T) {
+	sock, shutdown := startServer(t)
+	defer shutdown()
+
+	c := newClient(t, sock)
+	if err := c.createAccount("alice"); err != nil {
+		t.Fatalf("c.createAccount failed: %v", err)
+	}
+	if err := c.preLogin(); err != nil {
+		t.Fatalf("c.preLogin failed: %v", err)
+	}
+	if err := c.login(); err != nil {
+		t.Fatalf("c.login failed: %v", err)
+	}
+	if err := c.getServerPK(); err != nil {
+		t.Fatalf("c.getServerPK failed: %v", err)
+	}
+	if err := c.checkKey(); err != nil {
+		t.Fatalf("c.checkKey failed: %v", err)
+	}
+	if err := c.changePass(); err != nil {
+		t.Fatalf("c.changePass failed: %v", err)
+	}
+	if err := c.recoverAccount(); err != nil {
+		t.Fatalf("c.recoverAccount failed: %v", err)
+	}
+
+	// Negative tests.
+	c.password = "WrongPassword"
+	if err := c.login(); err == nil {
+		t.Fatal("c.login should have failed but succeeded")
+	}
+	c.token = "BadToken"
+	if err := c.changePass(); err == nil {
+		t.Fatal("c.changePass should have failed but succeeded")
+	}
+	c.secretKey = crypto.MakeSecretKey()
+	if err := c.recoverAccount(); err == nil {
+		t.Fatal("c.recoverAccount should have failed but succeeded")
+	}
+	if err := c.checkKey(); err == nil {
+		t.Fatal("c.checkKey should have failed but succeeded")
+	}
+	c.email = "bob"
+	if err := c.preLogin(); err == nil {
+		t.Fatal("c.preLogin should have failed but succeeded")
+	}
+	if err := c.getServerPK(); err == nil {
+		t.Fatal("c.getServerPK should have failed but succeeded")
+	}
+}
+
+func (c *client) createAccount(email string) error {
+	c.email = email
+	c.password = "PASSWORD"
+	c.salt = "SALT"
+	c.keyBundle = crypto.MakeKeyBundle(c.secretKey.PublicKey())
+	c.isBackup = "0"
+	form := url.Values{}
+	form.Set("email", c.email)
+	form.Set("password", c.password)
+	form.Set("salt", c.salt)
+	form.Set("keyBundle", c.keyBundle)
+	form.Set("isBackup", c.isBackup)
+
+	sr, err := c.sendRequest("/v2/register/createAccount", form)
+	if err != nil {
+		return err
+	}
+	if sr.Status != "ok" {
+		return fmt.Errorf("status:nok %+v", sr)
+	}
+	return nil
+}
+
+func (c *client) preLogin() error {
+	form := url.Values{}
+	form.Set("email", c.email)
+	sr, err := c.sendRequest("/v2/login/preLogin", form)
+	if err != nil {
+		return err
+	}
+	if sr.Status != "ok" {
+		return fmt.Errorf("status:nok %+v", sr)
+	}
+	if want, got := c.salt, sr.Parts["salt"]; want != got {
+		c.t.Errorf("preLogin: unexpected salt: want %q, got %q", want, got)
+	}
+	return nil
+}
+
+func (c *client) login() error {
+	form := url.Values{}
+	form.Set("email", c.email)
+	form.Set("password", c.password)
+	sr, err := c.sendRequest("/v2/login/login", form)
+	if err != nil {
+		return err
+	}
+	if sr.Status != "ok" {
+		return fmt.Errorf("status:nok %+v", sr)
+	}
+	if want, got := c.keyBundle, sr.Parts["keyBundle"]; want != got {
+		c.t.Errorf("login: unexpected keyBundle: want %q, got %q", want, got)
+	}
+	if want, got := c.isBackup, sr.Parts["isKeyBackedUp"]; want != got {
+		c.t.Errorf("login: unexpected isKeyBackedUp: want %q, got %q", want, got)
+	}
+	id, err := strconv.ParseInt(sr.Parts["userId"].(string), 10, 32)
+	if err != nil {
+		return err
+	}
+	c.userID = int(id)
+	pk, err := base64.StdEncoding.DecodeString(sr.Parts["serverPublicKey"].(string))
+	if err != nil {
+		return err
+	}
+	c.serverPublicKey.Bytes = pk
+	token, ok := sr.Parts["token"].(string)
+	if !ok || token == "" {
+		return fmt.Errorf("login: invalid token: %#v", sr.Parts["token"])
+	}
+	c.token = token
+	return nil
+}
+
+func (c *client) getServerPK() error {
+	form := url.Values{}
+	form.Set("token", c.token)
+	sr, err := c.sendRequest("/v2/keys/getServerPK", form)
+	if err != nil {
+		return err
+	}
+	if sr.Status != "ok" {
+		return fmt.Errorf("status:nok %+v", sr)
+	}
+	if sr.Parts["serverPK"] == nil {
+		return fmt.Errorf("server did not return serverPK")
+	}
+	pk, err := base64.StdEncoding.DecodeString(sr.Parts["serverPK"].(string))
+	if err != nil {
+		return err
+	}
+	if want, got := []byte(c.serverPublicKey.Bytes), pk; !reflect.DeepEqual(want, got) {
+		c.t.Errorf("login: unexpected serverPK: want %#v, got %#v", want, got)
+	}
+	return nil
+}
+
+func (c *client) checkKey() error {
+	form := url.Values{}
+	form.Set("email", c.email)
+	sr, err := c.sendRequest("/v2/login/checkKey", form)
+	if err != nil {
+		return err
+	}
+	if sr.Status != "ok" {
+		return fmt.Errorf("status:nok %+v", sr)
+	}
+	if want, got := c.isBackup, sr.Parts["isKeyBackedUp"]; want != got {
+		c.t.Errorf("checkKey: unexpected isKeyBackedUp: want %q, got %q", want, got)
+	}
+	pk, err := base64.StdEncoding.DecodeString(sr.Parts["serverPK"].(string))
+	if err != nil {
+		return err
+	}
+	if want, got := []byte(c.serverPublicKey.Bytes), pk; !reflect.DeepEqual(want, got) {
+		c.t.Errorf("checkKey: unexpected serverPK: want %#v, got %#v", want, got)
+	}
+	dec, err := crypto.SealBoxOpen(sr.Parts["challenge"].(string), c.secretKey)
+	if err != nil {
+		return fmt.Errorf("checkKey challenge error: %v", err)
+	}
+	if prefix := []byte("validkey_"); !bytes.HasPrefix(dec, prefix) {
+		return fmt.Errorf("checkKey challenge has unexpected prefix: %v", dec)
+	}
+	return nil
+}
+
+func (c *client) changePass() error {
+	params := make(map[string]string)
+	params["newPassword"] = "NEWPASSWORD"
+	params["newSalt"] = "NEWSALT"
+	params["keyBundle"] = c.keyBundle
+
+	form := url.Values{}
+	form.Set("token", c.token)
+	form.Set("params", c.encodeParams(params))
+
+	sr, err := c.sendRequest("/v2/login/changePass", form)
+	if err != nil {
+		return err
+	}
+	if sr.Status != "ok" {
+		return fmt.Errorf("status:nok %+v", sr)
+	}
+	token, ok := sr.Parts["token"].(string)
+	if !ok || token == "" {
+		return fmt.Errorf("login: invalid token: %#v", sr.Parts["token"])
+	}
+	c.token = token
+	return nil
+}
+
+func (c *client) recoverAccount() error {
+	params := make(map[string]string)
+	params["newPassword"] = "NEWPASSWORD"
+	params["newSalt"] = "NEWSALT"
+	params["keyBundle"] = c.keyBundle
+
+	form := url.Values{}
+	form.Set("email", c.email)
+	form.Set("params", c.encodeParams(params))
+
+	sr, err := c.sendRequest("/v2/login/recoverAccount", form)
+	if err != nil {
+		return err
+	}
+	if sr.Status != "ok" {
+		return fmt.Errorf("status:nok %+v", sr)
+	}
+	if want, got := "OK", sr.Parts["result"]; want != got {
+		c.t.Errorf("recoverAccount: unexpected result: want %v, got %v", want, got)
+	}
+	return nil
+}

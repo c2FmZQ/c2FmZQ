@@ -45,3 +45,17 @@ func SealBox(msg []byte, pk PublicKey) string {
 	b := sodium.Bytes(msg)
 	return base64.StdEncoding.EncodeToString([]byte(b.SealedBox(sodium.BoxPublicKey(pk))))
 }
+
+// SealBoxOpen decrypts a message encrypted by SealBox.
+func SealBoxOpen(msg string, sk SecretKey) ([]byte, error) {
+	b, err := base64.StdEncoding.DecodeString(msg)
+	if err != nil {
+		return nil, err
+	}
+	kp := sodium.BoxKP{sodium.BoxPublicKey(sk.PublicKey()), sodium.BoxSecretKey(sk)}
+	d, err := sodium.Bytes(b).SealedBoxOpen(kp)
+	if err != nil {
+		return nil, err
+	}
+	return []byte(d), nil
+}

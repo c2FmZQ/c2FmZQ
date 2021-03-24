@@ -164,7 +164,7 @@ func (s *Server) handleChangePass(user database.User, req *http.Request) *Stingl
 			180*24*time.Hour))
 }
 
-// handleGetServerPK handles the /v2/login/getServerPK endpoint. The server's
+// handleGetServerPK handles the /v2/keys/getServerPK endpoint. The server's
 // public key is used to encrypt the "params" arguments.
 //
 // Arguments:

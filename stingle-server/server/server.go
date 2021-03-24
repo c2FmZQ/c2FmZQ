@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"strconv"
 
@@ -83,6 +84,15 @@ func (s *Server) RunWithTLS(certFile, keyFile string) error {
 		Handler: gziphandler.GzipHandler(s.mux),
 	}
 	return s.srv.ListenAndServeTLS(certFile, keyFile)
+}
+
+// RunWithListener runs the server using a pre-existing Listener. Used for testing.
+func (s *Server) RunWithListener(l net.Listener) error {
+	s.srv = &http.Server{
+		Addr:    s.addr,
+		Handler: gziphandler.GzipHandler(s.mux),
+	}
+	return s.srv.Serve(l)
 }
 
 // Shutdown cleanly shutdowns the http server.

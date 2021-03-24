@@ -2,6 +2,7 @@ package crypto
 
 import (
 	"bytes"
+	"reflect"
 	"testing"
 )
 
@@ -16,5 +17,19 @@ func TestEncryptDecrypt(t *testing.T) {
 		t.Errorf("DecryptMessage failed, err: %v", err)
 	} else if !bytes.Equal(got, msg) {
 		t.Errorf("DecryptMessage got %v, want %v", got, msg)
+	}
+}
+
+func TestSealBox(t *testing.T) {
+	key := MakeSecretKey()
+	msg := []byte("foo bar")
+	enc := SealBox(msg, key.PublicKey())
+
+	dec, err := SealBoxOpen(enc, key)
+	if err != nil {
+		t.Fatalf("SealBoxOpen failed: %v", err)
+	}
+	if want, got := msg, dec; !reflect.DeepEqual(want, got) {
+		t.Errorf("SealBoxOpen returned unexpected result: Want %v, got %v", want, got)
 	}
 }

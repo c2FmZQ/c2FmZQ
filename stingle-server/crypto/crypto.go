@@ -115,3 +115,9 @@ func DecodeKeyBundle(bundle string) (PublicKey, error) {
 	return PublicKey(pk), nil
 
 }
+
+func MakeKeyBundle(pk PublicKey) string {
+	b := []byte{'S', 'P', 'K', 1, 2}
+	b = append(b, []byte(sodium.BoxPublicKey(pk).Bytes)...)
+	return base64.StdEncoding.EncodeToString(b)
+}
