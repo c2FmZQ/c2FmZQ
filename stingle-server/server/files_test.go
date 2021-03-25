@@ -116,6 +116,93 @@ func TestUploadDownload(t *testing.T) {
 	}
 }
 
+func TestEmptyTrash(t *testing.T) {
+	sock, shutdown := startServer(t)
+	defer shutdown()
+
+	c, err := createAccountAndLogin(sock, "alice")
+	if err != nil {
+		t.Fatalf("createAccountAndLogin failed: %v", err)
+	}
+
+	// Upload to trash.
+	for i := 0; i < 10; i++ {
+		f := fmt.Sprintf("filename%d", i)
+		sr, err := c.uploadFile(f, database.TrashSet, "")
+		if err != nil {
+			t.Errorf("c.uploadFile(%q) failed: %v", f, err)
+		}
+		if want, got := "ok", sr.Status; want != got {
+			t.Errorf("c.uploadFile returned unexpected status: Want %q, got %q", want, got)
+		}
+	}
+
+	// Empty trash.
+	if err := c.emptyTrash(nowString()); err != nil {
+		t.Errorf("c.emptyTrash failed: %v", err)
+	}
+
+	// Attempts to download the deleted files should fail.
+	for i := 0; i < 10; i++ {
+		f := fmt.Sprintf("filename%d", i)
+		url, err := c.getURL(f, database.TrashSet)
+		if err != nil {
+			t.Errorf("c.getURL(%q, %q) failed: %v", f, database.TrashSet, err)
+		}
+		if _, err := c.downloadGet(url); err == nil {
+			t.Errorf("c.downloadGet(%q) should have failed, but didn't", url)
+		}
+	}
+}
+
+func TestDelete(t *testing.T) {
+	sock, shutdown := startServer(t)
+	defer shutdown()
+
+	c, err := createAccountAndLogin(sock, "alice")
+	if err != nil {
+		t.Fatalf("createAccountAndLogin failed: %v", err)
+	}
+
+	// Upload to trash.
+	for i := 0; i < 10; i++ {
+		f := fmt.Sprintf("filename%d", i)
+		sr, err := c.uploadFile(f, database.TrashSet, "")
+		if err != nil {
+			t.Errorf("c.uploadFile(%q) failed: %v", f, err)
+		}
+		if want, got := "ok", sr.Status; want != got {
+			t.Errorf("c.uploadFile returned unexpected status: Want %q, got %q", want, got)
+		}
+	}
+
+	// Empty trash.
+	files := []string{"filename0", "filename1"}
+	if err := c.deleteFiles(files); err != nil {
+		t.Errorf("c.deleteFile(%v) failed: %v", files, err)
+	}
+
+	// Attempts to download the deleted files should fail.
+	for i := 0; i < 10; i++ {
+		f := fmt.Sprintf("filename%d", i)
+		url, err := c.getURL(f, database.TrashSet)
+		if err != nil {
+			t.Errorf("c.getURL(%q, %q) failed: %v", f, database.TrashSet, err)
+		}
+		if i < 2 {
+			// These are deleted.
+			if _, err := c.downloadGet(url); err == nil {
+				t.Errorf("c.downloadGet(%q) should have failed, but didn't", url)
+			}
+			continue
+		}
+		// These are still there.
+		if _, err := c.downloadGet(url); err != nil {
+			t.Errorf("c.downloadGet(%q) failed unexpectedly: %v", url, err)
+		}
+	}
+}
+
 func (c *client) getURL(file, set string) (string, error) {
 	form := url.Values{}
 	form.Set("token", c.token)
@@ -161,4 +248,40 @@ func (c *client) getDownloadURLs(files, sets []string, isThumb bool) (map[string
 		out[k] = v.(string)
 	}
 	return out, nil
+}
+
+func (c *client) emptyTrash(ts string) error {
+	params := map[string]string{"time": ts}
+	form := url.Values{}
+	form.Set("token", c.token)
+	form.Set("params", c.encodeParams(params))
+
+	sr, err := c.sendRequest("/v2/sync/emptyTrash", form)
+	if err != nil {
+		return err
+	}
+	if sr.Status != "ok" {
+		return fmt.Errorf("status:nok %+v", sr)
+	}
+	return nil
+}
+
+func (c *client) deleteFiles(files []string) error {
+	params := make(map[string]string)
+	params["count"] = fmt.Sprintf("%d", len(files))
+	for i, f := range files {
+		params[fmt.Sprintf("filename%d", i)] = f
+	}
+	form := url.Values{}
+	form.Set("token", c.token)
+	form.Set("params", c.encodeParams(params))
+
+	sr, err := c.sendRequest("/v2/sync/delete", form)
+	if err != nil {
+		return err
+	}
+	if sr.Status != "ok" {
+		return fmt.Errorf("status:nok %+v", sr)
+	}
+	return nil
 }
