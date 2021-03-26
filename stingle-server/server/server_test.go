@@ -104,7 +104,7 @@ func (c *client) sendRequest(uri string, form url.Values) (server.StingleRespons
 	return sr, nil
 }
 
-func (c *client) uploadFile(filename, set, albumID string) (server.StingleResponse, error) {
+func (c *client) uploadFile(filename, set, albumID string, t int64) (server.StingleResponse, error) {
 	dialer := dialer{sock: c.sock}
 	hc := http.Client{Transport: &http.Transport{DialContext: dialer.DialContext}}
 
@@ -117,9 +117,9 @@ func (c *client) uploadFile(filename, set, albumID string) (server.StingleRespon
 		}
 		fmt.Fprintf(pw, "Content of %q filename %q", f, filename)
 	}
-	ts := fmt.Sprintf("%d", time.Now().UnixNano()/1000000)
+	ts := fmt.Sprintf("%d", t)
 	for _, f := range []struct{ name, value string }{
-		{"headers", "HEADERS"},
+		{"headers", fmt.Sprintf("%s headers %s", filename, albumID)},
 		{"set", set},
 		{"albumId", albumID},
 		{"dateCreated", ts},

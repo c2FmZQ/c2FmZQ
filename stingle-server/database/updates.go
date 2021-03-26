@@ -77,7 +77,12 @@ func (d *Database) FileUpdates(user User, set string, ts int64) ([]StingleFile, 
 	for sf := range ch {
 		out = append(out, sf)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].DateModified < out[j].DateModified })
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].DateModified == out[j].DateModified {
+			return out[i].File < out[j].File
+		}
+		return out[i].DateModified < out[j].DateModified
+	})
 	return out, nil
 }
 

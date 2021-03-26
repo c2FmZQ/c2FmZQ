@@ -278,6 +278,7 @@ func (d *Database) MoveFile(user User, p MoveFileParams) (retErr error) {
 			refCountAdj = 1
 		}
 
+		toFile.DateModified = nowInMS()
 		fsTo.Files[fn] = &toFile
 
 		if p.IsMoving {

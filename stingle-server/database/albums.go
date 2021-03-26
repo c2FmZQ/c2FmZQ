@@ -264,7 +264,12 @@ func (d *Database) AlbumUpdates(user User, ts int64) ([]StingleAlbum, error) {
 			out = append(out, sa)
 		}
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].DateModified < out[j].DateModified })
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].DateModified == out[j].DateModified {
+			return out[i].AlbumID < out[j].AlbumID
+		}
+		return out[i].DateModified < out[j].DateModified
+	})
 
 	return out, nil
 }

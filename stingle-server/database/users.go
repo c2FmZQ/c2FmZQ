@@ -277,6 +277,11 @@ func (d *Database) ContactUpdates(email string, ts int64) ([]StingleContact, err
 			out = append(out, sc)
 		}
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].DateModified < out[j].DateModified })
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].DateModified == out[j].DateModified {
+			return out[i].Email < out[j].Email
+		}
+		return out[i].DateModified < out[j].DateModified
+	})
 	return out, nil
 }
