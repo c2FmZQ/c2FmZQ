@@ -18,6 +18,9 @@ const (
 var (
 	Level int = 0
 	mu    sync.Mutex
+	// If Record is not nil, it will be used to send log messages instead
+	// of Stderr.
+	Record func(...interface{})
 )
 
 func log(l, s string) {
@@ -26,6 +29,10 @@ func log(l, s string) {
 		fl = fmt.Sprintf("%s:%d", filepath.Join(filepath.Base(filepath.Dir(file)), filepath.Base(file)), line)
 	}
 	t := time.Now().UTC().Format("20060102-150405.000")
+	if Record != nil {
+		Record(fmt.Sprintf("%s%s %s] %s", l, t, fl, s))
+		return
+	}
 	mu.Lock()
 	fmt.Fprintf(os.Stderr, "%s%s %s] %s\n", l, t, fl, s)
 	mu.Unlock()

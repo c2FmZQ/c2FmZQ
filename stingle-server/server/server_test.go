@@ -23,9 +23,10 @@ import (
 
 // startServer starts a server listening on a unix socket. Returns the unix socket
 // and a function to shutdown the server.
-func startServer(t *testing.T) (string, func() error) {
+func startServer(t *testing.T) (string, func()) {
 	testdir := t.TempDir()
 	sock := filepath.Join(testdir, "server.sock")
+	log.Record = t.Log
 	log.Level = 3
 	db := database.New(filepath.Join(testdir, "data"))
 	s := server.New(db, "")
@@ -35,7 +36,10 @@ func startServer(t *testing.T) (string, func() error) {
 		t.Fatalf("net.Listen failed: %v", err)
 	}
 	go s.RunWithListener(l)
-	return sock, s.Shutdown
+	return sock, func() {
+		s.Shutdown()
+		log.Record = nil
+	}
 }
 
 // newClient returns a new test client that uses sock to connect to the server.
