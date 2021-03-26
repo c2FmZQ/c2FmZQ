@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"math/rand"
 	"os"
 	"time"
@@ -90,23 +89,30 @@ func openForUpdate(f string, obj interface{}) (func(*error) error, error) {
 }
 
 // loadJSON reads a json object from a file.
-func loadJSON(f string, obj interface{}) error {
-	j, err := ioutil.ReadFile(f)
+func loadJSON(flename string, obj interface{}) error {
+	f, err := os.Open(flename)
 	if err != nil {
 		return err
 	}
-	return json.Unmarshal(j, obj)
+	defer f.Close()
+	return json.NewDecoder(f).Decode(obj)
 }
 
 // saveJSON atomically replace a json object in a file.
-func saveJSON(f string, obj interface{}) error {
-	json, err := json.MarshalIndent(obj, "", "  ")
+func saveJSON(filename string, obj interface{}) error {
+	t := fmt.Sprintf("%s.tmp-%d", filename, time.Now().UnixNano())
+	f, err := os.OpenFile(t, os.O_WRONLY|os.O_CREATE|os.O_EXCL|os.O_SYNC, 0600)
 	if err != nil {
 		return err
 	}
-	t := fmt.Sprintf("%s.tmp-%d", f, time.Now().UnixNano())
-	if err := ioutil.WriteFile(t, json, 0600); err != nil {
-		return nil
+	enc := json.NewEncoder(f)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(obj); err != nil {
+		f.Close()
+		return err
 	}
-	return os.Rename(t, f)
+	if err := f.Close(); err != nil {
+		return err
+	}
+	return os.Rename(t, filename)
 }

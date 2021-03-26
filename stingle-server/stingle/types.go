@@ -131,11 +131,6 @@ func (r Response) Send(w io.Writer) error {
 	if r.Status == "" {
 		log.Panic("Response has empty status")
 	}
-	j, err := json.Marshal(r)
-	if err != nil {
-		return err
-	}
-	log.Infof("Response: %s", j)
-	_, err = w.Write(j)
-	return err
+	log.Infof("Response: %+v", r)
+	return json.NewEncoder(w).Encode(r)
 }
