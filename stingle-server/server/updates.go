@@ -6,6 +6,7 @@ import (
 
 	"stingle-server/database"
 	"stingle-server/log"
+	"stingle-server/stingle"
 )
 
 // handleGetUpdates handles the /v2/sync/getUpdates endpoint. This is the
@@ -29,7 +30,7 @@ import (
 //  - deletes: unseen deletions (files, albums, contacts, etc)
 //  - spacedUsed: the number of megabytes of storage used.
 //  - spaceQuota: the user's quota in megabytes.
-func (s *Server) handleGetUpdates(user database.User, req *http.Request) *StingleResponse {
+func (s *Server) handleGetUpdates(user database.User, req *http.Request) *stingle.Response {
 	fileST := parseInt(req.PostFormValue("filesST"), 0)
 	trashST := parseInt(req.PostFormValue("trashST"), 0)
 	albumsST := parseInt(req.PostFormValue("albumsST"), 0)
@@ -40,38 +41,38 @@ func (s *Server) handleGetUpdates(user database.User, req *http.Request) *Stingl
 	files, err := s.db.FileUpdates(user, database.GallerySet, fileST)
 	if err != nil {
 		log.Errorf("FileUpdates() failed: %v", err)
-		return NewResponse("nok")
+		return stingle.ResponseNOK()
 	}
 	trash, err := s.db.FileUpdates(user, database.TrashSet, trashST)
 	if err != nil {
 		log.Errorf("FileUpdates() failed: %v", err)
-		return NewResponse("nok")
+		return stingle.ResponseNOK()
 	}
 	albums, err := s.db.AlbumUpdates(user, albumsST)
 	if err != nil {
 		log.Errorf("AlbumUpdates() failed: %v", err)
-		return NewResponse("nok")
+		return stingle.ResponseNOK()
 	}
 	albumFiles, err := s.db.FileUpdates(user, database.AlbumSet, albumFilesST)
 	if err != nil {
 		log.Errorf("FileUpdates() failed: %v", err)
-		return NewResponse("nok")
+		return stingle.ResponseNOK()
 	}
 	contacts, err := s.db.ContactUpdates(user.Email, cntST)
 	if err != nil {
 		log.Errorf("ContactUpdates() failed: %v", err)
-		return NewResponse("nok")
+		return stingle.ResponseNOK()
 	}
 	deletes, err := s.db.DeleteUpdates(user, delST)
 	if err != nil {
 		log.Errorf("DeleteUpdates() failed: %v", err)
-		return NewResponse("nok")
+		return stingle.ResponseNOK()
 	}
 	spaceUsed, err := s.db.SpaceUsed(user)
 	if err != nil {
 		log.Errorf("SpaceUSed() failed: %v", err)
 	}
-	return NewResponse("ok").
+	return stingle.ResponseOK().
 		AddPart("files", files).
 		AddPart("trash", trash).
 		AddPart("albums", albums).

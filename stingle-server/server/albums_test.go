@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"stingle-server/database"
-	"stingle-server/server"
+	"stingle-server/stingle"
 )
 
 func TestAddDeleteAlbum(t *testing.T) {
@@ -27,29 +27,23 @@ func TestAddDeleteAlbum(t *testing.T) {
 	if err != nil {
 		t.Fatalf("c.getUpdates failed: %v", err)
 	}
-	want := server.StingleResponse{
-		Status: "ok",
-		Parts: map[string]interface{}{
-			"albums": []interface{}{
-				map[string]interface{}{
-					"albumId":       "album1",
-					"cover":         "",
-					"dateCreated":   "1000",
-					"dateModified":  "1000",
-					"encPrivateKey": "album1 encPrivateKey",
-					"isHidden":      "0",
-					"isLocked":      "0",
-					"isOwner":       "1",
-					"isShared":      "0",
-					"members":       "",
-					"metadata":      "album1 metadata",
-					"permissions":   "",
-					"publicKey":     "album1 publicKey",
-				},
-			},
-		},
-	}
-	if diff := compareUpdates(want, got); diff != "" {
+	want := stingle.ResponseOK().
+		AddPartList("albums", map[string]string{
+			"albumId":       "album1",
+			"cover":         "",
+			"dateCreated":   "1000",
+			"dateModified":  "1000",
+			"encPrivateKey": "album1 encPrivateKey",
+			"isHidden":      "0",
+			"isLocked":      "0",
+			"isOwner":       "1",
+			"isShared":      "0",
+			"members":       "",
+			"metadata":      "album1 metadata",
+			"permissions":   "",
+			"publicKey":     "album1 publicKey",
+		})
+	if diff := diffUpdates(want, got); diff != "" {
 		t.Errorf("Unexpected updates:\n%v", diff)
 	}
 
@@ -62,15 +56,11 @@ func TestAddDeleteAlbum(t *testing.T) {
 	if got, err = c.getUpdates(0, 0, 0, 0, 0, 0); err != nil {
 		t.Fatalf("c.getUpdates failed: %v", err)
 	}
-	want = server.StingleResponse{
-		Status: "ok",
-		Parts: map[string]interface{}{
-			"deletes": []interface{}{
-				map[string]interface{}{"albumId": "album1", "date": "2000", "file": "", "type": "4"},
-			},
-		},
-	}
-	if diff := compareUpdates(want, got); diff != "" {
+	want = stingle.ResponseOK().
+		AddPartList("deletes", map[string]string{
+			"albumId": "album1", "date": "2000", "file": "", "type": "4",
+		})
+	if diff := diffUpdates(want, got); diff != "" {
 		t.Errorf("Unexpected updates:\n%v", diff)
 	}
 }

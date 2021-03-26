@@ -9,6 +9,7 @@ import (
 	"stingle-server/crypto"
 	"stingle-server/database"
 	"stingle-server/log"
+	"stingle-server/stingle"
 )
 
 // handleCreateAccount handles the /v2/register/createAccount endpoint.
@@ -25,15 +26,15 @@ import (
 //  - isBackup:  Whether the user's secret key is included in the keyBundle.
 //
 // Returns:
-//  - StingleResponse(ok)
-func (s *Server) handleCreateAccount(req *http.Request) *StingleResponse {
+//  - stingle.Response(ok)
+func (s *Server) handleCreateAccount(req *http.Request) *stingle.Response {
 	email := req.PostFormValue("email")
 	if _, err := s.db.User(email); err == nil {
-		return NewResponse("nok").AddError("User already exists")
+		return stingle.ResponseNOK().AddError("User already exists")
 	}
 	pk, err := crypto.DecodeKeyBundle(req.PostFormValue("keyBundle"))
 	if err != nil {
-		return NewResponse("nok").AddError("KeyBundle cannot be parsed")
+		return stingle.ResponseNOK().AddError("KeyBundle cannot be parsed")
 	}
 	if err := s.db.AddUser(
 		database.User{
@@ -45,9 +46,9 @@ func (s *Server) handleCreateAccount(req *http.Request) *StingleResponse {
 			PublicKey: pk,
 		}); err != nil {
 		log.Errorf("AddUser: %v", err)
-		return NewResponse("nok")
+		return stingle.ResponseNOK()
 	}
-	return NewResponse("ok")
+	return stingle.ResponseOK()
 }
 
 // handlePreLogin handles the /v2/login/preLogin endpoint.
@@ -59,15 +60,15 @@ func (s *Server) handleCreateAccount(req *http.Request) *StingleResponse {
 //  - email: The email address of the account.
 //
 // Returns:
-//  - StingleResponse(ok)
+//  - stingle.Response(ok)
 //     Part(salt, The salt used to hash the password)
-func (s *Server) handlePreLogin(req *http.Request) *StingleResponse {
+func (s *Server) handlePreLogin(req *http.Request) *stingle.Response {
 	email := req.PostFormValue("email")
 	u, err := s.db.User(email)
 	if err != nil {
-		return NewResponse("nok").AddError("User doesn't exist")
+		return stingle.ResponseNOK().AddError("User doesn't exist")
 	}
-	return NewResponse("ok").AddPart("salt", u.Salt)
+	return stingle.ResponseOK().AddPart("salt", u.Salt)
 }
 
 // handleLogin handles the /v2/login/login endpoint.
@@ -80,21 +81,21 @@ func (s *Server) handlePreLogin(req *http.Request) *StingleResponse {
 //  - password: The hashed password.
 //
 // Returns:
-//  - StingleResponse(ok)
+//  - stingle.Response(ok)
 //      Part(userId, The numeric ID of the account)
 //      Part(keyBundle, The encoded keys of the user)
 //      Part(serverPublicKey, The server's public key that is associated with this account)
 //      Part(token, The session token signed by the server)
 //      Part(isKeyBackedUp, Whether the user's secret key is in keyBundle)
 //      Part(homeFolder, A "Home folder" used on the app's device)
-func (s *Server) handleLogin(req *http.Request) *StingleResponse {
+func (s *Server) handleLogin(req *http.Request) *stingle.Response {
 	email := req.PostFormValue("email")
 	pass := req.PostFormValue("password")
 	u, err := s.db.User(email)
 	if err != nil || u.Password != pass {
-		return NewResponse("nok").AddError("Invalid credentials")
+		return stingle.ResponseNOK().AddError("Invalid credentials")
 	}
-	return NewResponse("ok").
+	return stingle.ResponseOK().
 		AddPart("keyBundle", u.KeyBundle).
 		AddPart("serverPublicKey", u.ServerPublicKeyForExport()).
 		AddPart("token", crypto.MintToken(u.ServerSignKey,
@@ -113,13 +114,13 @@ func (s *Server) handleLogin(req *http.Request) *StingleResponse {
 //
 // Returns:
 //  - StringleResponse(ok)
-func (s *Server) handleLogout(user database.User, req *http.Request) *StingleResponse {
+func (s *Server) handleLogout(user database.User, req *http.Request) *stingle.Response {
 	user.TokenSeq++
 	if err := s.db.UpdateUser(user); err != nil {
 		log.Errorf("UpdateUser: %v", err)
-		return NewResponse("nok")
+		return stingle.ResponseNOK()
 	}
-	return NewResponse("ok").AddPart("logout", "1")
+	return stingle.ResponseOK().AddPart("logout", "1")
 }
 
 // handleChangePass handles the /v2/login/changePass endpoint.
@@ -135,13 +136,13 @@ func (s *Server) handleLogout(user database.User, req *http.Request) *StingleRes
 //     - keyBundle: The new keyBundle.
 //
 // Returns:
-//  - StingleResponse(ok)
+//  - stingle.Response(ok)
 //      Part(token, A new signed session token)
-func (s *Server) handleChangePass(user database.User, req *http.Request) *StingleResponse {
+func (s *Server) handleChangePass(user database.User, req *http.Request) *stingle.Response {
 	params, err := s.decodeParams(req.PostFormValue("params"), user)
 	if err != nil {
 		log.Errorf("decodeParams: %v", err)
-		return NewResponse("nok")
+		return stingle.ResponseNOK()
 	}
 	user.Password = params["newPassword"]
 	user.Salt = params["newSalt"]
@@ -150,15 +151,15 @@ func (s *Server) handleChangePass(user database.User, req *http.Request) *Stingl
 	pk, err := crypto.DecodeKeyBundle(user.KeyBundle)
 	if err != nil {
 		log.Errorf("DecodeKeyBundle: %v", err)
-		return NewResponse("nok")
+		return stingle.ResponseNOK()
 	}
 	user.PublicKey = pk
 
 	if err := s.db.UpdateUser(user); err != nil {
 		log.Errorf("UpdateUser: %v", err)
-		return NewResponse("nok")
+		return stingle.ResponseNOK()
 	}
-	return NewResponse("ok").
+	return stingle.ResponseOK().
 		AddPart("token", crypto.MintToken(s.db.SignKeyForUser(user.Email),
 			crypto.Token{Scope: "session", Subject: user.Email, Seq: user.TokenSeq},
 			180*24*time.Hour))
@@ -172,10 +173,10 @@ func (s *Server) handleChangePass(user database.User, req *http.Request) *Stingl
 //  - req: The http request.
 //
 // Returns:
-//  - StingleResponse(ok)
+//  - stingle.Response(ok)
 //     Part(serverPK, server's public key)
-func (s *Server) handleGetServerPK(user database.User, req *http.Request) *StingleResponse {
-	return NewResponse("ok").AddPart("serverPK", user.ServerPublicKeyForExport())
+func (s *Server) handleGetServerPK(user database.User, req *http.Request) *stingle.Response {
+	return stingle.ResponseOK().AddPart("serverPK", user.ServerPublicKeyForExport())
 }
 
 // handleCheckKey handles the /v2/login/checkKey endpoint. This is part of the
@@ -190,21 +191,21 @@ func (s *Server) handleGetServerPK(user database.User, req *http.Request) *Sting
 //  - email: The email address of the account.
 //
 // Returns:
-//  - StingleResponse(ok)
+//  - stingle.Response(ok)
 //      Part(challenge, A message that can only be read with the right secret key)
 //      Part(isKeyBackedUp, Whether the encrypted secrey of the user in on the server)
 //      Part(serverPK, The public key of the server associated with this account)
-func (s *Server) handleCheckKey(req *http.Request) *StingleResponse {
+func (s *Server) handleCheckKey(req *http.Request) *stingle.Response {
 	email := req.PostFormValue("email")
 	u, err := s.db.User(email)
 	if err != nil {
-		return NewResponse("nok").AddError("User doesn't exist")
+		return stingle.ResponseNOK().AddError("User doesn't exist")
 	}
 	rnd := make([]byte, 32)
 	if _, err := rand.Read(rnd); err != nil {
-		return NewResponse("nok")
+		return stingle.ResponseNOK()
 	}
-	return NewResponse("ok").
+	return stingle.ResponseOK().
 		AddPart("challenge", crypto.SealBox(append([]byte("validkey_"), rnd...), u.PublicKey)).
 		AddPart("isKeyBackedUp", u.IsBackup).
 		AddPart("serverPK", u.ServerPublicKeyForExport())
@@ -225,18 +226,18 @@ func (s *Server) handleCheckKey(req *http.Request) *StingleResponse {
 //     - keyBundle: The new keyBundle.
 //
 // Returns:
-//  - StingleResponse(ok)
+//  - stingle.Response(ok)
 //      Part(result, OK)
-func (s *Server) handleRecoverAccount(req *http.Request) *StingleResponse {
+func (s *Server) handleRecoverAccount(req *http.Request) *stingle.Response {
 	email := req.PostFormValue("email")
 	user, err := s.db.User(email)
 	if err != nil {
-		return NewResponse("nok").AddError("User doesn't exist")
+		return stingle.ResponseNOK().AddError("User doesn't exist")
 	}
 	params, err := s.decodeParams(req.PostFormValue("params"), user)
 	if err != nil {
 		log.Errorf("decodeParams: %v", err)
-		return NewResponse("nok")
+		return stingle.ResponseNOK()
 	}
 	user.Password = params["newPassword"]
 	user.Salt = params["newSalt"]
@@ -245,15 +246,15 @@ func (s *Server) handleRecoverAccount(req *http.Request) *StingleResponse {
 	pk, err := crypto.DecodeKeyBundle(user.KeyBundle)
 	if err != nil {
 		log.Errorf("DecodeKeyBundle: %v", err)
-		return NewResponse("nok")
+		return stingle.ResponseNOK()
 	}
 	user.PublicKey = pk
 
 	if err := s.db.UpdateUser(user); err != nil {
 		log.Errorf("UpdateUser: %v", err)
-		return NewResponse("nok")
+		return stingle.ResponseNOK()
 	}
-	return NewResponse("ok").AddPart("result", "OK")
+	return stingle.ResponseOK().AddPart("result", "OK")
 }
 
 // handleDeleteUser handles the /v2/keys/deleteUser endpoint. It is used
@@ -269,13 +270,13 @@ func (s *Server) handleRecoverAccount(req *http.Request) *StingleResponse {
 //     - password: The user's hashed password.
 //
 // Returns:
-//  - StingleResponse(ok)
-func (s *Server) handleDeleteUser(user database.User, req *http.Request) *StingleResponse {
+//  - stingle.Response(ok)
+func (s *Server) handleDeleteUser(user database.User, req *http.Request) *stingle.Response {
 	if _, err := s.decodeParams(req.PostFormValue("params"), user); err != nil {
 		log.Errorf("decodeParams: %v", err)
-		return NewResponse("nok")
+		return stingle.ResponseNOK()
 	}
-	return NewResponse("nok").AddError("Account deletion is not implemented")
+	return stingle.ResponseNOK().AddError("Account deletion is not implemented")
 }
 
 // handleReuploadKeys handles the /v2/keys/reuploadKeys endpoint. It is used
@@ -291,24 +292,24 @@ func (s *Server) handleDeleteUser(user database.User, req *http.Request) *Stingl
 //     - keyBundle: The new keyBundle.
 //
 // Returns:
-//  - StingleResponse(ok)
-func (s *Server) handleReuploadKeys(user database.User, req *http.Request) *StingleResponse {
+//  - stingle.Response(ok)
+func (s *Server) handleReuploadKeys(user database.User, req *http.Request) *stingle.Response {
 	params, err := s.decodeParams(req.PostFormValue("params"), user)
 	if err != nil {
 		log.Errorf("decodeParams: %v", err)
-		return NewResponse("nok")
+		return stingle.ResponseNOK()
 	}
 	user.KeyBundle = params["keyBundle"]
 	pk, err := crypto.DecodeKeyBundle(user.KeyBundle)
 	if err != nil {
 		log.Errorf("DecodeKeyBundle: %v", err)
-		return NewResponse("nok")
+		return stingle.ResponseNOK()
 	}
 	user.PublicKey = pk
 
 	if err := s.db.UpdateUser(user); err != nil {
 		log.Errorf("UpdateUser: %v", err)
-		return NewResponse("nok")
+		return stingle.ResponseNOK()
 	}
-	return NewResponse("ok")
+	return stingle.ResponseOK()
 }

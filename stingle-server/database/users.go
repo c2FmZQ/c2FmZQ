@@ -10,6 +10,7 @@ import (
 
 	"stingle-server/crypto"
 	"stingle-server/log"
+	"stingle-server/stingle"
 )
 
 const (
@@ -46,15 +47,6 @@ type Contact struct {
 	PublicKey    string `json:"publicKey"`
 	DateUsed     int64  `json:"dateUsed,omitempty"`
 	DateModified int64  `json:"dateModified,omitempty"`
-}
-
-// The Stingle API version of Contact.
-type StingleContact struct {
-	UserID       string `json:"userId"`
-	Email        string `json:"email"`
-	PublicKey    string `json:"publicKey"`
-	DateUsed     string `json:"dateUsed,omitempty"`
-	DateModified string `json:"dateModified,omitempty"`
 }
 
 // ServerPublicKeyForExport returns the server's public key associated with this
@@ -151,9 +143,9 @@ func (d *Database) SignKeyForUser(email string) crypto.SignSecretKey {
 	return crypto.SignSecretKey{}
 }
 
-// Export converts a Contact to StingleContact.
-func (c Contact) Export() StingleContact {
-	return StingleContact{
+// Export converts a Contact to stingle.Contact.
+func (c Contact) Export() stingle.Contact {
+	return stingle.Contact{
 		UserID:       fmt.Sprintf("%d", c.UserID),
 		Email:        c.Email,
 		PublicKey:    c.PublicKey,
@@ -255,7 +247,7 @@ func (d *Database) addCrossContacts(list []Contact) {
 
 // ContactUpdates returns changes to a user's contact list that are more recent
 // than ts.
-func (d *Database) ContactUpdates(email string, ts int64) ([]StingleContact, error) {
+func (d *Database) ContactUpdates(email string, ts int64) ([]stingle.Contact, error) {
 	home := d.Home(email)
 	var contacts map[string]Contact
 	if err := loadJSON(filepath.Join(home, contactListFile), &contacts); err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -264,10 +256,10 @@ func (d *Database) ContactUpdates(email string, ts int64) ([]StingleContact, err
 	if contacts == nil {
 		contacts = make(map[string]Contact)
 	}
-	out := []StingleContact{}
+	out := []stingle.Contact{}
 	for _, v := range contacts {
 		if v.DateModified > ts {
-			sc := StingleContact{
+			sc := stingle.Contact{
 				UserID:       fmt.Sprintf("%d", v.UserID),
 				Email:        v.Email,
 				PublicKey:    v.PublicKey,

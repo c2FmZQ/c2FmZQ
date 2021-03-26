@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"stingle-server/log"
+	"stingle-server/stingle"
 )
 
 const (
@@ -52,7 +53,7 @@ type AlbumSpec struct {
 	// Whether the album is hidden.
 	IsHidden bool `json:"isHidden"`
 	// The album's permissions settings.
-	Permissions SharingPermissions `json:"permissions"`
+	Permissions stingle.Permissions `json:"permissions"`
 	// Whether the album is locked (?)
 	IsLocked bool `json:"isLocked"`
 	// The file to use as album cover.
@@ -63,32 +64,6 @@ type AlbumSpec struct {
 	SyncLocal bool `json:"syncLocal"`
 	// The private key of the album, encrypted for each member.
 	SharingKeys map[int]string `json:"sharingKeys"`
-}
-
-// Permissions settings that control what album members can do.
-type SharingPermissions string
-
-func (p SharingPermissions) AllowAdd() bool   { return len(p) == 4 && p[0] == '1' && p[1] == '1' }
-func (p SharingPermissions) AllowShare() bool { return len(p) == 4 && p[0] == '1' && p[2] == '1' }
-func (p SharingPermissions) AllowCopy() bool  { return len(p) == 4 && p[0] == '1' && p[3] == '1' }
-
-// The Stingle API representation of an album.
-type StingleAlbum struct {
-	AlbumID       string            `json:"albumId"`
-	DateCreated   string            `json:"dateCreated"`
-	DateModified  string            `json:"dateModified"`
-	EncPrivateKey string            `json:"encPrivateKey"`
-	Metadata      string            `json:"metadata"`
-	PublicKey     string            `json:"publicKey"`
-	IsShared      string            `json:"isShared"`
-	IsHidden      string            `json:"isHidden"`
-	IsOwner       string            `json:"isOwner"`
-	Permissions   string            `json:"permissions"`
-	IsLocked      string            `json:"isLocked"`
-	Cover         string            `json:"cover"`
-	Members       string            `json:"members"`
-	SyncLocal     string            `json:"syncLocal,omitempty"`
-	SharingKeys   map[string]string `json:"sharingKeys,omitempty"`
 }
 
 // Album returns a user's album information.
@@ -198,10 +173,10 @@ func (d *Database) ChangeMetadata(user User, albumID, metadata string) (retErr e
 }
 
 // AlbumPermissions returns the album's permissions.
-func (d *Database) AlbumPermissions(user User, albumID string) (SharingPermissions, error) {
+func (d *Database) AlbumPermissions(user User, albumID string) (stingle.Permissions, error) {
 	fs, err := d.FileSet(user, AlbumSet, albumID)
 	if err != nil {
-		return SharingPermissions(""), err
+		return stingle.Permissions(""), err
 	}
 	return fs.Album.Permissions, nil
 }
@@ -218,14 +193,14 @@ func (d *Database) AlbumRefs(user User) (map[string]*AlbumRef, error) {
 	return manifest.Albums, nil
 }
 
-// convertAlbumSpecToStingleAlbum converts a AlbumSpec to StingleAlbum.
-func convertAlbumSpecToStingleAlbum(album *AlbumSpec) StingleAlbum {
+// convertAlbumSpecToStingleAlbum converts a AlbumSpec to stingle.Album.
+func convertAlbumSpecToStingleAlbum(album *AlbumSpec) stingle.Album {
 	members := []string{}
 	for k, _ := range album.Members {
 		members = append(members, fmt.Sprintf("%d", k))
 	}
 	sort.Strings(members)
-	return StingleAlbum{
+	return stingle.Album{
 		AlbumID:       album.AlbumID,
 		DateCreated:   fmt.Sprintf("%d", album.DateCreated),
 		DateModified:  fmt.Sprintf("%d", album.DateModified),
@@ -243,12 +218,12 @@ func convertAlbumSpecToStingleAlbum(album *AlbumSpec) StingleAlbum {
 }
 
 // AlbumUpdates returns all the changes to the user's album list since ts.
-func (d *Database) AlbumUpdates(user User, ts int64) ([]StingleAlbum, error) {
+func (d *Database) AlbumUpdates(user User, ts int64) ([]stingle.Album, error) {
 	albumRefs, err := d.AlbumRefs(user)
 	if err != nil {
 		return nil, err
 	}
-	out := []StingleAlbum{}
+	out := []stingle.Album{}
 	for _, v := range albumRefs {
 		fs, err := d.FileSet(user, AlbumSet, v.AlbumID)
 		if err != nil {
@@ -275,7 +250,7 @@ func (d *Database) AlbumUpdates(user User, ts int64) ([]StingleAlbum, error) {
 }
 
 // ShareAlbum turns on sharing on an album and adds members.
-func (d *Database) ShareAlbum(user User, sharing *StingleAlbum, sharingKeys map[string]string) (retErr error) {
+func (d *Database) ShareAlbum(user User, sharing *stingle.Album, sharingKeys map[string]string) (retErr error) {
 	albumRef, err := d.albumRef(user, sharing.AlbumID)
 	if err != nil {
 		return err
@@ -299,7 +274,7 @@ func (d *Database) ShareAlbum(user User, sharing *StingleAlbum, sharingKeys map[
 		fs.Album.IsHidden = sharing.IsHidden == "1"
 		fs.Album.IsLocked = sharing.IsLocked == "1"
 		fs.Album.SyncLocal = sharing.SyncLocal == "1"
-		fs.Album.Permissions = SharingPermissions(sharing.Permissions)
+		fs.Album.Permissions = stingle.Permissions(sharing.Permissions)
 	}
 	for _, m := range strings.Split(sharing.Members, ",") {
 		sid, err := strconv.ParseInt(m, 10, 32)
@@ -419,14 +394,14 @@ func (d *Database) removeAlbumRef(memberID int, albumID string) (retErr error) {
 
 	manifest.Deletes = append(manifest.Deletes, DeleteEvent{
 		AlbumID: albumID,
-		Type:    4,
+		Type:    stingle.DeleteEventAlbum,
 		Date:    nowInMS(),
 	})
 	return nil
 }
 
 // UpdatePerms updates the permissions on an album.
-func (d *Database) UpdatePerms(owner User, albumID string, permissions SharingPermissions) (retErr error) {
+func (d *Database) UpdatePerms(owner User, albumID string, permissions stingle.Permissions) (retErr error) {
 	done, fs, err := d.fileSetForUpdate(owner, AlbumSet, albumID)
 	if err != nil {
 		return err

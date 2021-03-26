@@ -14,6 +14,7 @@ import (
 	"stingle-server/crypto"
 	"stingle-server/database"
 	"stingle-server/log"
+	"stingle-server/stingle"
 )
 
 // handleUpload handles the /v2/sync/upload endpoint. It is used to upload
@@ -33,34 +34,34 @@ import (
 //  - version: The file format version (opaque to the server).
 //
 // Returns:
-//  - StingleResponse("ok")
-func (s *Server) handleUpload(req *http.Request) *StingleResponse {
+//  - stingle.Response("ok")
+func (s *Server) handleUpload(req *http.Request) *stingle.Response {
 	up, err := receiveUpload(filepath.Join(s.db.Dir(), "uploads"), req)
 	if err != nil {
 		log.Errorf("receiveUpload: %v", err)
-		return NewResponse("nok")
+		return stingle.ResponseNOK()
 	}
 	_, user, err := s.checkToken(up.Token, "session")
 	if err != nil {
-		return NewResponse("nok")
+		return stingle.ResponseNOK()
 	}
 
 	if up.Set == database.AlbumSet {
 		albumSpec, err := s.db.Album(user, up.AlbumID)
 		if err != nil {
 			log.Errorf("db.Album(%q, %q) failed: %v", user.Email, up.AlbumID, err)
-			return NewResponse("nok")
+			return stingle.ResponseNOK()
 		}
 		if albumSpec.OwnerID != user.UserID && !albumSpec.Permissions.AllowAdd() {
-			return NewResponse("nok").AddError("Adding to this album is not permitted")
+			return stingle.ResponseNOK().AddError("Adding to this album is not permitted")
 		}
 	}
 
 	if err := s.db.AddFile(user, up.FileSpec); err != nil {
 		log.Errorf("AddFile: %v", err)
-		return NewResponse("nok")
+		return stingle.ResponseNOK()
 	}
-	return NewResponse("ok")
+	return stingle.ResponseOK()
 }
 
 // handleMoveFile handles the /v2/sync/moveFile endpoint. It is used to move
@@ -86,12 +87,12 @@ func (s *Server) handleUpload(req *http.Request) *StingleResponse {
 //                     changing, i.e. when moving to/from albums.
 //
 // Returns:
-//  - StingleResponse(ok)
-func (s *Server) handleMoveFile(user database.User, req *http.Request) *StingleResponse {
+//  - stingle.Response(ok)
+func (s *Server) handleMoveFile(user database.User, req *http.Request) *stingle.Response {
 	params, err := s.decodeParams(req.PostFormValue("params"), user)
 	if err != nil {
 		log.Errorf("decodeParams: %v", err)
-		return NewResponse("nok")
+		return stingle.ResponseNOK()
 	}
 
 	p := database.MoveFileParams{
@@ -115,31 +116,31 @@ func (s *Server) handleMoveFile(user database.User, req *http.Request) *StingleR
 		albumSpec, err := s.db.Album(user, p.AlbumIDFrom)
 		if err != nil {
 			log.Errorf("db.Album(%q, %q) failed: %v", user.Email, p.AlbumIDFrom, err)
-			return NewResponse("nok")
+			return stingle.ResponseNOK()
 		}
 		if albumSpec.OwnerID != user.UserID && !albumSpec.Permissions.AllowCopy() {
-			return NewResponse("nok").AddError("Copying from this album is not permitted")
+			return stingle.ResponseNOK().AddError("Copying from this album is not permitted")
 		}
 		if albumSpec.OwnerID != user.UserID && p.IsMoving {
-			return NewResponse("nok").AddError("Removing items from this album is not permitted")
+			return stingle.ResponseNOK().AddError("Removing items from this album is not permitted")
 		}
 	}
 	if p.AlbumIDTo != "" {
 		albumSpec, err := s.db.Album(user, p.AlbumIDTo)
 		if err != nil {
 			log.Errorf("db.Album(%q, %q) failed: %v", user.Email, p.AlbumIDTo, err)
-			return NewResponse("nok")
+			return stingle.ResponseNOK()
 		}
 		if albumSpec.OwnerID != user.UserID && !albumSpec.Permissions.AllowAdd() {
-			return NewResponse("nok").AddError("Adding to this album is not permitted")
+			return stingle.ResponseNOK().AddError("Adding to this album is not permitted")
 		}
 	}
 
 	if err := s.db.MoveFile(user, p); err != nil {
 		log.Errorf("MoveFile(%+v): %v", p, err)
-		return NewResponse("nok")
+		return stingle.ResponseNOK()
 	}
-	return NewResponse("ok")
+	return stingle.ResponseOK()
 }
 
 // handleEmptyTrash handles the /v2/sync/emptyTrash endpoint. It is used to
@@ -155,18 +156,18 @@ func (s *Server) handleMoveFile(user database.User, req *http.Request) *StingleR
 //             should be removed.
 //
 // Returns:
-//  - StingleResponse(ok)
-func (s *Server) handleEmptyTrash(user database.User, req *http.Request) *StingleResponse {
+//  - stingle.Response(ok)
+func (s *Server) handleEmptyTrash(user database.User, req *http.Request) *stingle.Response {
 	params, err := s.decodeParams(req.PostFormValue("params"), user)
 	if err != nil {
 		log.Errorf("decodeParams: %v", err)
-		return NewResponse("nok")
+		return stingle.ResponseNOK()
 	}
 	if err := s.db.EmptyTrash(user, parseInt(params["time"], 0)); err != nil {
 		log.Errorf("EmptyTrash: %v", err)
-		return NewResponse("nok")
+		return stingle.ResponseNOK()
 	}
-	return NewResponse("ok")
+	return stingle.ResponseOK()
 }
 
 // handleDelete handles the /v2/sync/delete endpoint. It is used to delete some
@@ -182,12 +183,12 @@ func (s *Server) handleEmptyTrash(user database.User, req *http.Request) *Stingl
 //     - filename<int>: The filenames being deleted.
 //
 // Returns:
-//  - StingleResponse(ok)
-func (s *Server) handleDelete(user database.User, req *http.Request) *StingleResponse {
+//  - stingle.Response(ok)
+func (s *Server) handleDelete(user database.User, req *http.Request) *stingle.Response {
 	params, err := s.decodeParams(req.PostFormValue("params"), user)
 	if err != nil {
 		log.Errorf("decodeParams: %v", err)
-		return NewResponse("nok")
+		return stingle.ResponseNOK()
 	}
 	count := int(parseInt(params["count"], 0))
 	files := []string{}
@@ -196,9 +197,9 @@ func (s *Server) handleDelete(user database.User, req *http.Request) *StingleRes
 	}
 	if err := s.db.DeleteFiles(user, files); err != nil {
 		log.Errorf("DeleteFiles: %v", err)
-		return NewResponse("nok")
+		return stingle.ResponseNOK()
 	}
-	return NewResponse("ok")
+	return stingle.ResponseOK()
 }
 
 // handleDownload handles the /v2/sync/download endpoint. It is used to download
@@ -221,7 +222,7 @@ func (s *Server) handleDownload(w http.ResponseWriter, req *http.Request) {
 	_, user, err := s.checkToken(req.PostFormValue("token"), "session")
 	if err != nil {
 		log.Errorf("%s %s (INVALID TOKEN: %v)", req.Method, req.URL, err)
-		NewResponse("ok").AddPart("logout", "1").Send(w)
+		stingle.ResponseOK().AddPart("logout", "1").Send(w)
 		return
 	}
 	log.Infof("%s %s (UserID:%d)", req.Method, req.URL, user.UserID)
@@ -342,7 +343,7 @@ func (s *Server) makeDownloadURL(user database.User, host, file, set string, isT
 // Returns:
 //   - StringleResponse(ok).
 //        Parts("urls", list of signed urls)
-func (s *Server) handleGetDownloadUrls(user database.User, req *http.Request) *StingleResponse {
+func (s *Server) handleGetDownloadUrls(user database.User, req *http.Request) *stingle.Response {
 	isThumb := req.PostFormValue("is_thumb") == "1"
 	urls := make(map[string]string)
 	re := regexp.MustCompile(`^files\[\d+\]\[filename\]$`)
@@ -354,7 +355,7 @@ func (s *Server) handleGetDownloadUrls(user database.User, req *http.Request) *S
 		set := req.PostFormValue(strings.Replace(k, "filename", "set", 1))
 		urls[v[0]] = s.makeDownloadURL(user, req.Host, v[0], set, isThumb)
 	}
-	return NewResponse("ok").AddPart("urls", urls)
+	return stingle.ResponseOK().AddPart("urls", urls)
 }
 
 // handleGetURL handles the /v2/sync/getUrl endpoint. It is used to created
@@ -371,7 +372,7 @@ func (s *Server) handleGetDownloadUrls(user database.User, req *http.Request) *S
 // Returns:
 //   - StringleResponse(ok).
 //        Parts("url", signed url)
-func (s *Server) handleGetURL(user database.User, req *http.Request) *StingleResponse {
-	return NewResponse("ok").
+func (s *Server) handleGetURL(user database.User, req *http.Request) *stingle.Response {
+	return stingle.ResponseOK().
 		AddPart("url", s.makeDownloadURL(user, req.Host, req.PostFormValue("file"), req.PostFormValue("set"), false))
 }

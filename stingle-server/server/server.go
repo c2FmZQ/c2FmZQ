@@ -13,6 +13,7 @@ import (
 	"stingle-server/crypto"
 	"stingle-server/database"
 	"stingle-server/log"
+	"stingle-server/stingle"
 )
 
 // An HTTP server that implements the Stingle server API.
@@ -127,7 +128,7 @@ func parseInt(s string, def int64) int64 {
 }
 
 // noauth wraps handlers that don't require authentication.
-func (s *Server) noauth(f func(*http.Request) *StingleResponse) http.HandlerFunc {
+func (s *Server) noauth(f func(*http.Request) *stingle.Response) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		log.Infof("%s %s", req.Method, req.URL)
 		req.ParseForm()
@@ -163,14 +164,14 @@ func (s *Server) checkToken(tok, scope string) (crypto.Token, database.User, err
 
 // auth wraps handlers that require authentication, checking the token, and
 // passing the authenticated user to the underlying handler.
-func (s *Server) auth(f func(database.User, *http.Request) *StingleResponse) http.HandlerFunc {
+func (s *Server) auth(f func(database.User, *http.Request) *stingle.Response) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		req.ParseForm()
 
 		_, user, err := s.checkToken(req.PostFormValue("token"), "session")
 		if err != nil {
 			log.Errorf("%s %s (INVALID TOKEN: %v)", req.Method, req.URL, err)
-			if err := NewResponse("ok").AddPart("logout", "1").Send(w); err != nil {
+			if err := stingle.ResponseOK().AddPart("logout", "1").Send(w); err != nil {
 				log.Errorf("Send: %v", err)
 			}
 			return

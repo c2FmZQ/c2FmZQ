@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	"stingle-server/log"
+	"stingle-server/stingle"
 )
 
 const (
@@ -37,15 +38,6 @@ type FileSpec struct {
 	StoreFileSize  int64  `json:"storeFilesize"`
 	StoreThumb     string `json:"storeThumb"`
 	StoreThumbSize int64  `json:"storeThumbSize"`
-}
-
-type StingleFile struct {
-	File         string `json:"file"`
-	Version      string `json:"version"`
-	DateCreated  string `json:"dateCreated"`
-	DateModified string `json:"dateModified"`
-	Headers      string `json:"headers"`
-	AlbumID      string `json:"albumId"`
 }
 
 type BlobSpec struct {
@@ -288,13 +280,12 @@ func (d *Database) MoveFile(user User, p MoveFileParams) (retErr error) {
 				AlbumID: p.AlbumIDFrom,
 				Date:    nowInMS(),
 			}
-			// 1: Gallery 2: Trash 3: Trash&delete 4: Album 5: Album file 6: Contact
 			if p.SetFrom == GallerySet {
-				de.Type = 1
+				de.Type = stingle.DeleteEventGallery
 			} else if p.SetFrom == TrashSet {
-				de.Type = 2
+				de.Type = stingle.DeleteEventTrash
 			} else {
-				de.Type = 5
+				de.Type = stingle.DeleteEventAlbumFile
 			}
 			fsFrom.Deletes = append(fsFrom.Deletes, de)
 		}
@@ -322,7 +313,7 @@ func (d *Database) EmptyTrash(user User, t int64) (retErr error) {
 			delete(fs.Files, k)
 			de := DeleteEvent{
 				File: k,
-				Type: 3,
+				Type: stingle.DeleteEventTrashDelete,
 				Date: t,
 			}
 			fs.Deletes = append(fs.Deletes, de)
@@ -346,7 +337,7 @@ func (d *Database) DeleteFiles(user User, files []string) (retErr error) {
 		delete(fs.Files, f)
 		de := DeleteEvent{
 			File: f,
-			Type: 3,
+			Type: stingle.DeleteEventTrashDelete,
 			Date: nowInMS(),
 		}
 		fs.Deletes = append(fs.Deletes, de)

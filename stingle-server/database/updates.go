@@ -9,25 +9,17 @@ import (
 	"sync"
 
 	"stingle-server/log"
+	"stingle-server/stingle"
 )
 
 type DeleteEvent struct {
 	File    string `json:"file"`
 	AlbumID string `json:"albumId"`
-	// 1: Gallery 2: Trash 3: Trash&delete 4: Album 5: Album file 6: Contact
-	Type int   `json:"type"`
-	Date int64 `json:"date"`
+	Type    int    `json:"type"`
+	Date    int64  `json:"date"`
 }
 
-type StingleDelete struct {
-	File    string `json:"file"`
-	AlbumID string `json:"albumId"`
-	// 1: Gallery 2: Trash 3: Trash&delete 4: Album 5: Album file 6: Contact
-	Type string `json:"type"`
-	Date string `json:"date"`
-}
-
-func (d *Database) fileUpdatesForSet(user User, set, albumID string, ts int64, ch chan<- StingleFile, wg *sync.WaitGroup) {
+func (d *Database) fileUpdatesForSet(user User, set, albumID string, ts int64, ch chan<- stingle.File, wg *sync.WaitGroup) {
 	defer wg.Done()
 	fs, err := d.FileSet(user, set, albumID)
 	if err != nil {
@@ -37,7 +29,7 @@ func (d *Database) fileUpdatesForSet(user User, set, albumID string, ts int64, c
 
 	for _, v := range fs.Files {
 		if v.DateModified > ts {
-			ch <- StingleFile{
+			ch <- stingle.File{
 				File:         v.File,
 				Version:      v.Version,
 				DateCreated:  fmt.Sprintf("%d", v.DateCreated),
@@ -49,8 +41,8 @@ func (d *Database) fileUpdatesForSet(user User, set, albumID string, ts int64, c
 	}
 }
 
-func (d *Database) FileUpdates(user User, set string, ts int64) ([]StingleFile, error) {
-	ch := make(chan StingleFile)
+func (d *Database) FileUpdates(user User, set string, ts int64) ([]stingle.File, error) {
+	ch := make(chan stingle.File)
 	var wg sync.WaitGroup
 
 	if set != AlbumSet {
@@ -68,12 +60,12 @@ func (d *Database) FileUpdates(user User, set string, ts int64) ([]StingleFile, 
 			go d.fileUpdatesForSet(user, AlbumSet, album.AlbumID, ts, ch, &wg)
 		}
 	}
-	go func(ch chan<- StingleFile, wg *sync.WaitGroup) {
+	go func(ch chan<- stingle.File, wg *sync.WaitGroup) {
 		wg.Wait()
 		close(ch)
 	}(ch, &wg)
 
-	out := []StingleFile{}
+	out := []stingle.File{}
 	for sf := range ch {
 		out = append(out, sf)
 	}
@@ -86,7 +78,7 @@ func (d *Database) FileUpdates(user User, set string, ts int64) ([]StingleFile, 
 	return out, nil
 }
 
-func (d *Database) deleteUpdatesForSet(user User, set, albumID string, ts int64, ch chan<- StingleDelete, wg *sync.WaitGroup) {
+func (d *Database) deleteUpdatesForSet(user User, set, albumID string, ts int64, ch chan<- stingle.DeleteEvent, wg *sync.WaitGroup) {
 	defer wg.Done()
 	fs, err := d.FileSet(user, set, albumID)
 	if err != nil {
@@ -95,7 +87,7 @@ func (d *Database) deleteUpdatesForSet(user User, set, albumID string, ts int64,
 	}
 	for _, d := range fs.Deletes {
 		if d.Date > ts {
-			ch <- StingleDelete{
+			ch <- stingle.DeleteEvent{
 				File:    d.File,
 				AlbumID: d.AlbumID,
 				Type:    fmt.Sprintf("%d", d.Type),
@@ -105,8 +97,8 @@ func (d *Database) deleteUpdatesForSet(user User, set, albumID string, ts int64,
 	}
 }
 
-func (d *Database) DeleteUpdates(user User, ts int64) ([]StingleDelete, error) {
-	out := []StingleDelete{}
+func (d *Database) DeleteUpdates(user User, ts int64) ([]stingle.DeleteEvent, error) {
+	out := []stingle.DeleteEvent{}
 
 	var manifest AlbumManifest
 	if err := loadJSON(filepath.Join(d.Home(user.Email), albumManifest), &manifest); err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -114,7 +106,7 @@ func (d *Database) DeleteUpdates(user User, ts int64) ([]StingleDelete, error) {
 	}
 	for _, d := range manifest.Deletes {
 		if d.Date > ts {
-			out = append(out, StingleDelete{
+			out = append(out, stingle.DeleteEvent{
 				File:    d.File,
 				AlbumID: d.AlbumID,
 				Type:    fmt.Sprintf("%d", d.Type),
@@ -123,7 +115,7 @@ func (d *Database) DeleteUpdates(user User, ts int64) ([]StingleDelete, error) {
 		}
 	}
 
-	ch := make(chan StingleDelete)
+	ch := make(chan stingle.DeleteEvent)
 	var wg sync.WaitGroup
 	for _, set := range []string{GallerySet, TrashSet, AlbumSet} {
 		if set == AlbumSet {
@@ -136,7 +128,7 @@ func (d *Database) DeleteUpdates(user User, ts int64) ([]StingleDelete, error) {
 			go d.deleteUpdatesForSet(user, set, "", ts, ch, &wg)
 		}
 	}
-	go func(ch chan<- StingleDelete, wg *sync.WaitGroup) {
+	go func(ch chan<- stingle.DeleteEvent, wg *sync.WaitGroup) {
 		wg.Wait()
 		close(ch)
 	}(ch, &wg)

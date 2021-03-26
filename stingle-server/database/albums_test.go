@@ -7,6 +7,7 @@ import (
 
 	"stingle-server/crypto"
 	"stingle-server/database"
+	"stingle-server/stingle"
 )
 
 func addAlbum(db *database.Database, user database.User, albumID string) error {
@@ -82,7 +83,7 @@ func TestAlbums(t *testing.T) {
 	}
 
 	// Share album with Bob.
-	stingleAlbum := database.StingleAlbum{
+	stingleAlbum := stingle.Album{
 		AlbumID:     "my-album",
 		IsShared:    "1",
 		Permissions: "1111",
@@ -122,8 +123,8 @@ func TestAlbums(t *testing.T) {
 	if err != nil {
 		t.Fatalf("db.AlbumUpdates(%q, 0) failed: %v", user.Email, err)
 	}
-	expAliceUpdates := []database.StingleAlbum{
-		database.StingleAlbum{
+	expAliceUpdates := []stingle.Album{
+		stingle.Album{
 			AlbumID:       "my-album",
 			DateCreated:   "1000",
 			DateModified:  "10000",
@@ -148,8 +149,8 @@ func TestAlbums(t *testing.T) {
 	if err != nil {
 		t.Fatalf("db.AlbumUpdates(%q, 0) failed: %v", bobUser.Email, err)
 	}
-	expBobUpdates := []database.StingleAlbum{
-		database.StingleAlbum{
+	expBobUpdates := []stingle.Album{
+		stingle.Album{
 			AlbumID:       "my-album",
 			DateCreated:   "1000",
 			DateModified:  "10000",

@@ -18,6 +18,7 @@ import (
 	"stingle-server/database"
 	"stingle-server/log"
 	"stingle-server/server"
+	"stingle-server/stingle"
 )
 
 // startServer starts a server listening on a unix socket. Returns the unix socket
@@ -79,32 +80,32 @@ func (d dialer) DialContext(ctx context.Context, _, _ string) (net.Conn, error) 
 	return d.Dialer.DialContext(ctx, "unix", d.sock)
 }
 
-func (c *client) sendRequest(uri string, form url.Values) (server.StingleResponse, error) {
+func (c *client) sendRequest(uri string, form url.Values) (*stingle.Response, error) {
 	dialer := dialer{sock: c.sock}
 	hc := http.Client{Transport: &http.Transport{DialContext: dialer.DialContext}}
 
 	log.Debugf("SEND POST %s", uri)
 	log.Debugf(" %v", form)
-	var sr server.StingleResponse
 	resp, err := hc.PostForm("http://unix"+uri, form)
 	if err != nil {
-		return sr, err
+		return nil, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return sr, fmt.Errorf("request returned status code %d", resp.StatusCode)
+		return nil, fmt.Errorf("request returned status code %d", resp.StatusCode)
 	}
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return sr, err
+		return nil, err
 	}
+	var sr stingle.Response
 	if err := json.Unmarshal(body, &sr); err != nil {
-		return sr, err
+		return nil, err
 	}
-	return sr, nil
+	return &sr, nil
 }
 
-func (c *client) uploadFile(filename, set, albumID string, t int64) (server.StingleResponse, error) {
+func (c *client) uploadFile(filename, set, albumID string, t int64) (*stingle.Response, error) {
 	dialer := dialer{sock: c.sock}
 	hc := http.Client{Transport: &http.Transport{DialContext: dialer.DialContext}}
 
@@ -113,7 +114,7 @@ func (c *client) uploadFile(filename, set, albumID string, t int64) (server.Stin
 	for _, f := range []string{"file", "thumb"} {
 		pw, err := w.CreateFormFile(f, filename)
 		if err != nil {
-			return server.StingleResponse{}, err
+			return nil, err
 		}
 		fmt.Fprintf(pw, "Content of %q filename %q", f, filename)
 	}
@@ -129,34 +130,34 @@ func (c *client) uploadFile(filename, set, albumID string, t int64) (server.Stin
 	} {
 		pw, err := w.CreateFormField(f.name)
 		if err != nil {
-			return server.StingleResponse{}, err
+			return nil, err
 		}
 		fmt.Fprint(pw, f.value)
 	}
 	if err := w.Close(); err != nil {
-		return server.StingleResponse{}, err
+		return nil, err
 	}
 
 	log.Debugf("SEND POST /v2/sync/upload (%q, %q, %q)", filename, set, albumID)
-	var sr server.StingleResponse
 
 	resp, err := hc.Post("http://unix/v2/sync/upload", w.FormDataContentType(), &buf)
 	if err != nil {
-		return sr, err
+		return nil, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return sr, fmt.Errorf("request returned status code %d", resp.StatusCode)
+		return nil, fmt.Errorf("request returned status code %d", resp.StatusCode)
 	}
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return sr, err
+		return nil, err
 	}
+	var sr stingle.Response
 	if err := json.Unmarshal(body, &sr); err != nil {
-		return sr, err
+		return nil, err
 	}
 
-	return sr, nil
+	return &sr, nil
 }
 
 func (c *client) downloadPost(file, set, isThumb string) (string, error) {
