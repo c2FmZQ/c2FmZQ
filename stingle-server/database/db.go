@@ -3,6 +3,7 @@
 package database
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -49,12 +50,12 @@ func nowInMS() int64 {
 	return time.Now().UnixNano() / 1000000 // ms
 }
 
-// boolToString converts a bool to "0" or "1".
-func boolToString(b bool) string {
+// boolToNumber converts a bool to json.Number "0" or "1".
+func boolToNumber(b bool) json.Number {
 	if b {
-		return "1"
+		return json.Number("1")
 	}
-	return "0"
+	return json.Number("0")
 }
 
 func showCallStack() {

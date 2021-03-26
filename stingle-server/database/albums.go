@@ -35,7 +35,7 @@ type AlbumRef struct {
 // Encapsulates all the information we know about an album.
 type AlbumSpec struct {
 	// The ID of the user account that owns the album.
-	OwnerID int `json:"ownerId"`
+	OwnerID int64 `json:"ownerId"`
 	// The ID of the album.
 	AlbumID string `json:"albumId"`
 	// The time at which the album was created.
@@ -59,11 +59,11 @@ type AlbumSpec struct {
 	// The file to use as album cover.
 	Cover string `json:"cover"`
 	// The set of members: key is member ID, value is always true.
-	Members map[int]bool `json:"members"`
+	Members map[int64]bool `json:"members"`
 	// ?
 	SyncLocal bool `json:"syncLocal"`
 	// The private key of the album, encrypted for each member.
-	SharingKeys map[int]string `json:"sharingKeys"`
+	SharingKeys map[int64]string `json:"sharingKeys"`
 }
 
 // Album returns a user's album information.
@@ -104,10 +104,10 @@ func (d *Database) AddAlbum(owner User, album AlbumSpec) (retErr error) {
 	}
 	album.OwnerID = owner.UserID
 	if album.Members == nil {
-		album.Members = make(map[int]bool)
+		album.Members = make(map[int64]bool)
 	}
 	if album.SharingKeys == nil {
-		album.SharingKeys = make(map[int]string)
+		album.SharingKeys = make(map[int64]string)
 	}
 	fs.Album = &album
 	return done(&retErr)
@@ -202,16 +202,16 @@ func convertAlbumSpecToStingleAlbum(album *AlbumSpec) stingle.Album {
 	sort.Strings(members)
 	return stingle.Album{
 		AlbumID:       album.AlbumID,
-		DateCreated:   fmt.Sprintf("%d", album.DateCreated),
-		DateModified:  fmt.Sprintf("%d", album.DateModified),
+		DateCreated:   number(album.DateCreated),
+		DateModified:  number(album.DateModified),
 		EncPrivateKey: album.EncPrivateKey,
 		Metadata:      album.Metadata,
 		PublicKey:     album.PublicKey,
-		IsShared:      boolToString(album.IsShared),
-		IsHidden:      boolToString(album.IsHidden),
+		IsShared:      boolToNumber(album.IsShared),
+		IsHidden:      boolToNumber(album.IsHidden),
 		IsOwner:       "1",
 		Permissions:   string(album.Permissions),
-		IsLocked:      boolToString(album.IsLocked),
+		IsLocked:      boolToNumber(album.IsLocked),
 		Cover:         album.Cover,
 		Members:       strings.Join(members, ","),
 	}
@@ -261,10 +261,10 @@ func (d *Database) ShareAlbum(user User, sharing *stingle.Album, sharingKeys map
 	}
 	defer done(&retErr)
 	if fs.Album.Members == nil {
-		fs.Album.Members = make(map[int]bool)
+		fs.Album.Members = make(map[int64]bool)
 	}
 	if fs.Album.SharingKeys == nil {
-		fs.Album.SharingKeys = make(map[int]string)
+		fs.Album.SharingKeys = make(map[int64]string)
 	}
 	if fs.Album.OwnerID != user.UserID && (!fs.Album.IsShared || !fs.Album.Members[user.UserID] || !fs.Album.Permissions.AllowShare()) {
 		return fmt.Errorf("user %d is not allowed to share this album", user.UserID)
@@ -277,12 +277,11 @@ func (d *Database) ShareAlbum(user User, sharing *stingle.Album, sharingKeys map
 		fs.Album.Permissions = stingle.Permissions(sharing.Permissions)
 	}
 	for _, m := range strings.Split(sharing.Members, ",") {
-		sid, err := strconv.ParseInt(m, 10, 32)
+		id, err := strconv.ParseInt(m, 10, 64)
 		if err != nil {
 			log.Errorf("Invalid members: %q", sharing.Members)
 			continue
 		}
-		id := int(sid)
 		if id != fs.Album.OwnerID && sharingKeys[m] == "" {
 			log.Errorf("Sharing album with %d but no sharing key", id)
 			continue
@@ -293,12 +292,11 @@ func (d *Database) ShareAlbum(user User, sharing *stingle.Album, sharingKeys map
 		}
 	}
 	for k, v := range sharingKeys {
-		sid, err := strconv.ParseInt(k, 10, 32)
+		id, err := strconv.ParseInt(k, 10, 64)
 		if err != nil {
 			log.Errorf("Invalid sharingKeys: %v", sharingKeys)
 			continue
 		}
-		id := int(sid)
 		if _, ok := fs.Album.SharingKeys[id]; ok && fs.Album.OwnerID != user.UserID {
 			log.Errorf("Non-owner %d trying to overwrite sharing key for %d", user.UserID, id)
 			continue
@@ -327,8 +325,8 @@ func (d *Database) UnshareAlbum(owner User, albumID string) (retErr error) {
 			log.Errorf("removeAlbumRef(%d, %q) failed: %v", m, albumID, err)
 		}
 	}
-	fs.Album.Members = make(map[int]bool)
-	fs.Album.SharingKeys = make(map[int]string)
+	fs.Album.Members = make(map[int64]bool)
+	fs.Album.SharingKeys = make(map[int64]string)
 	fs.Album.DateModified = nowInMS()
 	return nil
 }
@@ -348,7 +346,7 @@ func (d *Database) albumRef(user User, albumID string) (*AlbumRef, error) {
 }
 
 // addAlbumRef adds an album reference the a user's album list.
-func (d *Database) addAlbumRef(memberID int, albumID, file string) (retErr error) {
+func (d *Database) addAlbumRef(memberID int64, albumID, file string) (retErr error) {
 	home, err := d.HomeByID(memberID)
 	if err != nil {
 		return err
@@ -373,7 +371,7 @@ func (d *Database) addAlbumRef(memberID int, albumID, file string) (retErr error
 }
 
 // removeAlbumRef removes an album reference from a user's album list.
-func (d *Database) removeAlbumRef(memberID int, albumID string) (retErr error) {
+func (d *Database) removeAlbumRef(memberID int64, albumID string) (retErr error) {
 	home, err := d.HomeByID(memberID)
 	if err != nil {
 		return err
@@ -413,7 +411,7 @@ func (d *Database) UpdatePerms(owner User, albumID string, permissions stingle.P
 }
 
 // RemoveAlbumMember removes a member from the album.
-func (d *Database) RemoveAlbumMember(owner User, albumID string, memberID int) (retErr error) {
+func (d *Database) RemoveAlbumMember(owner User, albumID string, memberID int64) (retErr error) {
 	if owner.UserID == memberID {
 		return nil
 	}

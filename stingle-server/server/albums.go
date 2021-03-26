@@ -313,7 +313,7 @@ func (s *Server) handleRemoveAlbumMember(user database.User, req *http.Request) 
 	if err != nil {
 		return stingle.ResponseNOK()
 	}
-	memberID := int(parseInt(params["memberUserId"], 0))
+	memberID := parseInt(params["memberUserId"], 0)
 
 	albumSpec, err := s.db.Album(user, album.AlbumID)
 	if err != nil {

@@ -11,6 +11,10 @@ import (
 	"stingle-server/log"
 )
 
+func number(n int64) json.Number {
+	return json.Number(fmt.Sprintf("%d", n))
+}
+
 // lock atomically creates a lock file for the given filename. When this
 // function returns without error, the lock is acquired and nobody else can
 // acquire it until it is released.

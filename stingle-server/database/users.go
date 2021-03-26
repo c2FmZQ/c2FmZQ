@@ -3,7 +3,6 @@ package database
 import (
 	"encoding/base64"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -21,13 +20,13 @@ const (
 
 // This is used internally for the list of all users in the system.
 type userList struct {
-	UserID int    `json:"userId"`
+	UserID int64  `json:"userId"`
 	Email  string `json:"email"`
 }
 
 // Encapsulates all the information about a user account.
 type User struct {
-	UserID        int                  `json:"userId"`
+	UserID        int64                `json:"userId"`
 	Email         string               `json:"email"`
 	Password      string               `json:"password"`
 	Salt          string               `json:"salt"`
@@ -42,7 +41,7 @@ type User struct {
 
 // Encapsulates the information about a user's contact (another user).
 type Contact struct {
-	UserID       int    `json:"userId"`
+	UserID       int64  `json:"userId"`
 	Email        string `json:"email"`
 	PublicKey    string `json:"publicKey"`
 	DateUsed     int64  `json:"dateUsed,omitempty"`
@@ -61,7 +60,7 @@ func (d Database) Home(email string) string {
 }
 
 // HomeByID is like Home() except that it uses a User ID instead of email.
-func (d Database) HomeByID(userID int) (string, error) {
+func (d Database) HomeByID(userID int64) (string, error) {
 	var ul []userList
 	if err := loadJSON(filepath.Join(d.Dir(), userListFile), &ul); err != nil {
 		return "", err
@@ -88,7 +87,7 @@ func (d *Database) AddUser(u User) (retErr error) {
 		return err
 	}
 	defer done(&retErr)
-	uid := 0
+	var uid int64
 	for _, i := range ul {
 		if i.Email == u.Email {
 			return os.ErrExist
@@ -115,7 +114,7 @@ func (d *Database) UpdateUser(u User) error {
 }
 
 // UserByID returns the User object with the given ID.
-func (d *Database) UserByID(id int) (User, error) {
+func (d *Database) UserByID(id int64) (User, error) {
 	var ul []userList
 	if err := loadJSON(filepath.Join(d.Dir(), userListFile), &ul); err != nil {
 		return User{}, err
@@ -146,11 +145,11 @@ func (d *Database) SignKeyForUser(email string) crypto.SignSecretKey {
 // Export converts a Contact to stingle.Contact.
 func (c Contact) Export() stingle.Contact {
 	return stingle.Contact{
-		UserID:       fmt.Sprintf("%d", c.UserID),
+		UserID:       number(c.UserID),
 		Email:        c.Email,
 		PublicKey:    c.PublicKey,
-		DateUsed:     fmt.Sprintf("%d", c.DateUsed),
-		DateModified: fmt.Sprintf("%d", c.DateModified),
+		DateUsed:     number(c.DateUsed),
+		DateModified: number(c.DateModified),
 	}
 }
 
@@ -188,7 +187,7 @@ func (d *Database) AddContact(user User, contactEmail string) (*Contact, error) 
 }
 
 // lookupContacts returns a Contact for each UserIDs in the list.
-func (d *Database) lookupContacts(uids map[int]bool) []Contact {
+func (d *Database) lookupContacts(uids map[int64]bool) []Contact {
 	var ul []userList
 	if err := loadJSON(filepath.Join(d.Dir(), userListFile), &ul); err != nil {
 		return nil
@@ -260,10 +259,10 @@ func (d *Database) ContactUpdates(email string, ts int64) ([]stingle.Contact, er
 	for _, v := range contacts {
 		if v.DateModified > ts {
 			sc := stingle.Contact{
-				UserID:       fmt.Sprintf("%d", v.UserID),
+				UserID:       number(v.UserID),
 				Email:        v.Email,
 				PublicKey:    v.PublicKey,
-				DateModified: fmt.Sprintf("%d", v.DateModified),
+				DateModified: number(v.DateModified),
 			}
 
 			out = append(out, sc)

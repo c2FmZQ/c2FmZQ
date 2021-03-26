@@ -10,39 +10,39 @@ import (
 
 // The Stingle API version of Contact.
 type Contact struct {
-	UserID       string `json:"userId"`
-	Email        string `json:"email"`
-	PublicKey    string `json:"publicKey"`
-	DateUsed     string `json:"dateUsed,omitempty"`
-	DateModified string `json:"dateModified,omitempty"`
+	UserID       json.Number `json:"userId"`
+	Email        string      `json:"email"`
+	PublicKey    string      `json:"publicKey"`
+	DateUsed     json.Number `json:"dateUsed,omitempty"`
+	DateModified json.Number `json:"dateModified,omitempty"`
 }
 
 // The Stingle API representation of a File.
 type File struct {
-	File         string `json:"file"`
-	Version      string `json:"version"`
-	DateCreated  string `json:"dateCreated"`
-	DateModified string `json:"dateModified"`
-	Headers      string `json:"headers"`
-	AlbumID      string `json:"albumId"`
+	File         string      `json:"file"`
+	Version      string      `json:"version"`
+	DateCreated  json.Number `json:"dateCreated"`
+	DateModified json.Number `json:"dateModified"`
+	Headers      string      `json:"headers"`
+	AlbumID      string      `json:"albumId"`
 }
 
 // The Stingle API representation of an album.
 type Album struct {
 	AlbumID       string            `json:"albumId"`
-	DateCreated   string            `json:"dateCreated"`
-	DateModified  string            `json:"dateModified"`
+	DateCreated   json.Number       `json:"dateCreated"`
+	DateModified  json.Number       `json:"dateModified"`
 	EncPrivateKey string            `json:"encPrivateKey"`
 	Metadata      string            `json:"metadata"`
 	PublicKey     string            `json:"publicKey"`
-	IsShared      string            `json:"isShared"`
-	IsHidden      string            `json:"isHidden"`
-	IsOwner       string            `json:"isOwner"`
+	IsShared      json.Number       `json:"isShared"`
+	IsHidden      json.Number       `json:"isHidden"`
+	IsOwner       json.Number       `json:"isOwner"`
 	Permissions   string            `json:"permissions"`
-	IsLocked      string            `json:"isLocked"`
+	IsLocked      json.Number       `json:"isLocked"`
 	Cover         string            `json:"cover"`
 	Members       string            `json:"members"`
-	SyncLocal     string            `json:"syncLocal,omitempty"`
+	SyncLocal     json.Number       `json:"syncLocal,omitempty"`
 	SharingKeys   map[string]string `json:"sharingKeys,omitempty"`
 }
 
@@ -65,10 +65,10 @@ const (
 
 // The Stingle API representation of a Delete event.
 type DeleteEvent struct {
-	File    string `json:"file"`
-	AlbumID string `json:"albumId"`
-	Type    string `json:"type"`
-	Date    string `json:"date"`
+	File    string      `json:"file"`
+	AlbumID string      `json:"albumId"`
+	Type    json.Number `json:"type"`
+	Date    json.Number `json:"date"`
 }
 
 // ResponseOK returns a new Response with status OK.

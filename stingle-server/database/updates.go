@@ -2,7 +2,6 @@ package database
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -32,8 +31,8 @@ func (d *Database) fileUpdatesForSet(user User, set, albumID string, ts int64, c
 			ch <- stingle.File{
 				File:         v.File,
 				Version:      v.Version,
-				DateCreated:  fmt.Sprintf("%d", v.DateCreated),
-				DateModified: fmt.Sprintf("%d", v.DateModified),
+				DateCreated:  number(v.DateCreated),
+				DateModified: number(v.DateModified),
 				Headers:      v.Headers,
 				AlbumID:      v.AlbumID,
 			}
@@ -90,8 +89,8 @@ func (d *Database) deleteUpdatesForSet(user User, set, albumID string, ts int64,
 			ch <- stingle.DeleteEvent{
 				File:    d.File,
 				AlbumID: d.AlbumID,
-				Type:    fmt.Sprintf("%d", d.Type),
-				Date:    fmt.Sprintf("%d", d.Date),
+				Type:    number(int64(d.Type)),
+				Date:    number(d.Date),
 			}
 		}
 	}
@@ -109,8 +108,8 @@ func (d *Database) DeleteUpdates(user User, ts int64) ([]stingle.DeleteEvent, er
 			out = append(out, stingle.DeleteEvent{
 				File:    d.File,
 				AlbumID: d.AlbumID,
-				Type:    fmt.Sprintf("%d", d.Type),
-				Date:    fmt.Sprintf("%d", d.Date),
+				Type:    number(int64(d.Type)),
+				Date:    number(d.Date),
 			})
 		}
 	}
