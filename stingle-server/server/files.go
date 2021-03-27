@@ -319,7 +319,7 @@ func (s *Server) makeDownloadURL(user database.User, host, file, set string, isT
 			File:    file,
 			Thumb:   isThumb,
 		},
-		1*time.Hour,
+		12*time.Hour,
 	)
 	b := s.BaseURL
 	if b == "" {
