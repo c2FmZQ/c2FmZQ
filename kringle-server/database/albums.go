@@ -50,18 +50,12 @@ type AlbumSpec struct {
 	PublicKey string `json:"publicKey"`
 	// Whether the album is shared.
 	IsShared bool `json:"isShared"`
-	// Whether the album is hidden.
-	IsHidden bool `json:"isHidden"`
 	// The album's permissions settings.
 	Permissions stingle.Permissions `json:"permissions"`
-	// Whether the album is locked (?)
-	IsLocked bool `json:"isLocked"`
 	// The file to use as album cover.
 	Cover string `json:"cover"`
 	// The set of members: key is member ID, value is always true.
 	Members map[int64]bool `json:"members"`
-	// ?
-	SyncLocal bool `json:"syncLocal"`
 	// The private key of the album, encrypted for each member.
 	SharingKeys map[int64]string `json:"sharingKeys"`
 }
@@ -208,10 +202,10 @@ func convertAlbumSpecToStingleAlbum(album *AlbumSpec) stingle.Album {
 		Metadata:      album.Metadata,
 		PublicKey:     album.PublicKey,
 		IsShared:      boolToNumber(album.IsShared),
-		IsHidden:      boolToNumber(album.IsHidden),
+		IsHidden:      "0",
 		IsOwner:       "1",
 		Permissions:   string(album.Permissions),
-		IsLocked:      boolToNumber(album.IsLocked),
+		IsLocked:      "0",
 		Cover:         album.Cover,
 		Members:       strings.Join(members, ","),
 	}
@@ -271,9 +265,6 @@ func (d *Database) ShareAlbum(user User, sharing *stingle.Album, sharingKeys map
 	}
 	if fs.Album.OwnerID == user.UserID {
 		fs.Album.IsShared = true
-		//fs.Album.IsHidden = sharing.IsHidden == "1"
-		//fs.Album.IsLocked = sharing.IsLocked == "1"
-		//fs.Album.SyncLocal = sharing.SyncLocal == "1"
 		fs.Album.Permissions = stingle.Permissions(sharing.Permissions)
 	}
 	for _, m := range strings.Split(sharing.Members, ",") {

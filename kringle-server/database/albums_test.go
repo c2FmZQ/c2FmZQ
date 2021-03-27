@@ -107,12 +107,9 @@ func TestAlbums(t *testing.T) {
 		Metadata:      "album-metadata",
 		PublicKey:     "album-publickey",
 		IsShared:      true,
-		IsHidden:      false,
 		Permissions:   "1111",
-		IsLocked:      false,
 		Cover:         "",
 		Members:       map[int64]bool{1: true, 2: true},
-		SyncLocal:     false,
 		SharingKeys:   map[int64]string{2: "bob's sharing key"},
 	}
 	if diff := deep.Equal(expAlbumSpec, *fs.Album); diff != nil {
