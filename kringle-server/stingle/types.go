@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io"
 
-	"stingle-server/log"
+	"kringle-server/log"
 )
 
 // The Stingle API version of Contact.

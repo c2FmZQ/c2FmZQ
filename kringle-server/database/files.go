@@ -8,8 +8,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"stingle-server/log"
-	"stingle-server/stingle"
+	"kringle-server/log"
+	"kringle-server/stingle"
 )
 
 const (

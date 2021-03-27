@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"sort"
 
-	"stingle-server/crypto"
-	"stingle-server/log"
-	"stingle-server/stingle"
+	"kringle-server/crypto"
+	"kringle-server/log"
+	"kringle-server/stingle"
 )
 
 const (

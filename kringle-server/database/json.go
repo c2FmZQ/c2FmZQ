@@ -8,7 +8,7 @@ import (
 	"os"
 	"time"
 
-	"stingle-server/log"
+	"kringle-server/log"
 )
 
 func number(n int64) json.Number {

@@ -5,7 +5,7 @@ import (
 	"net/url"
 	"strings"
 
-	"stingle-server/stingle"
+	"kringle-server/stingle"
 )
 
 func (c *client) getUpdates(fileST, trashST, albumsST, albumFilesST, cntST, delST int64) (*stingle.Response, error) {

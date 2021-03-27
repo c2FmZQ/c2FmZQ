@@ -7,8 +7,8 @@ import (
 	"os"
 	"strconv"
 
-	"stingle-server/database"
-	"stingle-server/log"
+	"kringle-server/database"
+	"kringle-server/log"
 )
 
 // The return value of receiveUpload.

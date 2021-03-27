@@ -1,4 +1,4 @@
-// The stingle-server binary is an API server that's compatible with the
+// The kringle-server binary is an API server that's compatible with the
 // Stingle Photos app (https://github.com/stingle/stingle-photos-android)
 // published by stingle.org.
 //
@@ -16,9 +16,9 @@ import (
 	"syscall"
 	"time"
 
-	"stingle-server/database"
-	"stingle-server/log"
-	"stingle-server/server"
+	"kringle-server/database"
+	"kringle-server/log"
+	"kringle-server/server"
 )
 
 var (

@@ -1,6 +1,6 @@
-# Stingle Server
+# Kringle Server
 
-Stingle-server is an API server that's compatible with the Stingle Photos app
+Kringle-server is an API server that's compatible with the Stingle Photos app
 (https://github.com/stingle/stingle-photos-android) published by [stingle.org](https://stingle.org).
 
 This project is **not** associated with stingle.org. This is not the code used

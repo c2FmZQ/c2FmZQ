@@ -4,8 +4,8 @@ import (
 	"github.com/go-test/deep"
 	"testing"
 
-	"stingle-server/crypto"
-	"stingle-server/database"
+	"kringle-server/crypto"
+	"kringle-server/database"
 )
 
 func addUser(db *database.Database, email string, pk crypto.PublicKey) error {

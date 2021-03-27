@@ -10,10 +10,10 @@ import (
 	"strconv"
 
 	"github.com/NYTimes/gziphandler"
-	"stingle-server/crypto"
-	"stingle-server/database"
-	"stingle-server/log"
-	"stingle-server/stingle"
+	"kringle-server/crypto"
+	"kringle-server/database"
+	"kringle-server/log"
+	"kringle-server/stingle"
 )
 
 // An HTTP server that implements the Stingle server API.

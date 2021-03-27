@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"stingle-server/database"
-	"stingle-server/log"
-	"stingle-server/stingle"
+	"kringle-server/database"
+	"kringle-server/log"
+	"kringle-server/stingle"
 )
 
 // handleAddAlbum handles the /v2/sync/addAlbum endpoint. It is used to add a

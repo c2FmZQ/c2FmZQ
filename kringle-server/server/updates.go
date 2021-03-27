@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"net/http"
 
-	"stingle-server/database"
-	"stingle-server/log"
-	"stingle-server/stingle"
+	"kringle-server/database"
+	"kringle-server/log"
+	"kringle-server/stingle"
 )
 
 // handleGetUpdates handles the /v2/sync/getUpdates endpoint. This is the

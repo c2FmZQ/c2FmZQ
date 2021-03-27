@@ -1,4 +1,4 @@
-// Package database implements all the storage requirement of the stingle server
+// Package database implements all the storage requirement of the kringle server
 // using a local filesystem. It doesn't use any external database server.
 package database
 
@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"stingle-server/log"
+	"kringle-server/log"
 )
 
 var (
@@ -31,7 +31,7 @@ func New(dir string) *Database {
 	return &Database{dir: dir}
 }
 
-// Implements all the storage requirements of the stingle server using a local
+// Implements all the storage requirements of the kringle server using a local
 // filesystem.
 type Database struct {
 	dir string
@@ -69,7 +69,7 @@ func showCallStack() {
 	log.Debug("Call Stack")
 	for {
 		frame, more := frames.Next()
-		if !strings.Contains(frame.File, "stingle-server") {
+		if !strings.Contains(frame.File, "kringle-server") {
 			break
 		}
 		fl := fmt.Sprintf("%s:%d", filepath.Base(frame.File), frame.Line)

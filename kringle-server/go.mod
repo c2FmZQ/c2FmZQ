@@ -1,4 +1,4 @@
-module stingle-server
+module kringle-server
 
 go 1.16
 

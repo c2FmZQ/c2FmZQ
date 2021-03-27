@@ -6,10 +6,10 @@ import (
 	"net/http"
 	"time"
 
-	"stingle-server/crypto"
-	"stingle-server/database"
-	"stingle-server/log"
-	"stingle-server/stingle"
+	"kringle-server/crypto"
+	"kringle-server/database"
+	"kringle-server/log"
+	"kringle-server/stingle"
 )
 
 // handleCreateAccount handles the /v2/register/createAccount endpoint.

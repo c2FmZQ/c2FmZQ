@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"stingle-server/crypto"
-	"stingle-server/database"
+	"kringle-server/crypto"
+	"kringle-server/database"
 )
 
 func addFile(db *database.Database, user database.User, name, set, albumID string) error {

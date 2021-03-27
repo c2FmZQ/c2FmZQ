@@ -7,8 +7,8 @@ import (
 	"net/url"
 	"testing"
 
-	"stingle-server/database"
-	"stingle-server/stingle"
+	"kringle-server/database"
+	"kringle-server/stingle"
 )
 
 func createAccountsAndLogin(sock string) (*client, *client, *client, error) {

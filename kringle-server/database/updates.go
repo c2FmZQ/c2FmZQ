@@ -7,8 +7,8 @@ import (
 	"sort"
 	"sync"
 
-	"stingle-server/log"
-	"stingle-server/stingle"
+	"kringle-server/log"
+	"kringle-server/stingle"
 )
 
 type DeleteEvent struct {

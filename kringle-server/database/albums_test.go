@@ -5,9 +5,9 @@ import (
 	"github.com/go-test/deep"
 	"testing"
 
-	"stingle-server/crypto"
-	"stingle-server/database"
-	"stingle-server/stingle"
+	"kringle-server/crypto"
+	"kringle-server/database"
+	"kringle-server/stingle"
 )
 
 func addAlbum(db *database.Database, user database.User, albumID string) error {

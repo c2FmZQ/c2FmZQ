@@ -14,11 +14,11 @@ import (
 	"testing"
 	"time"
 
-	"stingle-server/crypto"
-	"stingle-server/database"
-	"stingle-server/log"
-	"stingle-server/server"
-	"stingle-server/stingle"
+	"kringle-server/crypto"
+	"kringle-server/database"
+	"kringle-server/log"
+	"kringle-server/server"
+	"kringle-server/stingle"
 )
 
 // startServer starts a server listening on a unix socket. Returns the unix socket

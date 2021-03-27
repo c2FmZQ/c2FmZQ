@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"testing"
 
-	"stingle-server/crypto"
+	"kringle-server/crypto"
 )
 
 func createAccountAndLogin(sock, email string) (*client, error) {

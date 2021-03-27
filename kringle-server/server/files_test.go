@@ -5,8 +5,8 @@ import (
 	"net/url"
 	"testing"
 
-	"stingle-server/database"
-	"stingle-server/stingle"
+	"kringle-server/database"
+	"kringle-server/stingle"
 )
 
 func TestUploadDownload(t *testing.T) {
