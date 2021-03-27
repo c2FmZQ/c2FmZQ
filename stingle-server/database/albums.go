@@ -270,10 +270,10 @@ func (d *Database) ShareAlbum(user User, sharing *stingle.Album, sharingKeys map
 		return fmt.Errorf("user %d is not allowed to share this album", user.UserID)
 	}
 	if fs.Album.OwnerID == user.UserID {
-		fs.Album.IsShared = sharing.IsShared == "1"
-		fs.Album.IsHidden = sharing.IsHidden == "1"
-		fs.Album.IsLocked = sharing.IsLocked == "1"
-		fs.Album.SyncLocal = sharing.SyncLocal == "1"
+		fs.Album.IsShared = true
+		//fs.Album.IsHidden = sharing.IsHidden == "1"
+		//fs.Album.IsLocked = sharing.IsLocked == "1"
+		//fs.Album.SyncLocal = sharing.SyncLocal == "1"
 		fs.Album.Permissions = stingle.Permissions(sharing.Permissions)
 	}
 	for _, m := range strings.Split(sharing.Members, ",") {
@@ -411,13 +411,13 @@ func (d *Database) UpdatePerms(owner User, albumID string, permissions stingle.P
 }
 
 // RemoveAlbumMember removes a member from the album.
-func (d *Database) RemoveAlbumMember(owner User, albumID string, memberID int64) (retErr error) {
-	if owner.UserID == memberID {
-		return nil
-	}
-	done, fs, err := d.fileSetForUpdate(owner, AlbumSet, albumID)
+func (d *Database) RemoveAlbumMember(user User, albumID string, memberID int64) (retErr error) {
+	done, fs, err := d.fileSetForUpdate(user, AlbumSet, albumID)
 	if err != nil {
 		return err
+	}
+	if fs.Album.OwnerID == memberID {
+		return nil
 	}
 	defer done(&retErr)
 	delete(fs.Album.Members, memberID)
