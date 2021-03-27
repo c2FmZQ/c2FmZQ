@@ -54,7 +54,7 @@ func newClient(sock string) *client {
 type client struct {
 	sock string
 
-	userID          int
+	userID          int64
 	email           string
 	password        string
 	salt            string
@@ -98,12 +98,10 @@ func (c *client) sendRequest(uri string, form url.Values) (*stingle.Response, er
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("request returned status code %d", resp.StatusCode)
 	}
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
+	dec := json.NewDecoder(resp.Body)
+	dec.UseNumber()
 	var sr stingle.Response
-	if err := json.Unmarshal(body, &sr); err != nil {
+	if err := dec.Decode(&sr); err != nil {
 		return nil, err
 	}
 	return &sr, nil

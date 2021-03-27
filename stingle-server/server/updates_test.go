@@ -42,11 +42,11 @@ func addMissingFields(sr *stingle.Response) {
 func compareLists(s1, s2 []interface{}) []string {
 	m1 := make(map[string]bool)
 	for _, v := range s1 {
-		m1[fmt.Sprintf("%+v", v)] = true
+		m1[fmt.Sprintf("%#v", v)] = true
 	}
 	m2 := make(map[string]bool)
 	for _, v := range s2 {
-		m2[fmt.Sprintf("%+v", v)] = true
+		m2[fmt.Sprintf("%#v", v)] = true
 	}
 	var out []string
 	for k, _ := range m1 {

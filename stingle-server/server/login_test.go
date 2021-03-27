@@ -136,7 +136,7 @@ func (c *client) login() error {
 	if err != nil {
 		return err
 	}
-	c.userID = int(id)
+	c.userID = id
 	pk, err := base64.StdEncoding.DecodeString(sr.Parts["serverPublicKey"].(string))
 	if err != nil {
 		return err

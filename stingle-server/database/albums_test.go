@@ -111,9 +111,9 @@ func TestAlbums(t *testing.T) {
 		Permissions:   "1111",
 		IsLocked:      false,
 		Cover:         "",
-		Members:       map[int]bool{1: true, 2: true},
+		Members:       map[int64]bool{1: true, 2: true},
 		SyncLocal:     false,
-		SharingKeys:   map[int]string{2: "bob's sharing key"},
+		SharingKeys:   map[int64]string{2: "bob's sharing key"},
 	}
 	if diff := deep.Equal(expAlbumSpec, *fs.Album); diff != nil {
 		t.Errorf("Album data has unexpected value: %v", diff)

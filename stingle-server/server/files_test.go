@@ -282,32 +282,32 @@ func TestMoveFile(t *testing.T) {
 
 	want := stingle.ResponseOK().
 		AddPartList("trash",
-			map[string]string{"albumId": "", "dateCreated": "1000", "dateModified": "3000", "file": "filename0", "headers": "filename0 headers ", "version": "1"},
-			map[string]string{"albumId": "", "dateCreated": "1000", "dateModified": "3000", "file": "filename1", "headers": "filename1 headers ", "version": "1"},
+			map[string]interface{}{"albumId": "", "dateCreated": "1000", "dateModified": "3000", "file": "filename0", "headers": "filename0 headers ", "version": "1"},
+			map[string]interface{}{"albumId": "", "dateCreated": "1000", "dateModified": "3000", "file": "filename1", "headers": "filename1 headers ", "version": "1"},
 		).
 		AddPartList("files",
-			map[string]string{"albumId": "", "dateCreated": "1000", "dateModified": "2000", "file": "filename4", "headers": "filename4 headers ", "version": "1"},
-			map[string]string{"albumId": "", "dateCreated": "1000", "dateModified": "2000", "file": "filename5", "headers": "filename5 headers ", "version": "1"},
-			map[string]string{"albumId": "", "dateCreated": "1000", "dateModified": "2000", "file": "filename6", "headers": "filename6 headers ", "version": "1"},
-			map[string]string{"albumId": "", "dateCreated": "1000", "dateModified": "2000", "file": "filename7", "headers": "filename7 headers ", "version": "1"},
-			map[string]string{"albumId": "", "dateCreated": "1000", "dateModified": "2000", "file": "filename8", "headers": "filename8 headers ", "version": "1"},
-			map[string]string{"albumId": "", "dateCreated": "1000", "dateModified": "2000", "file": "filename9", "headers": "filename9 headers ", "version": "1"},
+			map[string]interface{}{"albumId": "", "dateCreated": "1000", "dateModified": "2000", "file": "filename4", "headers": "filename4 headers ", "version": "1"},
+			map[string]interface{}{"albumId": "", "dateCreated": "1000", "dateModified": "2000", "file": "filename5", "headers": "filename5 headers ", "version": "1"},
+			map[string]interface{}{"albumId": "", "dateCreated": "1000", "dateModified": "2000", "file": "filename6", "headers": "filename6 headers ", "version": "1"},
+			map[string]interface{}{"albumId": "", "dateCreated": "1000", "dateModified": "2000", "file": "filename7", "headers": "filename7 headers ", "version": "1"},
+			map[string]interface{}{"albumId": "", "dateCreated": "1000", "dateModified": "2000", "file": "filename8", "headers": "filename8 headers ", "version": "1"},
+			map[string]interface{}{"albumId": "", "dateCreated": "1000", "dateModified": "2000", "file": "filename9", "headers": "filename9 headers ", "version": "1"},
 		).
 		AddPartList("albums",
-			map[string]string{"albumId": "album1", "cover": "", "dateCreated": "1000", "dateModified": "1000", "encPrivateKey": "album1 encPrivateKey", "isHidden": "0", "isLocked": "0", "isOwner": "1", "isShared": "0", "members": "", "metadata": "album1 metadata", "permissions": "", "publicKey": "album1 publicKey"},
-			map[string]string{"albumId": "album2", "cover": "", "dateCreated": "1000", "dateModified": "1000", "encPrivateKey": "album2 encPrivateKey", "isHidden": "0", "isLocked": "0", "isOwner": "1", "isShared": "0", "members": "", "metadata": "album2 metadata", "permissions": "", "publicKey": "album2 publicKey"},
+			map[string]interface{}{"albumId": "album1", "cover": "", "dateCreated": "1000", "dateModified": "1000", "encPrivateKey": "album1 encPrivateKey", "isHidden": "0", "isLocked": "0", "isOwner": "1", "isShared": "0", "members": "", "metadata": "album1 metadata", "permissions": "", "publicKey": "album1 publicKey"},
+			map[string]interface{}{"albumId": "album2", "cover": "", "dateCreated": "1000", "dateModified": "1000", "encPrivateKey": "album2 encPrivateKey", "isHidden": "0", "isLocked": "0", "isOwner": "1", "isShared": "0", "members": "", "metadata": "album2 metadata", "permissions": "", "publicKey": "album2 publicKey"},
 		).
 		AddPartList("albumFiles",
-			map[string]string{"albumId": "album1", "dateCreated": "1000", "dateModified": "4000", "file": "filename2", "headers": "filename2 headers album1", "version": "1"},
-			map[string]string{"albumId": "album1", "dateCreated": "1000", "dateModified": "4000", "file": "filename3", "headers": "filename3 headers album1", "version": "1"},
-			map[string]string{"albumId": "album2", "dateCreated": "1000", "dateModified": "5000", "file": "filename4", "headers": "filename4 headers album2", "version": "1"},
-			map[string]string{"albumId": "album2", "dateCreated": "1000", "dateModified": "5000", "file": "filename5", "headers": "filename5 headers album2", "version": "1"},
+			map[string]interface{}{"albumId": "album1", "dateCreated": "1000", "dateModified": "4000", "file": "filename2", "headers": "filename2 headers album1", "version": "1"},
+			map[string]interface{}{"albumId": "album1", "dateCreated": "1000", "dateModified": "4000", "file": "filename3", "headers": "filename3 headers album1", "version": "1"},
+			map[string]interface{}{"albumId": "album2", "dateCreated": "1000", "dateModified": "5000", "file": "filename4", "headers": "filename4 headers album2", "version": "1"},
+			map[string]interface{}{"albumId": "album2", "dateCreated": "1000", "dateModified": "5000", "file": "filename5", "headers": "filename5 headers album2", "version": "1"},
 		).
 		AddPartList("deletes",
-			map[string]string{"albumId": "", "date": "3000", "file": "filename0", "type": "1"},
-			map[string]string{"albumId": "", "date": "3000", "file": "filename1", "type": "1"},
-			map[string]string{"albumId": "", "date": "4000", "file": "filename2", "type": "1"},
-			map[string]string{"albumId": "", "date": "4000", "file": "filename3", "type": "1"},
+			map[string]interface{}{"albumId": "", "date": "3000", "file": "filename0", "type": "1"},
+			map[string]interface{}{"albumId": "", "date": "3000", "file": "filename1", "type": "1"},
+			map[string]interface{}{"albumId": "", "date": "4000", "file": "filename2", "type": "1"},
+			map[string]interface{}{"albumId": "", "date": "4000", "file": "filename3", "type": "1"},
 		)
 	if diff := diffUpdates(want, got); diff != "" {
 		t.Errorf("Unexpected updates:\n%s", diff)
