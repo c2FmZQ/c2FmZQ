@@ -324,7 +324,7 @@ func (c *client) getURL(file, set string) (string, error) {
 		return "", err
 	}
 	if sr.Status != "ok" {
-		return "", fmt.Errorf("status:nok %+v", sr)
+		return "", sr
 	}
 	url, ok := sr.Parts["url"].(string)
 	if !ok {
@@ -348,7 +348,7 @@ func (c *client) getDownloadURLs(files, sets []string, isThumb bool) (map[string
 		return nil, err
 	}
 	if sr.Status != "ok" {
-		return nil, fmt.Errorf("status:nok %+v", sr)
+		return nil, sr
 	}
 	urls, ok := sr.Parts["urls"].(map[string]interface{})
 	if !ok {
@@ -372,7 +372,7 @@ func (c *client) emptyTrash(ts string) error {
 		return err
 	}
 	if sr.Status != "ok" {
-		return fmt.Errorf("status:nok %+v", sr)
+		return sr
 	}
 	return nil
 }
@@ -392,7 +392,7 @@ func (c *client) deleteFiles(files []string) error {
 		return err
 	}
 	if sr.Status != "ok" {
-		return fmt.Errorf("status:nok %+v", sr)
+		return sr
 	}
 	return nil
 }
@@ -424,7 +424,7 @@ func (c *client) moveFiles(p database.MoveFileParams) error {
 		return err
 	}
 	if sr.Status != "ok" {
-		return fmt.Errorf("status:nok %+v", sr)
+		return sr
 	}
 	return nil
 }

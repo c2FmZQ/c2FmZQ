@@ -3,6 +3,7 @@ package stingle
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 
 	"stingle-server/log"
@@ -100,6 +101,11 @@ type Response struct {
 	Parts  map[string]interface{} `json:"parts"`
 	Infos  []string               `json:"infos"`
 	Errors []string               `json:"errors"`
+}
+
+// Error makes it so that Response can be returned as an error.
+func (r Response) Error() string {
+	return fmt.Sprintf("status:%q errors:%v", r.Status, r.Errors)
 }
 
 // AddPart adds a value to Parts.

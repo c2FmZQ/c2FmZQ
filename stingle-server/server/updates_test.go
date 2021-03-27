@@ -23,7 +23,7 @@ func (c *client) getUpdates(fileST, trashST, albumsST, albumFilesST, cntST, delS
 		return nil, err
 	}
 	if sr.Status != "ok" {
-		return nil, fmt.Errorf("status:nok %+v", sr)
+		return nil, sr
 	}
 	return sr, nil
 }

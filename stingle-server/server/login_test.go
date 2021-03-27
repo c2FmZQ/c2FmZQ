@@ -94,7 +94,7 @@ func (c *client) createAccount(email string) error {
 		return err
 	}
 	if sr.Status != "ok" {
-		return fmt.Errorf("status:nok %+v", sr)
+		return sr
 	}
 	return nil
 }
@@ -107,7 +107,7 @@ func (c *client) preLogin() error {
 		return err
 	}
 	if sr.Status != "ok" {
-		return fmt.Errorf("status:nok %+v", sr)
+		return sr
 	}
 	if want, got := c.salt, sr.Parts["salt"]; want != got {
 		return fmt.Errorf("preLogin: unexpected salt: want %q, got %q", want, got)
@@ -124,7 +124,7 @@ func (c *client) login() error {
 		return err
 	}
 	if sr.Status != "ok" {
-		return fmt.Errorf("status:nok %+v", sr)
+		return sr
 	}
 	if want, got := c.keyBundle, sr.Parts["keyBundle"]; want != got {
 		return fmt.Errorf("login: unexpected keyBundle: want %q, got %q", want, got)
@@ -158,7 +158,7 @@ func (c *client) getServerPK() error {
 		return err
 	}
 	if sr.Status != "ok" {
-		return fmt.Errorf("status:nok %+v", sr)
+		return sr
 	}
 	if sr.Parts["serverPK"] == nil {
 		return fmt.Errorf("server did not return serverPK")
@@ -181,7 +181,7 @@ func (c *client) checkKey() error {
 		return err
 	}
 	if sr.Status != "ok" {
-		return fmt.Errorf("status:nok %+v", sr)
+		return sr
 	}
 	if want, got := c.isBackup, sr.Parts["isKeyBackedUp"]; want != got {
 		return fmt.Errorf("checkKey: unexpected isKeyBackedUp: want %q, got %q", want, got)
@@ -218,7 +218,7 @@ func (c *client) changePass() error {
 		return err
 	}
 	if sr.Status != "ok" {
-		return fmt.Errorf("status:nok %+v", sr)
+		return sr
 	}
 	token, ok := sr.Parts["token"].(string)
 	if !ok || token == "" {
@@ -243,7 +243,7 @@ func (c *client) recoverAccount() error {
 		return err
 	}
 	if sr.Status != "ok" {
-		return fmt.Errorf("status:nok %+v", sr)
+		return sr
 	}
 	if want, got := "OK", sr.Parts["result"]; want != got {
 		return fmt.Errorf("recoverAccount: unexpected result: want %v, got %v", want, got)

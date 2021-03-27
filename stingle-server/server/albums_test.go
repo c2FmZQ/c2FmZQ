@@ -395,7 +395,7 @@ func (c *client) addAlbum(albumID string, ts int64) error {
 		return err
 	}
 	if sr.Status != "ok" {
-		return fmt.Errorf("status:nok %+v", sr)
+		return sr
 	}
 	return nil
 }
@@ -413,7 +413,7 @@ func (c *client) deleteAlbum(albumID string) error {
 		return err
 	}
 	if sr.Status != "ok" {
-		return fmt.Errorf("status:nok %+v", sr)
+		return sr
 	}
 	return nil
 }
@@ -440,7 +440,7 @@ func (c *client) shareAlbum(album stingle.Album) error {
 		return err
 	}
 	if sr.Status != "ok" {
-		return fmt.Errorf("status:nok %+v", sr)
+		return sr
 	}
 	return nil
 }
@@ -459,7 +459,7 @@ func (c *client) changeAlbumCover(albumID, cover string) error {
 		return err
 	}
 	if sr.Status != "ok" {
-		return fmt.Errorf("status:nok %+v", sr)
+		return sr
 	}
 	return nil
 }
@@ -478,7 +478,7 @@ func (c *client) renameAlbum(albumID, metadata string) error {
 		return err
 	}
 	if sr.Status != "ok" {
-		return fmt.Errorf("status:nok %+v", sr)
+		return sr
 	}
 	return nil
 }
@@ -500,7 +500,7 @@ func (c *client) editPerms(album stingle.Album) error {
 		return err
 	}
 	if sr.Status != "ok" {
-		return fmt.Errorf("status:nok %+v", sr)
+		return sr
 	}
 	return nil
 }
@@ -523,7 +523,7 @@ func (c *client) removeAlbumMember(album stingle.Album, memberUserID int64) erro
 		return err
 	}
 	if sr.Status != "ok" {
-		return fmt.Errorf("status:nok %+v", sr)
+		return sr
 	}
 	return nil
 }
@@ -541,7 +541,7 @@ func (c *client) leaveAlbum(albumID string) error {
 		return err
 	}
 	if sr.Status != "ok" {
-		return fmt.Errorf("status:nok %+v", sr)
+		return sr
 	}
 	return nil
 }
@@ -559,7 +559,7 @@ func (c *client) unshareAlbum(albumID string) error {
 		return err
 	}
 	if sr.Status != "ok" {
-		return fmt.Errorf("status:nok %+v", sr)
+		return sr
 	}
 	return nil
 }
