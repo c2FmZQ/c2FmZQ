@@ -1,6 +1,7 @@
 package database
 
 import (
+	"compress/gzip"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -120,7 +121,12 @@ func (d *Database) DumpFile(filename string) error {
 	if err != nil {
 		return err
 	}
-	_, err = io.Copy(os.Stdout, r)
+	gz, err := gzip.NewReader(r)
+	if err != nil {
+		return err
+	}
+	defer gz.Close()
+	_, err = io.Copy(os.Stdout, gz)
 	return err
 }
 
@@ -136,7 +142,15 @@ func (d *Database) readDataFile(filename string, obj interface{}) (*crypter, err
 	if err != nil {
 		return nil, err
 	}
-	return c, json.NewDecoder(r).Decode(obj)
+	gz, err := gzip.NewReader(r)
+	if err != nil {
+		return nil, err
+	}
+	defer gz.Close()
+	if err := json.NewDecoder(gz).Decode(obj); err != nil {
+		return nil, err
+	}
+	return c, nil
 }
 
 // saveDataFile atomically replace a json object in a file.
@@ -157,9 +171,18 @@ func (d *Database) saveDataFile(c *crypter, filename string, obj interface{}) er
 		f.Close()
 		return err
 	}
-	enc := json.NewEncoder(w)
+	gz, err := gzip.NewWriterLevel(w, gzip.BestCompression)
+	if err != nil {
+		return err
+	}
+	enc := json.NewEncoder(gz)
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(obj); err != nil {
+		gz.Close()
+		w.Close()
+		return err
+	}
+	if err := gz.Close(); err != nil {
 		w.Close()
 		return err
 	}
