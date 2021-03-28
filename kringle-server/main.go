@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -30,7 +31,8 @@ var (
 	keyFile  = flag.String("key", "", "The name of the file containing the TLS private key to use.")
 	logLevel = flag.Int("v", 3, "The level of logging verbosity: 1:Error 2:Info 3:Debug")
 
-	catFlag = flag.String("cat", "", "When set, decrypts the given file and writes it to stdout.")
+	passphraseFile = flag.String("passphrase_file", "", "The name of the file containing the passphrase that protects the server's metadata. If left empty, the server will prompt for a passphrase when it starts.")
+	catFlag        = flag.String("cat", "", "When set, decrypts the given file and writes it to stdout.")
 )
 
 func usage() {
@@ -45,25 +47,10 @@ func main() {
 	flag.Parse()
 	log.Level = *logLevel
 
-	var passphrase []byte
-	var err error
-	fmt.Print("Enter passphrase: ")
-	if passphrase, err = term.ReadPassword(int(os.Stdin.Fd())); err != nil {
-		log.Fatalf("term.ReadPassword: %v", err)
-	}
-
 	if *dbFlag == "" {
 		log.Error("--db must be set")
 		usage()
 	}
-	db := database.New(*dbFlag, string(passphrase))
-	if *catFlag != "" {
-		if err := db.DumpFile(*catFlag); err != nil {
-			os.Exit(1)
-		}
-		os.Exit(0)
-	}
-
 	if *address == "" {
 		log.Error("--address must be set")
 		usage()
@@ -72,6 +59,14 @@ func main() {
 		log.Error("--cert and --key must either both be set or unset.")
 		usage()
 	}
+	db := database.New(*dbFlag, passphrase())
+	if *catFlag != "" {
+		if err := db.DumpFile(*catFlag); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+
 	s := server.New(db, *address)
 	s.BaseURL = *baseURL
 
@@ -88,16 +83,33 @@ func main() {
 		close(done)
 	}()
 
-	log.Info("Starting server")
 	if *certFile == "" {
+		log.Info("Starting server WITHOUT TLS")
 		if err := s.Run(); err != http.ErrServerClosed {
 			log.Errorf("s.Run: %v", err)
 		}
 	} else {
+		log.Info("Starting server with TLS")
 		if err := s.RunWithTLS(*certFile, *keyFile); err != http.ErrServerClosed {
 			log.Errorf("s.RunWithTLS: %v", err)
 		}
 	}
 	<-done
 	log.Info("Server exited cleanly.")
+}
+
+func passphrase() string {
+	if *passphraseFile != "" {
+		p, err := os.ReadFile(*passphraseFile)
+		if err != nil {
+			log.Fatalf("passphrase: %v", err)
+		}
+		return string(p)
+	}
+	fmt.Print("Enter passphrase: ")
+	passphrase, err := term.ReadPassword(int(os.Stdin.Fd()))
+	if err != nil {
+		log.Fatalf("passphrase: %v", err)
+	}
+	return strings.TrimSpace(string(passphrase))
 }

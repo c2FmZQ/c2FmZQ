@@ -1,5 +1,3 @@
-// Package database implements all the storage requirement of the kringle server
-// using a local filesystem. It doesn't use any external database server.
 package database
 
 import (
