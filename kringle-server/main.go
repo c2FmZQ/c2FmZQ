@@ -32,7 +32,6 @@ var (
 	logLevel = flag.Int("v", 3, "The level of logging verbosity: 1:Error 2:Info 3:Debug")
 
 	passphraseFile = flag.String("passphrase_file", "", "The name of the file containing the passphrase that protects the server's metadata. If left empty, the server will prompt for a passphrase when it starts.")
-	catFlag        = flag.String("cat", "", "When set, decrypts the given file and writes it to stdout.")
 )
 
 func usage() {
@@ -60,12 +59,6 @@ func main() {
 		usage()
 	}
 	db := database.New(*dbFlag, passphrase())
-	if *catFlag != "" {
-		if err := db.DumpFile(*catFlag); err != nil {
-			os.Exit(1)
-		}
-		os.Exit(0)
-	}
 
 	s := server.New(db, *address)
 	s.BaseURL = *baseURL
