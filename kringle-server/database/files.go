@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	fileSetPattern = "fileset-%s.json"
+	fileSetPattern = "fileset-%s"
 
 	GallerySet = "0"
 	TrashSet   = "1"
@@ -46,7 +46,7 @@ type BlobSpec struct {
 
 func (d *Database) incRefCount(blob string, delta int) int {
 	var blobSpec BlobSpec
-	done, err := openForUpdate(blob+".json", &blobSpec)
+	done, err := d.openForUpdate(blob+".ref", &blobSpec)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		log.Fatalf("incRefCount(%q, %d) failed: %v", blob, delta, err)
 	}
@@ -60,15 +60,15 @@ func (d *Database) incRefCount(blob string, delta int) int {
 		if err := os.Remove(blob); err != nil {
 			log.Errorf("os.Remove(%q) failed: %v", blob, err)
 		}
-		if err := os.Remove(blob + ".json"); err != nil {
-			log.Errorf("os.Remove(%q) failed: %v", blob+".json", err)
+		if err := os.Remove(blob + ".ref"); err != nil {
+			log.Errorf("os.Remove(%q) failed: %v", blob+".ref", err)
 		}
 	}
 	return blobSpec.RefCount
 }
 
 func (d *Database) fileSetPath(user User, set string) string {
-	return filepath.Join(d.Home(user.Email), fmt.Sprintf(fileSetPattern, set))
+	return d.filePath("home", user.Email, fmt.Sprintf(fileSetPattern, set))
 }
 
 func (d *Database) addFileToFileSet(user User, file FileSpec) (retErr error) {
@@ -83,9 +83,9 @@ func (d *Database) addFileToFileSet(user User, file FileSpec) (retErr error) {
 		fileName = d.fileSetPath(user, file.Set)
 	}
 	var fileSet FileSet
-	done, err := openForUpdate(fileName, &fileSet)
+	done, err := d.openForUpdate(fileName, &fileSet)
 	if err != nil {
-		log.Errorf("openForUpdate(%q): %v", fileName, err)
+		log.Errorf("d.openForUpdate(%q): %v", fileName, err)
 		return err
 	}
 	defer done(&retErr)
@@ -160,7 +160,7 @@ func (d *Database) FileSet(user User, set, albumID string) (*FileSet, error) {
 		fileName = d.fileSetPath(user, set)
 	}
 	var fileSet FileSet
-	if err := loadJSON(fileName, &fileSet); err != nil && !errors.Is(err, os.ErrNotExist) {
+	if _, err := d.readDataFile(fileName, &fileSet); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}
 	if fileSet.Files == nil {
@@ -184,7 +184,7 @@ func (d *Database) fileSetForUpdate(user User, set, albumID string) (func(*error
 		fileName = d.fileSetPath(user, set)
 	}
 	var fileSet FileSet
-	done, err := openForUpdate(fileName, &fileSet)
+	done, err := d.openForUpdate(fileName, &fileSet)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, nil, err
 	}

@@ -13,9 +13,9 @@ import (
 )
 
 const (
-	userListFile    = "users.json"
-	userFile        = "user.json"
-	contactListFile = "contact-list.json"
+	userListFile    = "users.dat"
+	userFile        = "user.dat"
+	contactListFile = "contact-list.dat"
 )
 
 // This is used internally for the list of all users in the system.
@@ -54,36 +54,12 @@ func (u User) ServerPublicKeyForExport() string {
 	return base64.StdEncoding.EncodeToString(u.ServerKey.PublicKey().Bytes)
 }
 
-// Home returns the directory where the user's data is stored.
-func (d Database) Home(email string) string {
-	return filepath.Join(d.dir, "users", base64.RawURLEncoding.EncodeToString([]byte(email)))
-}
-
-// HomeByID is like Home() except that it uses a User ID instead of email.
-func (d Database) HomeByID(userID int64) (string, error) {
-	var ul []userList
-	if err := loadJSON(filepath.Join(d.Dir(), userListFile), &ul); err != nil {
-		return "", err
-	}
-	for _, u := range ul {
-		if u.UserID == userID {
-			return d.Home(u.Email), nil
-		}
-	}
-	return "", os.ErrNotExist
-}
-
 // AddUser creates a new user account for u.
 func (d *Database) AddUser(u User) (retErr error) {
-	home := d.Home(u.Email)
-	if err := os.MkdirAll(home, 0700); err != nil {
-		return err
-	}
-
 	var ul []userList
-	done, err := openForUpdate(filepath.Join(d.Dir(), userListFile), &ul)
+	done, err := d.openForUpdate(d.filePath(userListFile), &ul)
 	if err != nil {
-		log.Errorf("openForUpdate: %v", err)
+		log.Errorf("d.openForUpdate: %v", err)
 		return err
 	}
 	defer done(&retErr)
@@ -97,26 +73,31 @@ func (d *Database) AddUser(u User) (retErr error) {
 		}
 	}
 	uid += 1
-	hf := base64.RawURLEncoding.EncodeToString([]byte(filepath.Join("users", u.Email)))
 	ul = append(ul, userList{UserID: uid, Email: u.Email})
 
 	u.UserID = uid
-	u.HomeFolder = hf
+	u.HomeFolder = base64.RawURLEncoding.EncodeToString([]byte(filepath.Join("users", u.Email)))
 	u.ServerKey = crypto.MakeSecretKey()
 	u.ServerSignKey = crypto.MakeSignSecretKey()
 	u.TokenSeq = 1
-	return saveJSON(filepath.Join(home, userFile), u)
+	return d.saveDataFile(nil, d.filePath("home", u.Email, userFile), u)
 }
 
 // UpdateUser saves a user object.
 func (d *Database) UpdateUser(u User) error {
-	return saveJSON(filepath.Join(d.Home(u.Email), userFile), u)
+	var f User
+	done, err := d.openForUpdate(d.filePath("home", u.Email, userFile), &f)
+	if err != nil {
+		return err
+	}
+	f = u
+	return done(nil)
 }
 
 // UserByID returns the User object with the given ID.
 func (d *Database) UserByID(id int64) (User, error) {
 	var ul []userList
-	if err := loadJSON(filepath.Join(d.Dir(), userListFile), &ul); err != nil {
+	if _, err := d.readDataFile(d.filePath(userListFile), &ul); err != nil {
 		return User{}, err
 	}
 	for _, u := range ul {
@@ -130,7 +111,7 @@ func (d *Database) UserByID(id int64) (User, error) {
 // User returns the User object with the given email address.
 func (d *Database) User(email string) (User, error) {
 	var u User
-	err := loadJSON(filepath.Join(d.Home(email), userFile), &u)
+	_, err := d.readDataFile(d.filePath("home", email, userFile), &u)
 	return u, err
 }
 
@@ -155,12 +136,10 @@ func (c Contact) Export() stingle.Contact {
 
 // addContactToUser adds contact to user's contact list.
 func (d *Database) addContactToUser(user, contact User) (c *Contact, retErr error) {
-	home := d.Home(user.Email)
-
 	var contactList map[string]*Contact
-	done, err := openForUpdate(filepath.Join(home, contactListFile), &contactList)
+	done, err := d.openForUpdate(d.filePath("home", user.Email, contactListFile), &contactList)
 	if err != nil {
-		log.Errorf("openForUpdate: %v", err)
+		log.Errorf("d.openForUpdate: %v", err)
 		return nil, err
 	}
 	defer done(&retErr)
@@ -189,7 +168,7 @@ func (d *Database) AddContact(user User, contactEmail string) (*Contact, error) 
 // lookupContacts returns a Contact for each UserIDs in the list.
 func (d *Database) lookupContacts(uids map[int64]bool) []Contact {
 	var ul []userList
-	if err := loadJSON(filepath.Join(d.Dir(), userListFile), &ul); err != nil {
+	if _, err := d.readDataFile(d.filePath(userListFile), &ul); err != nil {
 		return nil
 	}
 	var out []Contact
@@ -213,12 +192,10 @@ func (d *Database) lookupContacts(uids map[int64]bool) []Contact {
 // addCrossContacts adds contacts to each other.
 func (d *Database) addCrossContacts(list []Contact) {
 	for _, c1 := range list {
-		home := d.Home(c1.Email)
-
 		var contactList map[string]*Contact
-		done, err := openForUpdate(filepath.Join(home, contactListFile), &contactList)
+		done, err := d.openForUpdate(d.filePath("home", c1.Email, contactListFile), &contactList)
 		if err != nil {
-			log.Errorf("openForUpdate: %v", err)
+			log.Errorf("d.openForUpdate: %v", err)
 			continue
 		}
 		if contactList == nil {
@@ -247,9 +224,8 @@ func (d *Database) addCrossContacts(list []Contact) {
 // ContactUpdates returns changes to a user's contact list that are more recent
 // than ts.
 func (d *Database) ContactUpdates(email string, ts int64) ([]stingle.Contact, error) {
-	home := d.Home(email)
 	var contacts map[string]Contact
-	if err := loadJSON(filepath.Join(home, contactListFile), &contacts); err != nil && !errors.Is(err, os.ErrNotExist) {
+	if _, err := d.readDataFile(d.filePath("home", email, contactListFile), &contacts); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}
 	if contacts == nil {

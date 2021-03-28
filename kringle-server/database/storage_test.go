@@ -31,37 +31,39 @@ func TestLock(t *testing.T) {
 func TestOpenForUpdate(t *testing.T) {
 	dir := t.TempDir()
 	fn := filepath.Join(dir, "test.json")
+	db := New(dir, "")
 
 	type Foo struct {
 		Foo string `json:"foo"`
 	}
 	foo := Foo{"foo"}
-	if err := saveJSON(fn, foo); err != nil {
-		t.Fatalf("saveJSON failed: %v", err)
+	if err := db.saveDataFile(nil, fn, foo); err != nil {
+		t.Fatalf("d.saveDataFile failed: %v", err)
 	}
 	var bar Foo
-	done, err := openForUpdate(fn, &bar)
+	done, err := db.openForUpdate(fn, &bar)
 	if err != nil {
-		t.Fatalf("openForUpdate failed: %v", err)
+		t.Fatalf("db.openForUpdate failed: %v", err)
 	}
 	if !reflect.DeepEqual(foo, bar) {
-		t.Fatalf("openForUpdate() got %+v, want %+v", bar, foo)
+		t.Fatalf("db.openForUpdate() got %+v, want %+v", bar, foo)
 	}
 	bar.Foo = "bar"
 	if err := done(nil); err != nil {
 		t.Errorf("done() failed: %v", err)
 	}
 
-	if err := loadJSON(fn, &foo); err != nil {
-		t.Fatalf("loadJSON() failed: %v", err)
+	if _, err := db.readDataFile(fn, &foo); err != nil {
+		t.Fatalf("db.readDataFile() failed: %v", err)
 	}
 	if !reflect.DeepEqual(foo, bar) {
-		t.Fatalf("openForUpdate() got %+v, want %+v", foo, bar)
+		t.Fatalf("d.openForUpdate() got %+v, want %+v", foo, bar)
 	}
 }
 
 func TestOpenForUpdateDeferredDone(t *testing.T) {
 	dir := t.TempDir()
+	db := New(dir, "")
 
 	// This function should return os.ErrNotExist because the file open for
 	// update can't be saved.
@@ -75,9 +77,9 @@ func TestOpenForUpdateDeferredDone(t *testing.T) {
 			Foo string `json:"foo"`
 		}
 		var foo Foo
-		done, err := openForUpdate(fn, &foo)
+		done, err := db.openForUpdate(fn, &foo)
 		if err != nil {
-			t.Fatalf("openForUpdate failed: %v", err)
+			t.Fatalf("db.openForUpdate failed: %v", err)
 		}
 		defer done(&retErr)
 		if err := os.RemoveAll(sub); err != nil {

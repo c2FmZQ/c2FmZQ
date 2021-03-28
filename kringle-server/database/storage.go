@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math/rand"
 	"os"
+	"path/filepath"
 	"time"
 
 	"kringle-server/log"
@@ -15,12 +17,25 @@ func number(n int64) json.Number {
 	return json.Number(fmt.Sprintf("%d", n))
 }
 
+func createParentIfNotExist(filename string) error {
+	dir, _ := filepath.Split(filename)
+	if _, err := os.Stat(dir); errors.Is(err, os.ErrNotExist) {
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			return fmt.Errorf("os.MkdirAll(%q): %v", dir, err)
+		}
+	}
+	return nil
+}
+
 // lock atomically creates a lock file for the given filename. When this
 // function returns without error, the lock is acquired and nobody else can
 // acquire it until it is released.
 //
 // There is logic in place to remove stale locks after a while.
 func lock(fn string) error {
+	if err := createParentIfNotExist(fn); err != nil {
+		return err
+	}
 	deadline := time.Duration(60+rand.Int()%60) * time.Second
 	lockf := fn + ".lock"
 	for {
@@ -61,30 +76,31 @@ func tryToRemoveStaleLock(lockf string, deadline time.Duration) {
 	}
 }
 
-// openForUpdate opens a json file with the expectation that the object will be
+// d.openForUpdate opens a json file with the expectation that the object will be
 // modified and then saved again.
 //
 // Example:
 //   var foo FooStruct
-//   done, err := openForUpdate(filename, &foo)
+//   done, err := d.openForUpdate(filename, &foo)
 //   if err != nil {
 //     panic(err)
 //   }
 //   // modified foo
 //   foo.Bar = X
 //   return done()
-func openForUpdate(f string, obj interface{}) (func(*error) error, error) {
+func (d *Database) openForUpdate(f string, obj interface{}) (func(*error) error, error) {
 	if err := lock(f); err != nil {
 		return nil, err
 	}
-	if err := loadJSON(f, obj); err != nil && !errors.Is(err, os.ErrNotExist) {
+	crypter, err := d.readDataFile(f, obj)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}
 	return func(errp *error) (err error) {
 		if errp == nil || *errp != nil {
 			errp = &err
 		}
-		if *errp = saveJSON(f, obj); *errp != nil {
+		if *errp = d.saveDataFile(crypter, f, obj); *errp != nil {
 			return *errp
 		}
 		*errp = unlock(f)
@@ -92,30 +108,62 @@ func openForUpdate(f string, obj interface{}) (func(*error) error, error) {
 	}, nil
 }
 
-// loadJSON reads a json object from a file.
-func loadJSON(flename string, obj interface{}) error {
-	f, err := os.Open(flename)
+// DumpFile writes the decrypted content of a file to stdout.
+func (d *Database) DumpFile(filename string) error {
+	f, err := os.Open(filename)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
-	return json.NewDecoder(f).Decode(obj)
+	c := newCrypter(d.decryptWithMasterKey)
+	r, err := c.BeginRead(f)
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(os.Stdout, r)
+	return err
 }
 
-// saveJSON atomically replace a json object in a file.
-func saveJSON(filename string, obj interface{}) error {
+// readDataFile reads a json object from a file.
+func (d *Database) readDataFile(filename string, obj interface{}) (*crypter, error) {
+	f, err := os.Open(filename)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	c := newCrypter(d.decryptWithMasterKey)
+	r, err := c.BeginRead(f)
+	if err != nil {
+		return nil, err
+	}
+	return c, json.NewDecoder(r).Decode(obj)
+}
+
+// saveDataFile atomically replace a json object in a file.
+func (d *Database) saveDataFile(c *crypter, filename string, obj interface{}) error {
+	if c == nil {
+		c = newCrypter(d.decryptWithMasterKey)
+		if err := createParentIfNotExist(filename); err != nil {
+			return err
+		}
+	}
 	t := fmt.Sprintf("%s.tmp-%d", filename, time.Now().UnixNano())
 	f, err := os.OpenFile(t, os.O_WRONLY|os.O_CREATE|os.O_EXCL|os.O_SYNC, 0600)
 	if err != nil {
 		return err
 	}
-	enc := json.NewEncoder(f)
-	enc.SetIndent("", "  ")
-	if err := enc.Encode(obj); err != nil {
+	w, err := c.BeginWrite(f)
+	if err != nil {
 		f.Close()
 		return err
 	}
-	if err := f.Close(); err != nil {
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(obj); err != nil {
+		w.Close()
+		return err
+	}
+	if err := w.Close(); err != nil {
 		return err
 	}
 	return os.Rename(t, filename)

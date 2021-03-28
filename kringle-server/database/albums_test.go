@@ -25,7 +25,7 @@ func addAlbum(db *database.Database, user database.User, albumID string) error {
 
 func TestAlbums(t *testing.T) {
 	dir := t.TempDir()
-	db := database.New(dir)
+	db := database.New(dir, "")
 	email := "alice@"
 	key := crypto.MakeSecretKey()
 	database.CurrentTimeForTesting = 10000

@@ -3,7 +3,6 @@ package database
 import (
 	"errors"
 	"os"
-	"path/filepath"
 	"sort"
 	"sync"
 
@@ -100,7 +99,7 @@ func (d *Database) DeleteUpdates(user User, ts int64) ([]stingle.DeleteEvent, er
 	out := []stingle.DeleteEvent{}
 
 	var manifest AlbumManifest
-	if err := loadJSON(filepath.Join(d.Home(user.Email), albumManifest), &manifest); err != nil && !errors.Is(err, os.ErrNotExist) {
+	if _, err := d.readDataFile(d.filePath("home", user.Email, albumManifest), &manifest); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}
 	for _, d := range manifest.Deletes {
@@ -162,7 +161,7 @@ func (d *Database) getFileSizes(user User, set, albumID string, ch chan<- fileSi
 
 func (d *Database) SpaceUsed(user User) (int64, error) {
 	var manifest AlbumManifest
-	if err := loadJSON(filepath.Join(d.Home(user.Email), albumManifest), &manifest); err != nil && !errors.Is(err, os.ErrNotExist) {
+	if _, err := d.readDataFile(d.filePath("home", user.Email, albumManifest), &manifest); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return 0, err
 	}
 

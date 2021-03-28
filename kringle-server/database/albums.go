@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	albumManifest = "album-manifest.json"
+	albumManifest = "album-manifest"
 )
 
 // Encapsulates a list of all of a user's albums, including albums shared with
@@ -75,11 +75,11 @@ func (d *Database) makeAlbumPath() (string, error) {
 	if _, err := rand.Read(name); err != nil {
 		return "", err
 	}
-	dir := filepath.Join(d.Dir(), "albums", fmt.Sprintf("%02X", name[0]), fmt.Sprintf("%02X", name[1]))
+	dir := filepath.Join(d.Dir(), "metadata", fmt.Sprintf("%02X", name[0]), fmt.Sprintf("%02X", name[1]))
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return "", err
 	}
-	return filepath.Join(dir, base64.RawURLEncoding.EncodeToString(name)+".json"), nil
+	return filepath.Join(dir, base64.RawURLEncoding.EncodeToString(name)), nil
 }
 
 // AddAlbum creates a new empty album with the given information.
@@ -178,7 +178,7 @@ func (d *Database) AlbumPermissions(user User, albumID string) (stingle.Permissi
 // AlbumRefs returns a list of all the user's albums.
 func (d *Database) AlbumRefs(user User) (map[string]*AlbumRef, error) {
 	var manifest AlbumManifest
-	if err := loadJSON(filepath.Join(d.Home(user.Email), albumManifest), &manifest); err != nil && !errors.Is(err, os.ErrNotExist) {
+	if _, err := d.readDataFile(d.filePath("home", user.Email, albumManifest), &manifest); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}
 	if manifest.Albums == nil {
@@ -324,9 +324,8 @@ func (d *Database) UnshareAlbum(owner User, albumID string) (retErr error) {
 
 // albumRef returns a reference to an album file, i.e. where it is stored.
 func (d *Database) albumRef(user User, albumID string) (*AlbumRef, error) {
-	home := d.Home(user.Email)
 	var manifest AlbumManifest
-	if err := loadJSON(filepath.Join(home, albumManifest), &manifest); err != nil {
+	if _, err := d.readDataFile(d.filePath("home", user.Email, albumManifest), &manifest); err != nil {
 		return nil, err
 	}
 	a := manifest.Albums[albumID]
@@ -338,15 +337,15 @@ func (d *Database) albumRef(user User, albumID string) (*AlbumRef, error) {
 
 // addAlbumRef adds an album reference the a user's album list.
 func (d *Database) addAlbumRef(memberID int64, albumID, file string) (retErr error) {
-	home, err := d.HomeByID(memberID)
+	user, err := d.UserByID(memberID)
 	if err != nil {
 		return err
 	}
 
 	var manifest AlbumManifest
-	done, err := openForUpdate(filepath.Join(home, albumManifest), &manifest)
+	done, err := d.openForUpdate(d.filePath("home", user.Email, albumManifest), &manifest)
 	if err != nil {
-		log.Errorf("openForUpdate: %v", err)
+		log.Errorf("d.openForUpdate: %v", err)
 		return err
 	}
 	defer done(&retErr)
@@ -363,15 +362,15 @@ func (d *Database) addAlbumRef(memberID int64, albumID, file string) (retErr err
 
 // removeAlbumRef removes an album reference from a user's album list.
 func (d *Database) removeAlbumRef(memberID int64, albumID string) (retErr error) {
-	home, err := d.HomeByID(memberID)
+	user, err := d.UserByID(memberID)
 	if err != nil {
 		return err
 	}
 
 	var manifest AlbumManifest
-	done, err := openForUpdate(filepath.Join(home, albumManifest), &manifest)
+	done, err := d.openForUpdate(d.filePath("home", user.Email, albumManifest), &manifest)
 	if err != nil {
-		log.Errorf("openForUpdate: %v", err)
+		log.Errorf("d.openForUpdate: %v", err)
 		return err
 	}
 	defer done(&retErr)

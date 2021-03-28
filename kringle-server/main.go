@@ -16,6 +16,7 @@ import (
 	"syscall"
 	"time"
 
+	"golang.org/x/term"
 	"kringle-server/database"
 	"kringle-server/log"
 	"kringle-server/server"
@@ -28,6 +29,8 @@ var (
 	certFile = flag.String("cert", "", "The name of the file containing the TLS cert to use. If neither -cert or -key is set, the server will not use TLS.")
 	keyFile  = flag.String("key", "", "The name of the file containing the TLS private key to use.")
 	logLevel = flag.Int("v", 3, "The level of logging verbosity: 1:Error 2:Info 3:Debug")
+
+	catFlag = flag.String("cat", "", "When set, decrypts the given file and writes it to stdout.")
 )
 
 func usage() {
@@ -42,10 +45,25 @@ func main() {
 	flag.Parse()
 	log.Level = *logLevel
 
+	var passphrase []byte
+	var err error
+	fmt.Print("Enter passphrase: ")
+	if passphrase, err = term.ReadPassword(int(os.Stdin.Fd())); err != nil {
+		log.Fatalf("term.ReadPassword: %v", err)
+	}
+
 	if *dbFlag == "" {
 		log.Error("--db must be set")
 		usage()
 	}
+	db := database.New(*dbFlag, string(passphrase))
+	if *catFlag != "" {
+		if err := db.DumpFile(*catFlag); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+
 	if *address == "" {
 		log.Error("--address must be set")
 		usage()
@@ -54,7 +72,6 @@ func main() {
 		log.Error("--cert and --key must either both be set or unset.")
 		usage()
 	}
-	db := database.New(*dbFlag)
 	s := server.New(db, *address)
 	s.BaseURL = *baseURL
 

@@ -3,9 +3,12 @@
 package database
 
 import (
+	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -20,26 +23,34 @@ var (
 )
 
 // New returns an initialized database that uses dir for storage.
-func New(dir string) *Database {
-	for _, d := range []string{"users", "blobs", "albums"} {
-		sub := filepath.Join(dir, d)
-		if err := os.MkdirAll(sub, 0700); err != nil {
-			log.Panicf("os.MkdirAll(%q): %v", sub, err)
-		}
-
+func New(dir, passphrase string) *Database {
+	db := &Database{dir: dir}
+	var err error
+	if db.masterKey, err = db.readMasterKey(passphrase); errors.Is(err, os.ErrNotExist) {
+		db.masterKey, err = db.createMasterKey(passphrase)
 	}
-	return &Database{dir: dir}
+	if err != nil {
+		log.Fatal("Failed to decrypt master key")
+	}
+	return db
 }
 
 // Implements all the storage requirements of the kringle server using a local
 // filesystem.
 type Database struct {
-	dir string
+	dir       string
+	masterKey []byte
 }
 
 // Dir returns the directory where the database stores its data.
 func (d Database) Dir() string {
 	return d.dir
+}
+
+func (d *Database) filePath(elems ...string) string {
+	name := d.masterHash([]byte(path.Join(elems...)))
+	dir := filepath.Join(d.Dir(), "metadata", fmt.Sprintf("%02X", name[0]), fmt.Sprintf("%02X", name[1]))
+	return filepath.Join(dir, base64.RawURLEncoding.EncodeToString(name))
 }
 
 // nowInMS returns the current time in ms.
