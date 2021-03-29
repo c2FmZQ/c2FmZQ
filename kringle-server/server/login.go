@@ -28,6 +28,10 @@ import (
 // Returns:
 //  - stingle.Response(ok)
 func (s *Server) handleCreateAccount(req *http.Request) *stingle.Response {
+	if !s.AllowCreateAccount {
+		return stingle.ResponseNOK().
+			AddError("This server does not allow new accounts to be created")
+	}
 	email := req.PostFormValue("email")
 	if _, err := s.db.User(email); err == nil {
 		return stingle.ResponseNOK().AddError("User already exists")

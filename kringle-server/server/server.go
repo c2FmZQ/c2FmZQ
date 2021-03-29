@@ -18,11 +18,12 @@ import (
 
 // An HTTP server that implements the Stingle server API.
 type Server struct {
-	BaseURL string
-	mux     *http.ServeMux
-	srv     *http.Server
-	db      *database.Database
-	addr    string
+	AllowCreateAccount bool
+	BaseURL            string
+	mux                *http.ServeMux
+	srv                *http.Server
+	db                 *database.Database
+	addr               string
 }
 
 // New returns an instance of Server that's fully initialized and ready to run.
