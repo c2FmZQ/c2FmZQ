@@ -1,10 +1,12 @@
 package database
 
 import (
+	"crypto/rand"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
+	"io"
 	"os"
-	"path/filepath"
 	"sort"
 
 	"kringle-server/crypto"
@@ -75,8 +77,13 @@ func (d *Database) AddUser(u User) (retErr error) {
 	uid += 1
 	ul = append(ul, userList{UserID: uid, Email: u.Email})
 
+	hf := make([]byte, 16)
+	if _, err := io.ReadFull(rand.Reader, hf); err != nil {
+		return err
+	}
+
 	u.UserID = uid
-	u.HomeFolder = base64.RawURLEncoding.EncodeToString([]byte(filepath.Join("users", u.Email)))
+	u.HomeFolder = hex.EncodeToString(hf)
 	u.ServerKey = crypto.MakeSecretKey()
 	u.ServerSignKey = crypto.MakeSignSecretKey()
 	u.TokenSeq = 1
