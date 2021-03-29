@@ -6,7 +6,7 @@ Kringle-server is an API server that's compatible with the Stingle Photos app
 This project is **not** associated with stingle.org. This is not the code used
 by stingle.org. We have no knowledge of how their server is actually implemented.
 The code in this repo was developed by studying the client app's code and
-reverse engineeing the API.
+reverse engineering the API.
 
 ## Connecting the app to this server
 
