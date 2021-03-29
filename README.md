@@ -32,7 +32,8 @@ actually sharing with an attacker.
 
 ## How to run the server
 
-The server doesn't depend on an external database. It stores all its data on a local filesystem.
+The server is self-contained. It doesn't depend on any external resources. It
+stores all its data on a local filesystem.
 
 Simply build it, and run it.
 
@@ -46,7 +47,14 @@ Or, build a docker image.
 
 ```bash
 $ docker build -t kringle-server .
-$ docker run -v /data:${DATABASEDIR} -v /secrets:${SECRETSDIR} kringle-server
+$ docker run -v ${DATABASEDIR}:/data -v ${SECRETSDIR}:/secrets:ro kringle-server
 ```
 ${DATABASEDIR} is where all the data will be stored, and ${SECRETSDIR} is where the
 database encryption passphrase, the TLS key, and TLS cert are stored.
+
+With the default Dockerfile, the server expects the following files in ${SECRETDDIR}:
+
+- **passphrase** contains the passphrase used to encrypt the metadata.
+- **privkey.pem** contains the TLS private key in PEM format.
+- **fullchain.pem** contains the TLS certificates in PEM format.
+
