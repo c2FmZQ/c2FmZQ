@@ -12,8 +12,9 @@ reverse engineeing the API.
 
 For the app to connect to this server, it has to the recompiled with api_server_url
 set to point to this server.
-See https://github.com/rthellend/stingle-photos-android/commit/87ffc310b9fd02d4aba52a2fb4d12cb392208904
-for an example.
+See [this commit](https://github.com/rthellend/stingle-photos-android/commit/c6758758513f7b9d3cdf755085e4b57945f2494f) for an example.
+
+Note: build the F-Droid version with: gradlew installFdroidRelease
 
 ## Notes about security and privacy
 
