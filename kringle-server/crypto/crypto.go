@@ -45,6 +45,23 @@ func (k SecretKey) MarshalJSON() ([]byte, error) {
 	return json.Marshal(base64.RawURLEncoding.EncodeToString(k.Bytes))
 }
 
+func (k *PublicKey) UnmarshalJSON(b []byte) error {
+	var s string
+	if err := json.Unmarshal(b, &s); err != nil {
+		return err
+	}
+	b, err := base64.RawURLEncoding.DecodeString(s)
+	if err != nil {
+		return err
+	}
+	k.Bytes = sodium.Bytes(b)
+	return nil
+}
+
+func (k PublicKey) MarshalJSON() ([]byte, error) {
+	return json.Marshal(base64.RawURLEncoding.EncodeToString(k.Bytes))
+}
+
 // MakeSignSecretKey returns a new SignSecretKey.
 func MakeSignSecretKey() SignSecretKey {
 	kp := sodium.MakeSignKP()
