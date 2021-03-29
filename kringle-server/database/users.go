@@ -176,7 +176,7 @@ func (d *Database) lookupContacts(uids map[int64]bool) []Contact {
 		if uids[u.UserID] {
 			user, err := d.User(u.Email)
 			if err != nil {
-				log.Infof("d.User(%q) failed, but user in %q: %v", u.Email, userListFile, err)
+				log.Errorf("d.User(%q) failed, but user in %q: %v", u.Email, userListFile, err)
 				continue
 			}
 			out = append(out, Contact{
@@ -216,7 +216,7 @@ func (d *Database) addCrossContacts(list []Contact) {
 		if err := done(nil); err != nil {
 			log.Errorf("Failed to save user %d's contact list: %v", c1.UserID, err)
 		} else {
-			log.Infof("Added %d contact(s) to user %d", count, c1.UserID)
+			log.Debugf("Added %d contact(s) to user %d", count, c1.UserID)
 		}
 	}
 }

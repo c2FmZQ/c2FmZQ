@@ -113,7 +113,7 @@ func (s *Server) decodeParams(params string, user database.User) (map[string]str
 	if err := json.Unmarshal(m, &p); err != nil {
 		return nil, err
 	}
-	log.Infof("Params: %#v", p)
+	log.Debugf("Params: %#v", p)
 	return p, nil
 }
 

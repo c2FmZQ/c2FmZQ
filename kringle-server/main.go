@@ -29,7 +29,7 @@ var (
 	baseURL  = flag.String("base-url", "", "The base URL of the generated download links. If empty, the links will generated using the Host headers of the incoming requests, i.e. https://HOST/.")
 	certFile = flag.String("tlscert", "", "The name of the file containing the TLS cert to use. If neither -cert or -key is set, the server will not use TLS.")
 	keyFile  = flag.String("tlskey", "", "The name of the file containing the TLS private key to use.")
-	logLevel = flag.Int("v", 3, "The level of logging verbosity: 1:Error 2:Info 3:Debug")
+	logLevel = flag.Int("v", 2, "The level of logging verbosity: 1:Error 2:Info 3:Debug")
 
 	passphraseFile = flag.String("passphrase_file", "", "The name of the file containing the passphrase that protects the server's metadata. If left empty, the server will prompt for a passphrase when it starts.")
 )
@@ -79,12 +79,12 @@ func main() {
 	if *certFile == "" {
 		log.Info("Starting server WITHOUT TLS")
 		if err := s.Run(); err != http.ErrServerClosed {
-			log.Errorf("s.Run: %v", err)
+			log.Fatalf("s.Run: %v", err)
 		}
 	} else {
 		log.Info("Starting server with TLS")
 		if err := s.RunWithTLS(*certFile, *keyFile); err != http.ErrServerClosed {
-			log.Errorf("s.RunWithTLS: %v", err)
+			log.Fatalf("s.RunWithTLS: %v", err)
 		}
 	}
 	<-done

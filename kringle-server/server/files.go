@@ -247,7 +247,7 @@ func (s *Server) handleDownload(w http.ResponseWriter, req *http.Request) {
 // tryToHandleRange implements minimal support for RFC 7233, section 3.1: Range.
 // Streaming videos doesn't work very well without it.
 func (s *Server) tryToHandleRange(w http.ResponseWriter, rangeHdr string, f *os.File) {
-	log.Infof("Requested range: %s", rangeHdr)
+	log.Debugf("Requested range: %s", rangeHdr)
 	m := regexp.MustCompile(`^bytes=(\d+)-$`).FindStringSubmatch(rangeHdr)
 	if len(m) != 2 {
 		return
@@ -263,7 +263,7 @@ func (s *Server) tryToHandleRange(w http.ResponseWriter, rangeHdr string, f *os.
 		return
 	}
 	cr := fmt.Sprintf("bytes %d-%d/%d", offset, fi.Size()-1, fi.Size())
-	log.Infof("Sending %s", cr)
+	log.Debugf("Sending %s", cr)
 	w.Header().Set("Content-Range", cr)
 	w.WriteHeader(http.StatusPartialContent)
 }

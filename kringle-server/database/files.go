@@ -54,8 +54,7 @@ func (d *Database) incRefCount(blob string, delta int) int {
 	if err := done(nil); err != nil {
 		log.Fatalf("incRefCount(%q, %d) failed: %v", blob, delta, err)
 	}
-	log.Infof("RefCount(%q)%+d -> %d", blob, delta, blobSpec.RefCount)
-	showCallStack()
+	log.Debugf("RefCount(%q)%+d -> %d", blob, delta, blobSpec.RefCount)
 	if blobSpec.RefCount == 0 {
 		if err := os.Remove(blob); err != nil {
 			log.Errorf("os.Remove(%q) failed: %v", blob, err)
