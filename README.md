@@ -42,11 +42,11 @@ $ go build
 $ ./kringle-server -h
 ```
 
-Or, use the Dockerfil to build a docker image.
+Or, build a docker image.
 
 ```bash
 $ docker build -t kringle-server .
-# docker run -v /data:${DATABASEDIR} -v /secrets:${SECRETSDIR} --rm kringle-server
+$ docker run -v /data:${DATABASEDIR} -v /secrets:${SECRETSDIR} kringle-server
 ```
 ${DATABASEDIR} is where all the data will be stored, and ${SECRETSDIR} is where the
 database encryption passphrase, the TLS key, and TLS cert are stored.
