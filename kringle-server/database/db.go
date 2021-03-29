@@ -49,7 +49,7 @@ func (d Database) Dir() string {
 
 func (d *Database) filePath(elems ...string) string {
 	name := d.masterHash([]byte(path.Join(elems...)))
-	dir := filepath.Join(d.Dir(), "metadata", fmt.Sprintf("%02X", name[0]), fmt.Sprintf("%02X", name[1]))
+	dir := filepath.Join("metadata", fmt.Sprintf("%02X", name[0]), fmt.Sprintf("%02X", name[1]))
 	return filepath.Join(dir, base64.RawURLEncoding.EncodeToString(name))
 }
 
@@ -87,6 +87,30 @@ func showCallStack() {
 		log.Debugf("   %-15s %s", fl, frame.Function)
 		if !more {
 			break
+		}
+	}
+}
+
+func (d Database) DumpUsers() {
+	var ul []userList
+	if _, err := d.readDataFile(d.filePath(userListFile), &ul); err != nil {
+		log.Errorf("readDataFile: %v", err)
+	}
+	for _, u := range ul {
+		user, err := d.User(u.Email)
+		if err != nil {
+			log.Errorf("User(%q): %v", u.Email, err)
+		}
+		fmt.Printf("ID %d [%s]: %s\n", u.UserID, u.Email, d.filePath("home", u.Email, userFile))
+		fmt.Printf("  -contacts: %s\n", d.filePath("home", user.Email, contactListFile))
+		fmt.Printf("  -trash: %s\n", d.fileSetPath(user, TrashSet))
+		fmt.Printf("  -gallery: %s\n", d.fileSetPath(user, GallerySet))
+		albums, err := d.AlbumRefs(user)
+		if err != nil {
+			log.Errorf("AlbumRefs(%q): %v", u.Email, err)
+		}
+		for k, v := range albums {
+			fmt.Printf("  -album %s: %s\n", k, v.File)
 		}
 	}
 }

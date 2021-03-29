@@ -107,7 +107,7 @@ func (d *Database) makeFilePath() (string, error) {
 	if _, err := rand.Read(name); err != nil {
 		return "", err
 	}
-	dir := filepath.Join(d.Dir(), "blobs", fmt.Sprintf("%02X", name[0]), fmt.Sprintf("%02X", name[1]))
+	dir := filepath.Join("blobs", fmt.Sprintf("%02X", name[0]), fmt.Sprintf("%02X", name[1]))
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return "", err
 	}
@@ -126,21 +126,27 @@ func (d *Database) AddFile(user User, file FileSpec) error {
 		return err
 	}
 
-	if err := os.Rename(file.StoreFile, fn); err != nil {
+	if err := createParentIfNotExist(filepath.Join(filepath.Join(d.Dir(), fn))); err != nil {
+		return err
+	}
+	if err := os.Rename(file.StoreFile, filepath.Join(d.Dir(), fn)); err != nil {
 		return err
 	}
 	file.StoreFile = fn
-	if err := os.Rename(file.StoreThumb, tn); err != nil {
+	if err := createParentIfNotExist(filepath.Join(filepath.Join(d.Dir(), tn))); err != nil {
+		return err
+	}
+	if err := os.Rename(file.StoreThumb, filepath.Join(d.Dir(), tn)); err != nil {
 		return err
 	}
 	file.StoreThumb = tn
 	file.DateModified = nowInMS()
 
 	if err := d.addFileToFileSet(user, file); err != nil {
-		if err := os.Remove(fn); err != nil {
+		if err := os.Remove(filepath.Join(d.Dir(), fn)); err != nil {
 			log.Errorf("os.Remove(%q) failed: %v", fn, err)
 		}
-		if err := os.Remove(tn); err != nil {
+		if err := os.Remove(filepath.Join(d.Dir(), tn)); err != nil {
 			log.Errorf("os.Remove(%q) failed: %v", tn, err)
 		}
 		return err
@@ -358,9 +364,9 @@ func (d *Database) findFileInSet(user User, set, albumID, filename string) (*Fil
 
 func (d *Database) downloadFileSpec(fileSpec *FileSpec, thumb bool) (*os.File, error) {
 	if thumb {
-		return os.Open(fileSpec.StoreThumb)
+		return os.Open(filepath.Join(d.Dir(), fileSpec.StoreThumb))
 	}
-	return os.Open(fileSpec.StoreFile)
+	return os.Open(filepath.Join(d.Dir(), fileSpec.StoreFile))
 }
 
 func (d *Database) DownloadFile(user User, set, filename string, thumb bool) (*os.File, error) {

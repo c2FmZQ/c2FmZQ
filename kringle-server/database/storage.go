@@ -111,7 +111,7 @@ func (d *Database) openForUpdate(f string, obj interface{}) (func(*error) error,
 
 // DumpFile writes the decrypted content of a file to stdout.
 func (d *Database) DumpFile(filename string) error {
-	f, err := os.Open(filename)
+	f, err := os.Open(filepath.Join(d.Dir(), filename))
 	if err != nil {
 		return err
 	}
@@ -132,7 +132,7 @@ func (d *Database) DumpFile(filename string) error {
 
 // readDataFile reads a json object from a file.
 func (d *Database) readDataFile(filename string, obj interface{}) (*crypter, error) {
-	f, err := os.Open(filename)
+	f, err := os.Open(filepath.Join(d.Dir(), filename))
 	if err != nil {
 		return nil, err
 	}
@@ -155,6 +155,7 @@ func (d *Database) readDataFile(filename string, obj interface{}) (*crypter, err
 
 // saveDataFile atomically replace a json object in a file.
 func (d *Database) saveDataFile(c *crypter, filename string, obj interface{}) error {
+	filename = filepath.Join(d.Dir(), filename)
 	if c == nil {
 		c = newCrypter(d.decryptWithMasterKey)
 		if err := createParentIfNotExist(filename); err != nil {

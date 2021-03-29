@@ -75,10 +75,7 @@ func (d *Database) makeAlbumPath() (string, error) {
 	if _, err := rand.Read(name); err != nil {
 		return "", err
 	}
-	dir := filepath.Join(d.Dir(), "metadata", fmt.Sprintf("%02X", name[0]), fmt.Sprintf("%02X", name[1]))
-	if err := os.MkdirAll(dir, 0700); err != nil {
-		return "", err
-	}
+	dir := filepath.Join("metadata", fmt.Sprintf("%02X", name[0]), fmt.Sprintf("%02X", name[1]))
 	return filepath.Join(dir, base64.RawURLEncoding.EncodeToString(name)), nil
 }
 
