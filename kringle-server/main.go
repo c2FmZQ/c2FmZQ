@@ -27,8 +27,8 @@ var (
 	dbFlag   = flag.String("db", "", "The directory name of the database.")
 	address  = flag.String("address", "127.0.0.1:8080", "The local address to use.")
 	baseURL  = flag.String("base-url", "", "The base URL of the generated download links. If empty, the links will generated using the Host headers of the incoming requests, i.e. https://HOST/.")
-	certFile = flag.String("cert", "", "The name of the file containing the TLS cert to use. If neither -cert or -key is set, the server will not use TLS.")
-	keyFile  = flag.String("key", "", "The name of the file containing the TLS private key to use.")
+	certFile = flag.String("tlscert", "", "The name of the file containing the TLS cert to use. If neither -cert or -key is set, the server will not use TLS.")
+	keyFile  = flag.String("tlskey", "", "The name of the file containing the TLS private key to use.")
 	logLevel = flag.Int("v", 3, "The level of logging verbosity: 1:Error 2:Info 3:Debug")
 
 	passphraseFile = flag.String("passphrase_file", "", "The name of the file containing the passphrase that protects the server's metadata. If left empty, the server will prompt for a passphrase when it starts.")
