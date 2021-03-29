@@ -96,7 +96,7 @@ func (s *Server) RunWithListener(l net.Listener) error {
 	return s.srv.Serve(l)
 }
 
-// Shutdown cleanly shutdowns the http server.
+// Shutdown cleanly shuts down the http server.
 func (s *Server) Shutdown() error {
 	return s.srv.Shutdown(context.Background())
 }
