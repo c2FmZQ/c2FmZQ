@@ -101,7 +101,6 @@ func (d *Database) openForUpdate(f string, obj interface{}) (func(bool, *error) 
 			return errAlreadyRolledBack
 		}
 		called = true
-		committed = commit
 		if errp == nil || *errp != nil {
 			errp = &err
 		}
@@ -109,6 +108,7 @@ func (d *Database) openForUpdate(f string, obj interface{}) (func(bool, *error) 
 			if *errp = d.saveDataFile(crypter, f, obj); *errp != nil {
 				return *errp
 			}
+			committed = true
 		}
 		*errp = unlock(f)
 		if !commit && *errp == nil {
