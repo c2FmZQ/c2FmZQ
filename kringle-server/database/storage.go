@@ -14,20 +14,6 @@ import (
 	"kringle-server/log"
 )
 
-func number(n int64) json.Number {
-	return json.Number(fmt.Sprintf("%d", n))
-}
-
-func createParentIfNotExist(filename string) error {
-	dir, _ := filepath.Split(filename)
-	if _, err := os.Stat(dir); errors.Is(err, os.ErrNotExist) {
-		if err := os.MkdirAll(dir, 0700); err != nil {
-			return fmt.Errorf("os.MkdirAll(%q): %v", dir, err)
-		}
-	}
-	return nil
-}
-
 // lock atomically creates a lock file for the given filename. When this
 // function returns without error, the lock is acquired and nobody else can
 // acquire it until it is released.
@@ -81,15 +67,18 @@ func tryToRemoveStaleLock(lockf string, deadline time.Duration) {
 // modified and then saved again.
 //
 // Example:
-//   var foo FooStruct
-//   done, err := d.openForUpdate(filename, &foo)
-//   if err != nil {
-//     panic(err)
-//   }
-//   // modified foo
-//   foo.Bar = X
-//   return done()
-func (d *Database) openForUpdate(f string, obj interface{}) (func(*error) error, error) {
+//   func foo() (retErr error) {
+//     var foo FooStruct
+//     commit, err := d.openForUpdate(filename, &foo)
+//     if err != nil {
+//       panic(err)
+//     }
+//     defer commit(false, &retErr) // rollback unless first committed.
+//     // modified foo
+//     foo.Bar = X
+//     return commit(true, &retError) // commit
+//  }
+func (d *Database) openForUpdate(f string, obj interface{}) (func(bool, *error) error, error) {
 	if err := lock(f); err != nil {
 		return nil, err
 	}
@@ -97,12 +86,23 @@ func (d *Database) openForUpdate(f string, obj interface{}) (func(*error) error,
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}
-	return func(errp *error) (err error) {
+	var called, committed bool
+	return func(commit bool, errp *error) (err error) {
+		if called {
+			if committed {
+				return errors.New("already committed")
+			}
+			return errors.New("already rolled back")
+		}
+		called = true
+		committed = commit
 		if errp == nil || *errp != nil {
 			errp = &err
 		}
-		if *errp = d.saveDataFile(crypter, f, obj); *errp != nil {
-			return *errp
+		if commit {
+			if *errp = d.saveDataFile(crypter, f, obj); *errp != nil {
+				return *errp
+			}
 		}
 		*errp = unlock(f)
 		return *errp

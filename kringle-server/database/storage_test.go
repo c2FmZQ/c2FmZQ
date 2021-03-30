@@ -41,7 +41,7 @@ func TestOpenForUpdate(t *testing.T) {
 		t.Fatalf("d.saveDataFile failed: %v", err)
 	}
 	var bar Foo
-	done, err := db.openForUpdate(fn, &bar)
+	commit, err := db.openForUpdate(fn, &bar)
 	if err != nil {
 		t.Fatalf("db.openForUpdate failed: %v", err)
 	}
@@ -49,8 +49,11 @@ func TestOpenForUpdate(t *testing.T) {
 		t.Fatalf("db.openForUpdate() got %+v, want %+v", bar, foo)
 	}
 	bar.Foo = "bar"
-	if err := done(nil); err != nil {
+	if err := commit(true, nil); err != nil {
 		t.Errorf("done() failed: %v", err)
+	}
+	if err := commit(false, nil); err == nil {
+		t.Error("second commit should have failed")
 	}
 
 	if _, err := db.readDataFile(fn, &foo); err != nil {
@@ -58,6 +61,40 @@ func TestOpenForUpdate(t *testing.T) {
 	}
 	if !reflect.DeepEqual(foo, bar) {
 		t.Fatalf("d.openForUpdate() got %+v, want %+v", foo, bar)
+	}
+}
+
+func TestRollback(t *testing.T) {
+	dir := t.TempDir()
+	fn := filepath.Join(dir, "test.json")
+	db := New(dir, "")
+
+	type Foo struct {
+		Foo string `json:"foo"`
+	}
+	foo := Foo{"foo"}
+	if err := db.saveDataFile(nil, fn, foo); err != nil {
+		t.Fatalf("d.saveDataFile failed: %v", err)
+	}
+	var bar Foo
+	commit, err := db.openForUpdate(fn, &bar)
+	if err != nil {
+		t.Fatalf("db.openForUpdate failed: %v", err)
+	}
+	if !reflect.DeepEqual(foo, bar) {
+		t.Fatalf("db.openForUpdate() got %+v, want %+v", bar, foo)
+	}
+	bar.Foo = "bar"
+	if err := commit(false, nil); err == nil {
+		t.Error("second commit should have failed")
+	}
+
+	var foo2 Foo
+	if _, err := db.readDataFile(fn, &foo2); err != nil {
+		t.Fatalf("db.readDataFile() failed: %v", err)
+	}
+	if !reflect.DeepEqual(foo, foo2) {
+		t.Fatalf("d.openForUpdate() got %+v, want %+v", foo2, foo)
 	}
 }
 
@@ -77,11 +114,11 @@ func TestOpenForUpdateDeferredDone(t *testing.T) {
 			Foo string `json:"foo"`
 		}
 		var foo Foo
-		done, err := db.openForUpdate(fn, &foo)
+		commit, err := db.openForUpdate(fn, &foo)
 		if err != nil {
 			t.Fatalf("db.openForUpdate failed: %v", err)
 		}
-		defer done(&retErr)
+		defer commit(true, &retErr)
 		if err := os.RemoveAll(sub); err != nil {
 			t.Fatalf("of.RemoveAll(%q): %v", sub, err)
 		}

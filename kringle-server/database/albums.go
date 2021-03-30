@@ -89,7 +89,7 @@ func (d *Database) AddAlbum(owner User, album AlbumSpec) (retErr error) {
 	if err := d.addAlbumRef(owner.UserID, album.AlbumID, ap); err != nil {
 		return err
 	}
-	done, fs, err := d.fileSetForUpdate(owner, AlbumSet, album.AlbumID)
+	commit, fs, err := d.fileSetForUpdate(owner, AlbumSet, album.AlbumID)
 	if err != nil {
 		return err
 	}
@@ -101,7 +101,7 @@ func (d *Database) AddAlbum(owner User, album AlbumSpec) (retErr error) {
 		album.SharingKeys = make(map[int64]string)
 	}
 	fs.Album = &album
-	return done(&retErr)
+	return commit(true, &retErr)
 }
 
 // DeleteAlbum deletes an album.
@@ -139,11 +139,11 @@ func (d *Database) DeleteAlbum(owner User, albumID string) error {
 
 // ChangeAlbumCover changes the file uses as cover for the album.
 func (d *Database) ChangeAlbumCover(user User, albumID, cover string) (retErr error) {
-	done, fs, err := d.fileSetForUpdate(user, AlbumSet, albumID)
+	commit, fs, err := d.fileSetForUpdate(user, AlbumSet, albumID)
 	if err != nil {
 		return err
 	}
-	defer done(&retErr)
+	defer commit(true, &retErr)
 
 	fs.Album.Cover = cover
 	fs.Album.DateModified = nowInMS()
@@ -152,11 +152,11 @@ func (d *Database) ChangeAlbumCover(user User, albumID, cover string) (retErr er
 
 // ChangeMetadata updates the album's metadata.
 func (d *Database) ChangeMetadata(user User, albumID, metadata string) (retErr error) {
-	done, fs, err := d.fileSetForUpdate(user, AlbumSet, albumID)
+	commit, fs, err := d.fileSetForUpdate(user, AlbumSet, albumID)
 	if err != nil {
 		return err
 	}
-	defer done(&retErr)
+	defer commit(true, &retErr)
 
 	fs.Album.Metadata = metadata
 	fs.Album.DateModified = nowInMS()
@@ -246,11 +246,11 @@ func (d *Database) ShareAlbum(user User, sharing *stingle.Album, sharingKeys map
 	if err != nil {
 		return err
 	}
-	done, fs, err := d.fileSetForUpdate(user, AlbumSet, sharing.AlbumID)
+	commit, fs, err := d.fileSetForUpdate(user, AlbumSet, sharing.AlbumID)
 	if err != nil {
 		return err
 	}
-	defer done(&retErr)
+	defer commit(true, &retErr)
 	if fs.Album.Members == nil {
 		fs.Album.Members = make(map[int64]bool)
 	}
@@ -298,11 +298,11 @@ func (d *Database) ShareAlbum(user User, sharing *stingle.Album, sharingKeys map
 
 // UnshareAlbum turns off sharing and removes all the members of an album.
 func (d *Database) UnshareAlbum(owner User, albumID string) (retErr error) {
-	done, fs, err := d.fileSetForUpdate(owner, AlbumSet, albumID)
+	commit, fs, err := d.fileSetForUpdate(owner, AlbumSet, albumID)
 	if err != nil {
 		return err
 	}
-	defer done(&retErr)
+	defer commit(true, &retErr)
 
 	fs.Album.IsShared = false
 	for m, _ := range fs.Album.Members {
@@ -340,12 +340,12 @@ func (d *Database) addAlbumRef(memberID int64, albumID, file string) (retErr err
 	}
 
 	var manifest AlbumManifest
-	done, err := d.openForUpdate(d.filePath("home", user.Email, albumManifest), &manifest)
+	commit, err := d.openForUpdate(d.filePath("home", user.Email, albumManifest), &manifest)
 	if err != nil {
 		log.Errorf("d.openForUpdate: %v", err)
 		return err
 	}
-	defer done(&retErr)
+	defer commit(true, &retErr)
 
 	if manifest.Albums == nil {
 		manifest.Albums = make(map[string]*AlbumRef)
@@ -365,12 +365,12 @@ func (d *Database) removeAlbumRef(memberID int64, albumID string) (retErr error)
 	}
 
 	var manifest AlbumManifest
-	done, err := d.openForUpdate(d.filePath("home", user.Email, albumManifest), &manifest)
+	commit, err := d.openForUpdate(d.filePath("home", user.Email, albumManifest), &manifest)
 	if err != nil {
 		log.Errorf("d.openForUpdate: %v", err)
 		return err
 	}
-	defer done(&retErr)
+	defer commit(true, &retErr)
 
 	if manifest.Albums == nil {
 		return nil
@@ -387,11 +387,11 @@ func (d *Database) removeAlbumRef(memberID int64, albumID string) (retErr error)
 
 // UpdatePerms updates the permissions on an album.
 func (d *Database) UpdatePerms(owner User, albumID string, permissions stingle.Permissions) (retErr error) {
-	done, fs, err := d.fileSetForUpdate(owner, AlbumSet, albumID)
+	commit, fs, err := d.fileSetForUpdate(owner, AlbumSet, albumID)
 	if err != nil {
 		return err
 	}
-	defer done(&retErr)
+	defer commit(true, &retErr)
 	fs.Album.Permissions = permissions
 	fs.Album.DateModified = nowInMS()
 	return nil
@@ -399,14 +399,14 @@ func (d *Database) UpdatePerms(owner User, albumID string, permissions stingle.P
 
 // RemoveAlbumMember removes a member from the album.
 func (d *Database) RemoveAlbumMember(user User, albumID string, memberID int64) (retErr error) {
-	done, fs, err := d.fileSetForUpdate(user, AlbumSet, albumID)
+	commit, fs, err := d.fileSetForUpdate(user, AlbumSet, albumID)
 	if err != nil {
 		return err
 	}
 	if fs.Album.OwnerID == memberID {
 		return nil
 	}
-	defer done(&retErr)
+	defer commit(true, &retErr)
 	delete(fs.Album.Members, memberID)
 	delete(fs.Album.SharingKeys, memberID)
 	fs.Album.DateModified = nowInMS()

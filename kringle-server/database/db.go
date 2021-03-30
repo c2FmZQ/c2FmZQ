@@ -69,6 +69,20 @@ func boolToNumber(b bool) json.Number {
 	return json.Number("0")
 }
 
+func number(n int64) json.Number {
+	return json.Number(fmt.Sprintf("%d", n))
+}
+
+func createParentIfNotExist(filename string) error {
+	dir, _ := filepath.Split(filename)
+	if _, err := os.Stat(dir); errors.Is(err, os.ErrNotExist) {
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			return fmt.Errorf("os.MkdirAll(%q): %v", dir, err)
+		}
+	}
+	return nil
+}
+
 func showCallStack() {
 	pc := make([]uintptr, 10)
 	n := runtime.Callers(2, pc)

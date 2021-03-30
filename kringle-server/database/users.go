@@ -59,12 +59,12 @@ func (u User) ServerPublicKeyForExport() string {
 // AddUser creates a new user account for u.
 func (d *Database) AddUser(u User) (retErr error) {
 	var ul []userList
-	done, err := d.openForUpdate(d.filePath(userListFile), &ul)
+	commit, err := d.openForUpdate(d.filePath(userListFile), &ul)
 	if err != nil {
 		log.Errorf("d.openForUpdate: %v", err)
 		return err
 	}
-	defer done(&retErr)
+	defer commit(true, &retErr)
 	var uid int64
 	for _, i := range ul {
 		if i.Email == u.Email {
@@ -93,12 +93,12 @@ func (d *Database) AddUser(u User) (retErr error) {
 // UpdateUser saves a user object.
 func (d *Database) UpdateUser(u User) error {
 	var f User
-	done, err := d.openForUpdate(d.filePath("home", u.Email, userFile), &f)
+	commit, err := d.openForUpdate(d.filePath("home", u.Email, userFile), &f)
 	if err != nil {
 		return err
 	}
 	f = u
-	return done(nil)
+	return commit(true, nil)
 }
 
 // UserByID returns the User object with the given ID.
@@ -144,12 +144,12 @@ func (c Contact) Export() stingle.Contact {
 // addContactToUser adds contact to user's contact list.
 func (d *Database) addContactToUser(user, contact User) (c *Contact, retErr error) {
 	var contactList map[string]*Contact
-	done, err := d.openForUpdate(d.filePath("home", user.Email, contactListFile), &contactList)
+	commit, err := d.openForUpdate(d.filePath("home", user.Email, contactListFile), &contactList)
 	if err != nil {
 		log.Errorf("d.openForUpdate: %v", err)
 		return nil, err
 	}
-	defer done(&retErr)
+	defer commit(true, &retErr)
 
 	if contactList == nil {
 		contactList = make(map[string]*Contact)
@@ -200,7 +200,7 @@ func (d *Database) lookupContacts(uids map[int64]bool) []Contact {
 func (d *Database) addCrossContacts(list []Contact) {
 	for _, c1 := range list {
 		var contactList map[string]*Contact
-		done, err := d.openForUpdate(d.filePath("home", c1.Email, contactListFile), &contactList)
+		commit, err := d.openForUpdate(d.filePath("home", c1.Email, contactListFile), &contactList)
 		if err != nil {
 			log.Errorf("d.openForUpdate: %v", err)
 			continue
@@ -220,7 +220,7 @@ func (d *Database) addCrossContacts(list []Contact) {
 				contactList[c2.Email] = &c
 			}
 		}
-		if err := done(nil); err != nil {
+		if err := commit(true, nil); err != nil {
 			log.Errorf("Failed to save user %d's contact list: %v", c1.UserID, err)
 		} else {
 			log.Debugf("Added %d contact(s) to user %d", count, c1.UserID)

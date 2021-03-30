@@ -46,12 +46,12 @@ type BlobSpec struct {
 
 func (d *Database) incRefCount(blob string, delta int) int {
 	var blobSpec BlobSpec
-	done, err := d.openForUpdate(blob+".ref", &blobSpec)
+	commit, err := d.openForUpdate(blob+".ref", &blobSpec)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		log.Fatalf("incRefCount(%q, %d) failed: %v", blob, delta, err)
 	}
 	blobSpec.RefCount += delta
-	if err := done(nil); err != nil {
+	if err := commit(true, nil); err != nil {
 		log.Fatalf("incRefCount(%q, %d) failed: %v", blob, delta, err)
 	}
 	log.Debugf("RefCount(%q)%+d -> %d", blob, delta, blobSpec.RefCount)
@@ -82,12 +82,12 @@ func (d *Database) addFileToFileSet(user User, file FileSpec) (retErr error) {
 		fileName = d.fileSetPath(user, file.Set)
 	}
 	var fileSet FileSet
-	done, err := d.openForUpdate(fileName, &fileSet)
+	commit, err := d.openForUpdate(fileName, &fileSet)
 	if err != nil {
 		log.Errorf("d.openForUpdate(%q): %v", fileName, err)
 		return err
 	}
-	defer done(&retErr)
+	defer commit(true, &retErr)
 
 	if fileSet.Files == nil {
 		fileSet.Files = make(map[string]*FileSpec)
@@ -177,7 +177,7 @@ func (d *Database) FileSet(user User, set, albumID string) (*FileSet, error) {
 	return &fileSet, nil
 }
 
-func (d *Database) fileSetForUpdate(user User, set, albumID string) (func(*error) error, *FileSet, error) {
+func (d *Database) fileSetForUpdate(user User, set, albumID string) (func(bool, *error) error, *FileSet, error) {
 	var fileName string
 	if set == AlbumSet {
 		albumRef, err := d.albumRef(user, albumID)
@@ -189,7 +189,7 @@ func (d *Database) fileSetForUpdate(user User, set, albumID string) (func(*error
 		fileName = d.fileSetPath(user, set)
 	}
 	var fileSet FileSet
-	done, err := d.openForUpdate(fileName, &fileSet)
+	commit, err := d.openForUpdate(fileName, &fileSet)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, nil, err
 	}
@@ -199,7 +199,7 @@ func (d *Database) fileSetForUpdate(user User, set, albumID string) (func(*error
 	if fileSet.Deletes == nil {
 		fileSet.Deletes = []DeleteEvent{}
 	}
-	return done, &fileSet, nil
+	return commit, &fileSet, nil
 }
 
 type MoveFileParams struct {
@@ -214,30 +214,30 @@ type MoveFileParams struct {
 
 // openFileSetPairForUpdate opens two filesets in the right order to avoid
 // deadlocks.
-func (d *Database) openFileSetPairForUpdate(user User, set1, album1, set2, album2 string) (done func(*error), fs1 *FileSet, fs2 *FileSet, err error) {
-	var done1, done2 func(*error) error
+func (d *Database) openFileSetPairForUpdate(user User, set1, album1, set2, album2 string) (commit func(bool, *error), fs1 *FileSet, fs2 *FileSet, err error) {
+	var commit1, commit2 func(bool, *error) error
 	if set1 < set2 || (set1 == set2 && album1 < album2) {
 		// Open fs1 first, then fs2.
-		if done1, fs1, err = d.fileSetForUpdate(user, set1, album1); err != nil {
+		if commit1, fs1, err = d.fileSetForUpdate(user, set1, album1); err != nil {
 			return
 		}
-		if done2, fs2, err = d.fileSetForUpdate(user, set2, album2); err != nil {
-			done1(&err)
+		if commit2, fs2, err = d.fileSetForUpdate(user, set2, album2); err != nil {
+			commit1(false, &err)
 			return
 		}
 	} else {
 		// Open fs2 first, then fs1.
-		if done2, fs2, err = d.fileSetForUpdate(user, set2, album2); err != nil {
+		if commit2, fs2, err = d.fileSetForUpdate(user, set2, album2); err != nil {
 			return
 		}
-		if done1, fs1, err = d.fileSetForUpdate(user, set1, album1); err != nil {
-			done2(&err)
+		if commit1, fs1, err = d.fileSetForUpdate(user, set1, album1); err != nil {
+			commit2(false, &err)
 			return
 		}
 	}
-	done = func(errp *error) {
-		done1(errp)
-		done2(errp)
+	commit = func(c bool, errp *error) {
+		commit1(c, errp)
+		commit2(c, errp)
 	}
 	return
 }
@@ -246,13 +246,13 @@ func (d *Database) MoveFile(user User, p MoveFileParams) (retErr error) {
 	if p.SetTo == p.SetFrom && p.AlbumIDTo == p.AlbumIDFrom {
 		return errors.New("src and dest are the same")
 	}
-	done, fsTo, fsFrom, err := d.openFileSetPairForUpdate(user, p.SetTo, p.AlbumIDTo, p.SetFrom, p.AlbumIDFrom)
+	commit, fsTo, fsFrom, err := d.openFileSetPairForUpdate(user, p.SetTo, p.AlbumIDTo, p.SetFrom, p.AlbumIDFrom)
 	if err != nil {
 		log.Errorf("openFileSetPairForUpdate(%q, %q, %q, %q, %q) failed: %v",
 			user.Email, p.SetTo, p.AlbumIDTo, p.SetFrom, p.AlbumIDFrom, err)
 		return err
 	}
-	defer done(&retErr)
+	defer commit(true, &retErr)
 
 	for i := range p.Filenames {
 		fn := p.Filenames[i]
@@ -303,12 +303,12 @@ func (d *Database) MoveFile(user User, p MoveFileParams) (retErr error) {
 }
 
 func (d *Database) EmptyTrash(user User, t int64) (retErr error) {
-	done, fs, err := d.fileSetForUpdate(user, TrashSet, "")
+	commit, fs, err := d.fileSetForUpdate(user, TrashSet, "")
 	if err != nil {
 		log.Errorf("fileSetForUpdate(%q, %q, %q) failed: %v", user.Email, TrashSet, "", err)
 		return err
 	}
-	defer done(&retErr)
+	defer commit(true, &retErr)
 	for k, v := range fs.Files {
 		if v.DateModified <= t {
 			if file, ok := fs.Files[k]; ok {
@@ -328,12 +328,12 @@ func (d *Database) EmptyTrash(user User, t int64) (retErr error) {
 }
 
 func (d *Database) DeleteFiles(user User, files []string) (retErr error) {
-	done, fs, err := d.fileSetForUpdate(user, TrashSet, "")
+	commit, fs, err := d.fileSetForUpdate(user, TrashSet, "")
 	if err != nil {
 		log.Errorf("fileSetForUpdate(%q, %q, %q) failed: %v", user.Email, TrashSet, "", err)
 		return err
 	}
-	defer done(&retErr)
+	defer commit(true, &retErr)
 	for _, f := range files {
 		if file, ok := fs.Files[f]; ok {
 			d.incRefCount(file.StoreFile, -1)
