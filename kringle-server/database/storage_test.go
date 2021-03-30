@@ -52,8 +52,8 @@ func TestOpenForUpdate(t *testing.T) {
 	if err := commit(true, nil); err != nil {
 		t.Errorf("done() failed: %v", err)
 	}
-	if err := commit(false, nil); err == nil {
-		t.Error("second commit should have failed")
+	if err := commit(false, nil); err != errAlreadyCommitted {
+		t.Errorf("unexpected error. Want %v, got %v", errAlreadyCommitted, err)
 	}
 
 	if _, err := db.readDataFile(fn, &foo); err != nil {
@@ -85,8 +85,11 @@ func TestRollback(t *testing.T) {
 		t.Fatalf("db.openForUpdate() got %+v, want %+v", bar, foo)
 	}
 	bar.Foo = "bar"
-	if err := commit(false, nil); err == nil {
-		t.Error("second commit should have failed")
+	if err := commit(false, nil); err != errRolledBack {
+		t.Errorf("unexpected error. Want %v, got %v", errRolledBack, err)
+	}
+	if err := commit(true, nil); err != errAlreadyRolledBack {
+		t.Errorf("unexpected error. Want %v, got %v", errAlreadyRolledBack, err)
 	}
 
 	var foo2 Foo

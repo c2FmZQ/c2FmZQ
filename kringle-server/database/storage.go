@@ -14,6 +14,12 @@ import (
 	"kringle-server/log"
 )
 
+var (
+	errRolledBack        = errors.New("rolled back")
+	errAlreadyRolledBack = errors.New("already rolled back")
+	errAlreadyCommitted  = errors.New("already committed")
+)
+
 // lock atomically creates a lock file for the given filename. When this
 // function returns without error, the lock is acquired and nobody else can
 // acquire it until it is released.
@@ -90,9 +96,9 @@ func (d *Database) openForUpdate(f string, obj interface{}) (func(bool, *error) 
 	return func(commit bool, errp *error) (err error) {
 		if called {
 			if committed {
-				return errors.New("already committed")
+				return errAlreadyCommitted
 			}
-			return errors.New("already rolled back")
+			return errAlreadyRolledBack
 		}
 		called = true
 		committed = commit
@@ -105,6 +111,9 @@ func (d *Database) openForUpdate(f string, obj interface{}) (func(bool, *error) 
 			}
 		}
 		*errp = unlock(f)
+		if !commit && *errp == nil {
+			*errp = errRolledBack
+		}
 		return *errp
 	}, nil
 }
