@@ -8,18 +8,45 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/NYTimes/gziphandler"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"kringle-server/crypto"
 	"kringle-server/database"
 	"kringle-server/log"
 	"kringle-server/stingle"
 )
 
+var (
+	reqLatency = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "server_response_time",
+			Help:    "The server's response time",
+			Buckets: []float64{0.01, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 20, 30, 45, 60, 90, 120},
+		},
+		[]string{"method", "uri"},
+	)
+	reqStatus = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "server_response_status_total",
+			Help: "Number of requests",
+		},
+		[]string{"method", "uri", "status"},
+	)
+)
+
+func init() {
+	prometheus.MustRegister(reqLatency)
+	prometheus.MustRegister(reqStatus)
+}
+
 // An HTTP server that implements the Stingle server API.
 type Server struct {
 	AllowCreateAccount bool
 	BaseURL            string
+	ExportMetrics      bool
 	mux                *http.ServeMux
 	srv                *http.Server
 	db                 *database.Database
@@ -29,9 +56,13 @@ type Server struct {
 // New returns an instance of Server that's fully initialized and ready to run.
 func New(db *database.Database, addr string) *Server {
 	s := &Server{
-		mux:  http.NewServeMux(),
-		db:   db,
-		addr: addr,
+		ExportMetrics: true,
+		mux:           http.NewServeMux(),
+		db:            db,
+		addr:          addr,
+	}
+	if s.ExportMetrics {
+		s.mux.Handle("/metrics", promhttp.Handler())
 	}
 
 	s.mux.HandleFunc("/", s.handleNotFound)
@@ -131,11 +162,15 @@ func parseInt(s string, def int64) int64 {
 // noauth wraps handlers that don't require authentication.
 func (s *Server) noauth(f func(*http.Request) *stingle.Response) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
+		start := time.Now()
 		log.Infof("%s %s", req.Method, req.URL)
 		req.ParseForm()
-		if err := f(req).Send(w); err != nil {
+		sr := f(req)
+		if err := sr.Send(w); err != nil {
 			log.Errorf("Send: %v", err)
 		}
+		reqLatency.WithLabelValues(req.Method, req.URL.String()).Observe(float64(time.Since(start)) / float64(time.Second))
+		reqStatus.WithLabelValues(req.Method, req.URL.String(), sr.Status).Inc()
 	}
 }
 
@@ -167,6 +202,8 @@ func (s *Server) checkToken(tok, scope string) (crypto.Token, database.User, err
 // passing the authenticated user to the underlying handler.
 func (s *Server) auth(f func(database.User, *http.Request) *stingle.Response) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
+		start := time.Now()
+
 		req.ParseForm()
 
 		_, user, err := s.checkToken(req.PostFormValue("token"), "session")
@@ -178,9 +215,12 @@ func (s *Server) auth(f func(database.User, *http.Request) *stingle.Response) ht
 			return
 		}
 		log.Infof("%s %s (UserID:%d)", req.Method, req.URL, user.UserID)
-		if err := f(user, req).Send(w); err != nil {
+		sr := f(user, req)
+		if err := sr.Send(w); err != nil {
 			log.Errorf("Send: %v", err)
 		}
+		reqLatency.WithLabelValues(req.Method, req.URL.String()).Observe(float64(time.Since(start)) / float64(time.Second))
+		reqStatus.WithLabelValues(req.Method, req.URL.String(), sr.Status).Inc()
 	}
 }
 

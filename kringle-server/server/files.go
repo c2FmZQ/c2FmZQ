@@ -217,12 +217,14 @@ func (s *Server) handleDelete(user database.User, req *http.Request) *stingle.Re
 // Returns:
 //   - The content of the file is streamed.
 func (s *Server) handleDownload(w http.ResponseWriter, req *http.Request) {
+	start := time.Now()
 	req.ParseForm()
 
 	_, user, err := s.checkToken(req.PostFormValue("token"), "session")
 	if err != nil {
 		log.Errorf("%s %s (INVALID TOKEN: %v)", req.Method, req.URL, err)
 		stingle.ResponseOK().AddPart("logout", "1").Send(w)
+		reqStatus.WithLabelValues(req.Method, req.URL.String(), "nok").Inc()
 		return
 	}
 	log.Infof("%s %s (UserID:%d)", req.Method, req.URL, user.UserID)
@@ -234,6 +236,7 @@ func (s *Server) handleDownload(w http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		log.Errorf("DownloadFile failed: %v", err)
 		w.WriteHeader(http.StatusNotFound)
+		reqStatus.WithLabelValues(req.Method, req.URL.String(), "nok").Inc()
 		return
 	}
 	if _, err := io.Copy(w, f); err != nil {
@@ -242,6 +245,9 @@ func (s *Server) handleDownload(w http.ResponseWriter, req *http.Request) {
 	if err := f.Close(); err != nil {
 		log.Errorf("Close failed: %v", err)
 	}
+
+	reqLatency.WithLabelValues(req.Method, req.URL.String()).Observe(float64(time.Since(start)) / float64(time.Second))
+	reqStatus.WithLabelValues(req.Method, req.URL.String(), "ok").Inc()
 }
 
 // tryToHandleRange implements minimal support for RFC 7233, section 3.1: Range.
@@ -281,11 +287,13 @@ func (s *Server) tryToHandleRange(w http.ResponseWriter, rangeHdr string, f *os.
 // Returns:
 //   - The content of the file is streamed.
 func (s *Server) handleSignedDownload(w http.ResponseWriter, req *http.Request) {
-	_, tok := path.Split(req.URL.RequestURI())
+	start := time.Now()
+	baseURI, tok := path.Split(req.URL.RequestURI())
 	token, user, err := s.checkToken(tok, "download")
 	if err != nil {
 		log.Errorf("%s %s (INVALID TOKEN: %v)", req.Method, req.URL, err)
 		w.WriteHeader(http.StatusUnauthorized)
+		reqStatus.WithLabelValues(req.Method, baseURI, "nok").Inc()
 		return
 	}
 	log.Infof("%s %s (UserID:%d)", req.Method, req.URL, user.UserID)
@@ -294,6 +302,7 @@ func (s *Server) handleSignedDownload(w http.ResponseWriter, req *http.Request) 
 	if err != nil {
 		log.Errorf("DownloadFile(%q, %q, %q, %v) failed: %v", user.Email, token.Set, token.File, token.Thumb, err)
 		w.WriteHeader(http.StatusNotFound)
+		reqStatus.WithLabelValues(req.Method, baseURI, "nok").Inc()
 		return
 	}
 	if r := req.Header.Get("Range"); r != "" {
@@ -305,6 +314,8 @@ func (s *Server) handleSignedDownload(w http.ResponseWriter, req *http.Request) 
 	if err := f.Close(); err != nil {
 		log.Errorf("Close failed: %v", err)
 	}
+	reqLatency.WithLabelValues(req.Method, baseURI).Observe(float64(time.Since(start)) / float64(time.Second))
+	reqStatus.WithLabelValues(req.Method, baseURI, "ok").Inc()
 }
 
 // makeDownloadURL creates a signed URL to download a file.

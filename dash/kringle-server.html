@@ -1,0 +1,125 @@
+{{ template "head" . }}
+
+{{ template "prom_right_table_head" }}
+<tr>
+  <th>kringle-server</th>
+  <th>{{ template "prom_query_drilldown" (args "sum(up{job='kringle-server'})") }} / {{ template "prom_query_drilldown" (args "count(up{job='kringle-server'})") }}</th>
+</tr>
+{{ template "prom_right_table_tail" }}
+
+{{ template "prom_content_head" . }}
+<h1>kringle-server</h1>
+
+<table class="table table-condensed table-striped table-bordered" style="width: 0%">
+<tr>
+  <th>Instance</th>
+  <th>Up</th>
+  <th>CPU</th>
+  <th>Memory (RSS)</th>
+  <th>Goroutines</th>
+  <th>Open FDs</th>
+  <th>Reqs/s</th>
+  <th>Errors/s</th>
+</tr>
+{{ range query "up{job='kringle-server'}" | sortByLabel "instance" }}
+<tr>
+  <td>{{ .Labels.instance }}</a></td>
+  <td{{ if eq (. | value) 1.0 }}>Yes{{ else }} class="alert-danger">No{{ end }}</td>
+  <td>{{ template "prom_query_drilldown" (args (printf "100 * (avg by(instance)(irate(process_cpu_seconds_total{job='kringle-server',instance='%s'}[5m])))" .Labels.instance) "%" "printf.1f") }}</td>
+  <td>{{ template "prom_query_drilldown" (args (printf "process_resident_memory_bytes{job='kringle-server',instance='%s'}" .Labels.instance) "B" "humanize1024") }}</td>
+  <td>{{ template "prom_query_drilldown" (args (printf "go_goroutines{job='kringle-server',instance='%s'}" .Labels.instance)) }}</td>
+  <td>{{ template "prom_query_drilldown" (args (printf "process_open_fds{job='kringle-server',instance='%s'}" .Labels.instance)) }}</td>
+  <td>{{ template "prom_query_drilldown" (args (printf "sum by (instance) (rate(server_response_status_total{job='kringle-server',instance='%s'}[5m]))" .Labels.instance) "" "humanizeNoSmallPrefix" ) }}</td>
+  <td>{{ template "prom_query_drilldown" (args (printf "sum by (instance) (rate(server_response_status_total{job='kringle-server',status='nok',instance='%s'}[5m]))" .Labels.instance) "" "humanizeNoSmallPrefix" ) }}</td>
+</tr>
+{{ else }}
+<tr><td colspan=8>No instances found.</td></tr>
+{{ end }}
+</table>
+
+<strong>Total Traffic</strong>
+<div id="requestGraph"></div>
+<script>
+new PromConsole.Graph({
+  node: document.querySelector("#requestGraph"),
+  expr: "sum by (job, status) (rate(server_response_status_total{job='kringle-server'}[5m]))",
+  name: "[[status]]",
+  yAxisFormatter: PromConsole.NumberFormatter.humanizeNoSmallPrefix,
+  yHoverFormatter: PromConsole.NumberFormatter.humanizeNoSmallPrefix,
+  yUnits: "/s",
+  yTitle: "Requests",
+  min: 0,
+  height: 200,
+  colorScheme: 'munin',
+})
+</script>
+<br/>
+
+<strong>Overall Latency</strong>
+<div id="latencyGraph"></div>
+<script>
+new PromConsole.Graph({
+  node: document.querySelector("#latencyGraph"),
+  expr: [
+     "histogram_quantile(0.99, sum by (job, le) (rate(server_response_time_bucket{job='kringle-server'}[5m])))",
+     "histogram_quantile(0.9, sum by (job, le) (rate(server_response_time_bucket{job='kringle-server'}[5m])))",
+     "histogram_quantile(0.5, sum by (job, le) (rate(server_response_time_bucket{job='kringle-server'}[5m])))"
+  ],
+  name: ["99p", "90p", "50p"],
+  yAxisFormatter: PromConsole.NumberFormatter.humanizeNoSmallPrefix,
+  yHoverFormatter: PromConsole.NumberFormatter.humanizeNoSmallPrefix,
+  yUnits: "s",
+  yTitle: "Latency",
+  min: 0,
+  height: 200,
+  colorScheme: 'cool',
+})
+</script>
+</td></tr></table>
+
+{{ range $i, $v := query "sum by (uri) (server_response_time_count{job='kringle-server'})" | sortByLabel "uri" }}
+<br/>
+<p><strong>Endpoint {{ .Labels.uri }}</strong></p>
+<div id="requestGraph-{{ $i }}"></div>
+<script>
+new PromConsole.Graph({
+  node: document.querySelector("#requestGraph-{{ $i }}"),
+  expr: "sum by (job, method, status, uri) (rate(server_response_status_total{job='kringle-server',uri='{{ .Labels.uri }}'}[5m]))",
+  name: "[[method]] [[status]]",
+  yAxisFormatter: PromConsole.NumberFormatter.humanizeNoSmallPrefix,
+  yHoverFormatter: PromConsole.NumberFormatter.humanizeNoSmallPrefix,
+  yUnits: "/s",
+  yTitle: "Requests",
+  min: 0,
+  height: 100,
+  width: 350,
+  colorScheme: 'munin',
+})
+</script>
+<br/>
+<div id="latencyGraph-{{ $i }}"></div>
+<script>
+new PromConsole.Graph({
+  node: document.querySelector("#latencyGraph-{{ $i }}"),
+  expr: [
+     "histogram_quantile(0.99, sum by (job, le) (rate(server_response_time_bucket{job='kringle-server',uri='{{ .Labels.uri }}'}[5m])))",
+     "histogram_quantile(0.9, sum by (job, le) (rate(server_response_time_bucket{job='kringle-server',uri='{{ .Labels.uri }}'}[5m])))",
+     "histogram_quantile(0.5, sum by (job, le) (rate(server_response_time_bucket{job='kringle-server',uri='{{ .Labels.uri }}'}[5m])))"
+  ],
+  name: ["99p", "90p", "50p"],
+  yAxisFormatter: PromConsole.NumberFormatter.humanizeNoSmallPrefix,
+  yHoverFormatter: PromConsole.NumberFormatter.humanizeNoSmallPrefix,
+  yUnits: "s",
+  yTitle: "Latency",
+  min: 0,
+  height: 100,
+  width: 350,
+  colorScheme: 'cool',
+})
+</script>
+</td></tr></table>
+{{ end }}
+
+{{ template "prom_content_tail" . }}
+
+{{ template "tail" }}
