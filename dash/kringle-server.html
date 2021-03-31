@@ -18,7 +18,7 @@
   <th>Memory (RSS)</th>
   <th>Goroutines</th>
   <th>Open FDs</th>
-  <th>Reqs/s</th>
+  <th>RPS</th>
   <th>Errors/s</th>
 </tr>
 {{ range query "up{job='kringle-server'}" | sortByLabel "instance" }}
@@ -29,7 +29,7 @@
   <td>{{ template "prom_query_drilldown" (args (printf "process_resident_memory_bytes{job='kringle-server',instance='%s'}" .Labels.instance) "B" "humanize1024") }}</td>
   <td>{{ template "prom_query_drilldown" (args (printf "go_goroutines{job='kringle-server',instance='%s'}" .Labels.instance)) }}</td>
   <td>{{ template "prom_query_drilldown" (args (printf "process_open_fds{job='kringle-server',instance='%s'}" .Labels.instance)) }}</td>
-  <td>{{ template "prom_query_drilldown" (args (printf "sum by (instance) (rate(server_response_status_total{job='kringle-server',instance='%s'}[5m]))" .Labels.instance) "" "humanizeNoSmallPrefix" ) }}</td>
+  <td>{{ template "prom_query_drilldown" (args (printf "sum by (instance) (rate(server_request_size_count{job='kringle-server',instance='%s'}[5m]))" .Labels.instance) "" "humanizeNoSmallPrefix" ) }}</td>
   <td>{{ template "prom_query_drilldown" (args (printf "sum by (instance) (rate(server_response_status_total{job='kringle-server',status='nok',instance='%s'}[5m]))" .Labels.instance) "" "humanizeNoSmallPrefix" ) }}</td>
 </tr>
 {{ else }}
@@ -37,17 +37,38 @@
 {{ end }}
 </table>
 
-<strong>Total Traffic</strong>
+<strong>Total Traffic (Reqs/s)</strong>
 <div id="requestGraph"></div>
 <script>
 new PromConsole.Graph({
   node: document.querySelector("#requestGraph"),
-  expr: "sum by (job, status) (rate(server_response_status_total{job='kringle-server'}[5m]))",
-  name: "[[status]]",
+  expr: "sum by (job) (rate(server_request_size_count{job='kringle-server'}[5m]))",
+  name: "Requests",
   yAxisFormatter: PromConsole.NumberFormatter.humanizeNoSmallPrefix,
   yHoverFormatter: PromConsole.NumberFormatter.humanizeNoSmallPrefix,
   yUnits: "/s",
   yTitle: "Requests",
+  min: 0,
+  height: 200,
+  colorScheme: 'munin',
+})
+</script>
+<br/>
+
+<strong>Total Traffic (Bytes/s)</strong>
+<div id="requestBytesGraph"></div>
+<script>
+new PromConsole.Graph({
+  node: document.querySelector("#requestBytesGraph"),
+  expr: [
+     "sum by (job) (rate(server_request_size_sum{job='kringle-server'}[5m]))",
+     "sum by (job) (rate(server_response_size_sum{job='kringle-server'}[5m]))"
+  ],
+  name: ["In", "Out"],
+  yAxisFormatter: PromConsole.NumberFormatter.humanizeNoSmallPrefix,
+  yHoverFormatter: PromConsole.NumberFormatter.humanizeNoSmallPrefix,
+  yUnits: "/s",
+  yTitle: "Bytes",
   min: 0,
   height: 200,
   colorScheme: 'munin',

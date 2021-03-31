@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"kringle-server/crypto"
 	"kringle-server/database"
 	"kringle-server/log"
@@ -217,7 +218,8 @@ func (s *Server) handleDelete(user database.User, req *http.Request) *stingle.Re
 // Returns:
 //   - The content of the file is streamed.
 func (s *Server) handleDownload(w http.ResponseWriter, req *http.Request) {
-	start := time.Now()
+	timer := prometheus.NewTimer(reqLatency.WithLabelValues(req.Method, req.URL.String()))
+	defer timer.ObserveDuration()
 	req.ParseForm()
 
 	_, user, err := s.checkToken(req.PostFormValue("token"), "session")
@@ -245,8 +247,6 @@ func (s *Server) handleDownload(w http.ResponseWriter, req *http.Request) {
 	if err := f.Close(); err != nil {
 		log.Errorf("Close failed: %v", err)
 	}
-
-	reqLatency.WithLabelValues(req.Method, req.URL.String()).Observe(float64(time.Since(start)) / float64(time.Second))
 	reqStatus.WithLabelValues(req.Method, req.URL.String(), "ok").Inc()
 }
 
@@ -287,7 +287,9 @@ func (s *Server) tryToHandleRange(w http.ResponseWriter, rangeHdr string, f *os.
 // Returns:
 //   - The content of the file is streamed.
 func (s *Server) handleSignedDownload(w http.ResponseWriter, req *http.Request) {
-	start := time.Now()
+	timer := prometheus.NewTimer(reqLatency.WithLabelValues(req.Method, req.URL.String()))
+	defer timer.ObserveDuration()
+
 	baseURI, tok := path.Split(req.URL.RequestURI())
 	token, user, err := s.checkToken(tok, "download")
 	if err != nil {
@@ -314,7 +316,6 @@ func (s *Server) handleSignedDownload(w http.ResponseWriter, req *http.Request) 
 	if err := f.Close(); err != nil {
 		log.Errorf("Close failed: %v", err)
 	}
-	reqLatency.WithLabelValues(req.Method, baseURI).Observe(float64(time.Since(start)) / float64(time.Second))
 	reqStatus.WithLabelValues(req.Method, baseURI, "ok").Inc()
 }
 

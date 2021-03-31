@@ -8,7 +8,6 @@ import (
 	"net"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/NYTimes/gziphandler"
 	"github.com/prometheus/client_golang/prometheus"
@@ -35,11 +34,29 @@ var (
 		},
 		[]string{"method", "uri", "status"},
 	)
+	reqSize = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "server_request_size",
+			Help:    "The size of requests",
+			Buckets: prometheus.ExponentialBuckets(1, 2, 32),
+		},
+		[]string{"code"},
+	)
+	respSize = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "server_response_size",
+			Help:    "The size of responses",
+			Buckets: prometheus.ExponentialBuckets(1, 2, 32),
+		},
+		[]string{"code"},
+	)
 )
 
 func init() {
 	prometheus.MustRegister(reqLatency)
 	prometheus.MustRegister(reqStatus)
+	prometheus.MustRegister(reqSize)
+	prometheus.MustRegister(respSize)
 }
 
 // An HTTP server that implements the Stingle server API.
@@ -101,11 +118,26 @@ func New(db *database.Database, addr string) *Server {
 	return s
 }
 
+func (s *Server) wrapHandler() http.Handler {
+	handler := http.Handler(s.mux)
+	handler = gziphandler.GzipHandler(handler)
+	obs, err := reqSize.CurryWith(prometheus.Labels{})
+	if err != nil {
+		log.Fatalf("reqSize.CurryWith: %v", err)
+	}
+	handler = promhttp.InstrumentHandlerRequestSize(obs, handler)
+	if obs, err = respSize.CurryWith(prometheus.Labels{}); err != nil {
+		log.Fatalf("respSize.CurryWith: %v", err)
+	}
+	handler = promhttp.InstrumentHandlerResponseSize(obs, handler)
+	return handler
+}
+
 // Run runs the HTTP server on the configured address.
 func (s *Server) Run() error {
 	s.srv = &http.Server{
 		Addr:    s.addr,
-		Handler: gziphandler.GzipHandler(s.mux),
+		Handler: s.wrapHandler(),
 	}
 	return s.srv.ListenAndServe()
 }
@@ -114,7 +146,7 @@ func (s *Server) Run() error {
 func (s *Server) RunWithTLS(certFile, keyFile string) error {
 	s.srv = &http.Server{
 		Addr:    s.addr,
-		Handler: gziphandler.GzipHandler(s.mux),
+		Handler: s.wrapHandler(),
 	}
 	return s.srv.ListenAndServeTLS(certFile, keyFile)
 }
@@ -123,7 +155,7 @@ func (s *Server) RunWithTLS(certFile, keyFile string) error {
 func (s *Server) RunWithListener(l net.Listener) error {
 	s.srv = &http.Server{
 		Addr:    s.addr,
-		Handler: gziphandler.GzipHandler(s.mux),
+		Handler: s.wrapHandler(),
 	}
 	return s.srv.Serve(l)
 }
@@ -162,14 +194,14 @@ func parseInt(s string, def int64) int64 {
 // noauth wraps handlers that don't require authentication.
 func (s *Server) noauth(f func(*http.Request) *stingle.Response) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		start := time.Now()
+		timer := prometheus.NewTimer(reqLatency.WithLabelValues(req.Method, req.URL.String()))
+		defer timer.ObserveDuration()
 		log.Infof("%s %s", req.Method, req.URL)
 		req.ParseForm()
 		sr := f(req)
 		if err := sr.Send(w); err != nil {
 			log.Errorf("Send: %v", err)
 		}
-		reqLatency.WithLabelValues(req.Method, req.URL.String()).Observe(float64(time.Since(start)) / float64(time.Second))
 		reqStatus.WithLabelValues(req.Method, req.URL.String(), sr.Status).Inc()
 	}
 }
@@ -202,7 +234,8 @@ func (s *Server) checkToken(tok, scope string) (crypto.Token, database.User, err
 // passing the authenticated user to the underlying handler.
 func (s *Server) auth(f func(database.User, *http.Request) *stingle.Response) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		start := time.Now()
+		timer := prometheus.NewTimer(reqLatency.WithLabelValues(req.Method, req.URL.String()))
+		defer timer.ObserveDuration()
 
 		req.ParseForm()
 
@@ -219,7 +252,6 @@ func (s *Server) auth(f func(database.User, *http.Request) *stingle.Response) ht
 		if err := sr.Send(w); err != nil {
 			log.Errorf("Send: %v", err)
 		}
-		reqLatency.WithLabelValues(req.Method, req.URL.String()).Observe(float64(time.Since(start)) / float64(time.Second))
 		reqStatus.WithLabelValues(req.Method, req.URL.String(), sr.Status).Inc()
 	}
 }

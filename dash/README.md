@@ -1,3 +1,1 @@
-# dash
-
 Prometheus dashboard.
