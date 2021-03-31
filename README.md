@@ -48,7 +48,7 @@ Or, build a docker image.
 
 ```bash
 $ docker build -t kringle-server .
-$ docker run -v ${DATABASEDIR}:/data -v ${SECRETSDIR}:/secrets:ro kringle-server
+$ docker run -u ${USER} -v ${DATABASEDIR}:/data -v ${SECRETSDIR}:/secrets:ro kringle-server
 ```
 ${DATABASEDIR} is where all the data will be stored, and ${SECRETSDIR} is where the
 database encryption passphrase, the TLS key, and TLS cert are stored.
