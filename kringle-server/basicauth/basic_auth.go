@@ -14,7 +14,7 @@ import (
 // New returns an initialized BasicAuth that uses the given htdigest file.
 func New(filename string) (*BasicAuth, error) {
 	basicAuth := &BasicAuth{
-		htDigest: make(map[string]string),
+		htDigest: make(map[string][md5.Size]byte),
 	}
 	b, err := os.ReadFile(filename)
 	if err != nil {
@@ -29,13 +29,13 @@ func New(filename string) (*BasicAuth, error) {
 			log.Errorf("basic-auth: malformed line %s:%d", filename, i)
 			continue
 		}
-		key := string(bytes.Join(parts[:2], []byte{':'}))
-		pass := make([]byte, md5.Size)
-		if sz, err := hex.Decode(pass, parts[2]); err != nil || sz != md5.Size {
+		var pass [md5.Size]byte
+		if sz, err := hex.Decode(pass[:], parts[2]); err != nil || sz != md5.Size {
 			log.Errorf("basic-auth: malformed md5 hash %s:%d", filename, i)
 			continue
 		}
-		basicAuth.htDigest[key] = string(pass)
+		key := string(bytes.Join(parts[:2], []byte{':'}))
+		basicAuth.htDigest[key] = pass
 	}
 	return basicAuth, nil
 }
@@ -43,14 +43,14 @@ func New(filename string) (*BasicAuth, error) {
 // Handles basic auth for HTTP handlers using a htdigest file.
 type BasicAuth struct {
 	// key is user:realm, value is md5 password.
-	htDigest map[string]string
+	htDigest map[string][md5.Size]byte
 }
 
 // Check checks the user's password using the preloaded htdigest file.
 func (a *BasicAuth) Check(user, pass, realm string) bool {
 	key := user + ":" + realm
 	h := md5.Sum([]byte(key + ":" + pass))
-	if p, ok := a.htDigest[key]; !ok || subtle.ConstantTimeCompare(h[:], []byte(p)) != 1 {
+	if p, ok := a.htDigest[key]; !ok || subtle.ConstantTimeCompare(h[:], p[:]) != 1 {
 		return false
 	}
 	return true
