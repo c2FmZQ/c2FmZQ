@@ -29,7 +29,7 @@ func startServer(t *testing.T) (string, func()) {
 	log.Record = t.Log
 	log.Level = 3
 	db := database.New(filepath.Join(testdir, "data"), "")
-	s := server.New(db, "")
+	s := server.New(db, "", "")
 	s.AllowCreateAccount = true
 	s.BaseURL = "http://unix/"
 	l, err := net.Listen("unix", sock)

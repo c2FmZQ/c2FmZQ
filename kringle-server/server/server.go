@@ -12,6 +12,7 @@ import (
 	"github.com/NYTimes/gziphandler"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"kringle-server/basicauth"
 	"kringle-server/crypto"
 	"kringle-server/database"
 	"kringle-server/log"
@@ -63,23 +64,28 @@ func init() {
 type Server struct {
 	AllowCreateAccount bool
 	BaseURL            string
-	ExportMetrics      bool
 	mux                *http.ServeMux
 	srv                *http.Server
 	db                 *database.Database
 	addr               string
+	basicAuth          *basicauth.BasicAuth
 }
 
 // New returns an instance of Server that's fully initialized and ready to run.
-func New(db *database.Database, addr string) *Server {
+func New(db *database.Database, addr, htdigest string) *Server {
 	s := &Server{
-		ExportMetrics: true,
-		mux:           http.NewServeMux(),
-		db:            db,
-		addr:          addr,
+		mux:  http.NewServeMux(),
+		db:   db,
+		addr: addr,
 	}
-	if s.ExportMetrics {
-		s.mux.Handle("/metrics", promhttp.Handler())
+	if htdigest != "" {
+		var err error
+		if s.basicAuth, err = basicauth.New(htdigest); err != nil {
+			log.Errorf("htdigest: %v", err)
+		}
+	}
+	if s.basicAuth != nil {
+		s.mux.HandleFunc("/metrics", s.basicAuth.Handler("Metrics", promhttp.Handler()))
 	}
 
 	s.mux.HandleFunc("/", s.handleNotFound)
