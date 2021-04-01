@@ -287,10 +287,10 @@ func (s *Server) tryToHandleRange(w http.ResponseWriter, rangeHdr string, f *os.
 // Returns:
 //   - The content of the file is streamed.
 func (s *Server) handleSignedDownload(w http.ResponseWriter, req *http.Request) {
-	timer := prometheus.NewTimer(reqLatency.WithLabelValues(req.Method, req.URL.String()))
+	baseURI, tok := path.Split(req.URL.RequestURI())
+	timer := prometheus.NewTimer(reqLatency.WithLabelValues(req.Method, baseURI))
 	defer timer.ObserveDuration()
 
-	baseURI, tok := path.Split(req.URL.RequestURI())
 	token, user, err := s.checkToken(tok, "download")
 	if err != nil {
 		log.Errorf("%s %s (INVALID TOKEN: %v)", req.Method, req.URL, err)
