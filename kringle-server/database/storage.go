@@ -69,7 +69,7 @@ func tryToRemoveStaleLock(lockf string, deadline time.Duration) {
 	}
 }
 
-// d.openForUpdate opens a json file with the expectation that the object will be
+// openForUpdate opens a json file with the expectation that the object will be
 // modified and then saved again.
 //
 // Example:

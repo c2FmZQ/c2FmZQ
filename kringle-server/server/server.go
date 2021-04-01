@@ -127,15 +127,8 @@ func New(db *database.Database, addr, htdigest string) *Server {
 func (s *Server) wrapHandler() http.Handler {
 	handler := http.Handler(s.mux)
 	handler = gziphandler.GzipHandler(handler)
-	obs, err := reqSize.CurryWith(prometheus.Labels{})
-	if err != nil {
-		log.Fatalf("reqSize.CurryWith: %v", err)
-	}
-	handler = promhttp.InstrumentHandlerRequestSize(obs, handler)
-	if obs, err = respSize.CurryWith(prometheus.Labels{}); err != nil {
-		log.Fatalf("respSize.CurryWith: %v", err)
-	}
-	handler = promhttp.InstrumentHandlerResponseSize(obs, handler)
+	handler = promhttp.InstrumentHandlerRequestSize(reqSize, handler)
+	handler = promhttp.InstrumentHandlerResponseSize(respSize, handler)
 	return handler
 }
 
