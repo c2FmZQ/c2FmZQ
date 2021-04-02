@@ -6,16 +6,22 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"kringle-server/log"
 )
 
 // New returns a new Metadata rooted at dir. The caller must provide a
 // HeaderDecrypter that will be used to decrypt each file header and return
 // the SecretKey.
 func New(dir string, keyFromHeader HeaderDecrypter) *Metadata {
-	return &Metadata{
+	md := &Metadata{
 		dir:           dir,
 		keyFromHeader: keyFromHeader,
 	}
+	if err := md.recoverPendingOps(); err != nil {
+		log.Fatalf("md.recoverPendingOps: %v", err)
+	}
+	return md
 }
 
 // Offers the API to atomically read, write, and update encrypted files.

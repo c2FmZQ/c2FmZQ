@@ -179,16 +179,23 @@ func (md *Metadata) OpenManyForUpdate(files []string, objects []interface{}) (fu
 			var errorList []error
 			// If some of the SaveDataFile calls fails and some succeed, the data could
 			// be inconsistent.
+			backup, err := md.createBackup(files)
+			if err != nil {
+				*errp = err
+				return *errp
+			}
 			for i := range files {
 				if err := md.SaveDataFile(crypters[i], files[i], objects[i]); err != nil {
 					errorList = append(errorList, err)
 				}
 			}
 			if errorList != nil {
+				backup.restore()
 				if *errp == nil {
 					*errp = fmt.Errorf("md.SaveDataFile: %v", errorList)
 				}
 			} else {
+				backup.delete()
 				committed = true
 			}
 		}
