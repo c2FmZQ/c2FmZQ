@@ -18,8 +18,8 @@ func New(dir string, keyFromHeader HeaderDecrypter) *Metadata {
 		dir:           dir,
 		keyFromHeader: keyFromHeader,
 	}
-	if err := md.recoverPendingOps(); err != nil {
-		log.Fatalf("md.recoverPendingOps: %v", err)
+	if err := md.rollbackPendingOps(); err != nil {
+		log.Fatalf("md.rollbackPendingOps: %v", err)
 	}
 	return md
 }

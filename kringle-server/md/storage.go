@@ -178,11 +178,18 @@ func (md *Metadata) OpenManyForUpdate(files []string, objects []interface{}) (fu
 		if commit {
 			var errorList []error
 			// If some of the SaveDataFile calls fails and some succeed, the data could
-			// be inconsistent.
-			backup, err := md.createBackup(files)
-			if err != nil {
-				*errp = err
-				return *errp
+			// be inconsistent. When we have more then one file, make a backup of the
+			// original data, and restore it if anything goes wrong.
+			//
+			// If the process dies in the middle of saving the data, the backup will be
+			// restored automatically when the process restarts. See md.New().
+			var backup *backup
+			if len(files) > 1 {
+				var err error
+				if backup, err = md.createBackup(files); err != nil {
+					*errp = err
+					return *errp
+				}
 			}
 			for i := range files {
 				if err := md.SaveDataFile(crypters[i], files[i], objects[i]); err != nil {
@@ -190,12 +197,16 @@ func (md *Metadata) OpenManyForUpdate(files []string, objects []interface{}) (fu
 				}
 			}
 			if errorList != nil {
-				backup.restore()
+				if backup != nil {
+					backup.restore()
+				}
 				if *errp == nil {
 					*errp = fmt.Errorf("md.SaveDataFile: %v", errorList)
 				}
 			} else {
-				backup.delete()
+				if backup != nil {
+					backup.delete()
+				}
 				committed = true
 			}
 		}

@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"kringle-server/log"
 )
 
 func (md *Metadata) createBackup(files []string) (*backup, error) {
@@ -21,7 +23,7 @@ func (md *Metadata) createBackup(files []string) (*backup, error) {
 	return b, nil
 }
 
-func (md *Metadata) recoverPendingOps() error {
+func (md *Metadata) rollbackPendingOps() error {
 	m, err := filepath.Glob(filepath.Join(md.dir, "pending", "*"))
 	if err != nil {
 		return err
@@ -40,6 +42,8 @@ func (md *Metadata) recoverPendingOps() error {
 		if err := b.restore(); err != nil {
 			return err
 		}
+		log.Infof("Rolled back pending operation %d [%v]", b.TS.UnixNano(), b.Files)
+		// The abandoned files were most likely locked.
 		md.UnlockMany(b.Files)
 	}
 	return nil
