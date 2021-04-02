@@ -39,6 +39,8 @@ func (md *Metadata) rollbackPendingOps() error {
 		}
 		b.dir = md.dir
 		b.pending = rel
+		// Make sure pending is this backup is really abandoned.
+		time.Sleep(time.Until(b.TS.Add(5 * time.Second)))
 		if err := b.restore(); err != nil {
 			return err
 		}
@@ -62,36 +64,63 @@ type backup struct {
 }
 
 func (b *backup) backup() error {
+	ch := make(chan error)
 	for _, f := range b.Files {
-		fn := filepath.Join(b.dir, f)
-		if err := copyFile(b.fileName(fn), fn); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return err
+		go func(fn string) { ch <- copyFile(b.backupFileName(fn), fn) }(filepath.Join(b.dir, f))
+	}
+	var errList []error
+	for _ = range b.Files {
+		if err := <-ch; err != nil && !errors.Is(err, os.ErrNotExist) {
+			errList = append(errList, err)
 		}
+	}
+	if errList != nil {
+		return fmt.Errorf("%v", errList)
 	}
 	return nil
 }
 
 func (b *backup) restore() error {
+	ch := make(chan error)
 	for _, f := range b.Files {
-		fn := filepath.Join(b.dir, f)
-		if err := os.Rename(b.fileName(fn), fn); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return err
+		go func(fn string) { ch <- os.Rename(b.backupFileName(fn), fn) }(filepath.Join(b.dir, f))
+	}
+	var errList []error
+	for _ = range b.Files {
+		if err := <-ch; err != nil && !errors.Is(err, os.ErrNotExist) {
+			errList = append(errList, err)
 		}
 	}
-	return os.Remove(filepath.Join(b.dir, b.pending))
+	if errList != nil {
+		return fmt.Errorf("%v", errList)
+	}
+	if err := os.Remove(filepath.Join(b.dir, b.pending)); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
 }
 
 func (b *backup) delete() error {
+	ch := make(chan error)
 	for _, f := range b.Files {
-		fn := filepath.Join(b.dir, f)
-		if err := os.Remove(b.fileName(fn)); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return err
+		go func(fn string) { ch <- os.Remove(b.backupFileName(fn)) }(filepath.Join(b.dir, f))
+	}
+	var errList []error
+	for _ = range b.Files {
+		if err := <-ch; err != nil && !errors.Is(err, os.ErrNotExist) {
+			errList = append(errList, err)
 		}
 	}
-	return os.Remove(filepath.Join(b.dir, b.pending))
+	if errList != nil {
+		return fmt.Errorf("%v", errList)
+	}
+	if err := os.Remove(filepath.Join(b.dir, b.pending)); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
 }
 
-func (b *backup) fileName(f string) string {
+func (b *backup) backupFileName(f string) string {
 	return fmt.Sprintf("%s.bck-%d", f, b.TS.UnixNano())
 }
 

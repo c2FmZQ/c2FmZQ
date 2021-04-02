@@ -149,14 +149,27 @@ func (md *Metadata) OpenManyForUpdate(files []string, objects []interface{}) (fu
 	if err := md.LockMany(files); err != nil {
 		return nil, err
 	}
+	type readValue struct {
+		i   int
+		c   *Crypter
+		err error
+	}
+	ch := make(chan readValue)
 	crypters := make([]*Crypter, len(files))
-	var errorList []error
 	for i := range files {
-		crypter, err := md.ReadDataFile(files[i], objects[i])
-		if err != nil && !errors.Is(err, os.ErrNotExist) {
-			errorList = append(errorList, err)
+		go func(i int, file string, obj interface{}) {
+			crypter, err := md.ReadDataFile(files[i], objects[i])
+			ch <- readValue{i, crypter, err}
+		}(i, files[i], objects[i])
+	}
+
+	var errorList []error
+	for _ = range files {
+		v := <-ch
+		if v.err != nil && !errors.Is(v.err, os.ErrNotExist) {
+			errorList = append(errorList, v.err)
 		}
-		crypters[i] = crypter
+		crypters[v.i] = v.c
 	}
 	if errorList != nil {
 		md.UnlockMany(files)
@@ -176,7 +189,6 @@ func (md *Metadata) OpenManyForUpdate(files []string, objects []interface{}) (fu
 			errp = &retErr
 		}
 		if commit {
-			var errorList []error
 			// If some of the SaveDataFile calls fails and some succeed, the data could
 			// be inconsistent. When we have more then one file, make a backup of the
 			// original data, and restore it if anything goes wrong.
@@ -191,8 +203,15 @@ func (md *Metadata) OpenManyForUpdate(files []string, objects []interface{}) (fu
 					return *errp
 				}
 			}
+			ch := make(chan error)
 			for i := range files {
-				if err := md.SaveDataFile(crypters[i], files[i], objects[i]); err != nil {
+				go func(c *Crypter, file string, obj interface{}) {
+					ch <- md.SaveDataFile(c, file, obj)
+				}(crypters[i], files[i], objects[i])
+			}
+			var errorList []error
+			for _ = range files {
+				if err := <-ch; err != nil {
 					errorList = append(errorList, err)
 				}
 			}
