@@ -158,7 +158,7 @@ func (md *Metadata) OpenManyForUpdate(files []string, objects []interface{}) (fu
 	crypters := make([]*Crypter, len(files))
 	for i := range files {
 		go func(i int, file string, obj interface{}) {
-			crypter, err := md.ReadDataFile(files[i], objects[i])
+			crypter, err := md.ReadDataFile(file, obj)
 			ch <- readValue{i, crypter, err}
 		}(i, files[i], objects[i])
 	}
