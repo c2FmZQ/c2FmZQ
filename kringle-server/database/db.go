@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"kringle-server/log"
+	"kringle-server/md"
 )
 
 var (
@@ -25,6 +26,7 @@ var (
 // New returns an initialized database that uses dir for storage.
 func New(dir, passphrase string) *Database {
 	db := &Database{dir: dir}
+	db.md = md.New(dir, db.decryptWithMasterKey)
 	var err error
 	if db.masterKey, err = db.readMasterKey(passphrase); errors.Is(err, os.ErrNotExist) {
 		db.masterKey, err = db.createMasterKey(passphrase)
@@ -40,6 +42,7 @@ func New(dir, passphrase string) *Database {
 type Database struct {
 	dir       string
 	masterKey []byte
+	md        *md.Metadata
 }
 
 // Dir returns the directory where the database stores its data.
@@ -77,7 +80,7 @@ func createParentIfNotExist(filename string) error {
 	dir, _ := filepath.Split(filename)
 	if _, err := os.Stat(dir); errors.Is(err, os.ErrNotExist) {
 		if err := os.MkdirAll(dir, 0700); err != nil {
-			return fmt.Errorf("os.MkdirAll(%q): %v", dir, err)
+			return fmt.Errorf("os.MkdirAll(%q): %w", dir, err)
 		}
 	}
 	return nil
@@ -105,10 +108,14 @@ func showCallStack() {
 	}
 }
 
+func (d Database) DumpFile(filename string) error {
+	return d.md.DumpFile(filename)
+}
+
 func (d Database) DumpUsers() {
 	var ul []userList
-	if _, err := d.readDataFile(d.filePath(userListFile), &ul); err != nil {
-		log.Errorf("readDataFile: %v", err)
+	if _, err := d.md.ReadDataFile(d.filePath(userListFile), &ul); err != nil {
+		log.Errorf("ReadDataFile: %v", err)
 	}
 	for _, u := range ul {
 		user, err := d.User(u.Email)

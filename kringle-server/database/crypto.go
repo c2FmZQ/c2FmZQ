@@ -14,6 +14,7 @@ import (
 
 	"golang.org/x/crypto/pbkdf2"
 	"kringle-server/log"
+	"kringle-server/md"
 )
 
 const (
@@ -99,82 +100,18 @@ func (d Database) masterHash(in []byte) []byte {
 	return out[:]
 }
 
-func (d *Database) decryptWithMasterKey(header []byte) ([]byte, error) {
+func (d *Database) decryptWithMasterKey(header md.Header) (sk md.SecretKey, err error) {
 	if len(d.masterKey) == 0 {
 		log.Fatal("master key is not set")
 	}
 	if len(header) != 32+aes.BlockSize {
-		return nil, fmt.Errorf("wrong header size: %d", len(header))
+		return sk, fmt.Errorf("wrong header size: %d", len(header))
 	}
 	block, err := aes.NewCipher(d.masterKey)
 	if err != nil {
-		return nil, fmt.Errorf("aes.NewCipher failed: %v", err)
+		return sk, fmt.Errorf("aes.NewCipher failed: %w", err)
 	}
-	decKey := make([]byte, 32)
 	mode := cipher.NewCBCDecrypter(block, header[:aes.BlockSize])
-	mode.CryptBlocks(decKey, header[aes.BlockSize:])
-	return decKey, nil
-}
-
-type crypter struct {
-	decryptKey func([]byte) ([]byte, error)
-	header     []byte
-}
-
-func newCrypter(f func([]byte) ([]byte, error)) *crypter {
-	return &crypter{decryptKey: f}
-}
-
-func (c *crypter) BeginRead(r io.Reader) (*cipher.StreamReader, error) {
-	c.header = make([]byte, 32+aes.BlockSize)
-	if _, err := io.ReadFull(r, c.header); err != nil {
-		return nil, fmt.Errorf("reading header: %v", err)
-	}
-	key, err := c.decryptKey(c.header)
-	if err != nil {
-		return nil, fmt.Errorf("decrypting file key: %v", err)
-	}
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return nil, fmt.Errorf("aes.NewCipher: %v", err)
-	}
-	iv := make([]byte, block.BlockSize())
-	if _, err := io.ReadFull(r, iv); err != nil {
-		return nil, fmt.Errorf("reading file iv: %v", err)
-	}
-	return &cipher.StreamReader{
-		S: cipher.NewCTR(block, iv),
-		R: r,
-	}, nil
-}
-
-func (c *crypter) BeginWrite(w io.Writer) (*cipher.StreamWriter, error) {
-	if len(c.header) == 0 {
-		c.header = make([]byte, 32+aes.BlockSize)
-		if _, err := io.ReadFull(rand.Reader, c.header); err != nil {
-			return nil, fmt.Errorf("creating header: %v", err)
-		}
-	}
-	key, err := c.decryptKey(c.header)
-	if err != nil {
-		return nil, fmt.Errorf("decrypting file key: %v", err)
-	}
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return nil, fmt.Errorf("aes.NewCipher: %v", err)
-	}
-	iv := make([]byte, block.BlockSize())
-	if _, err := io.ReadFull(rand.Reader, iv); err != nil {
-		return nil, fmt.Errorf("creating file iv: %v", err)
-	}
-	if _, err := w.Write(c.header); err != nil {
-		return nil, fmt.Errorf("writing file header: %v", err)
-	}
-	if _, err := w.Write(iv); err != nil {
-		return nil, fmt.Errorf("writing file iv: %v", err)
-	}
-	return &cipher.StreamWriter{
-		S: cipher.NewCTR(block, iv),
-		W: w,
-	}, nil
+	mode.CryptBlocks(sk[:], header[aes.BlockSize:])
+	return
 }

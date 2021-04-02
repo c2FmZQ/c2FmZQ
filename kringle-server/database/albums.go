@@ -114,10 +114,10 @@ func (d *Database) DeleteAlbum(owner User, albumID string) error {
 	if err != nil {
 		return err
 	}
-	if err := lock(albumRef.File); err != nil {
+	if err := d.md.Lock(albumRef.File); err != nil {
 		return err
 	}
-	defer unlock(albumRef.File)
+	defer d.md.Unlock(albumRef.File)
 	if err := os.Remove(albumRef.File); err != nil {
 		log.Errorf("os.Remove(%q) failed: %v", albumRef.File, err)
 	}
@@ -175,7 +175,7 @@ func (d *Database) AlbumPermissions(user User, albumID string) (stingle.Permissi
 // AlbumRefs returns a list of all the user's albums.
 func (d *Database) AlbumRefs(user User) (map[string]*AlbumRef, error) {
 	var manifest AlbumManifest
-	if _, err := d.readDataFile(d.filePath("home", user.Email, albumManifest), &manifest); err != nil && !errors.Is(err, os.ErrNotExist) {
+	if _, err := d.md.ReadDataFile(d.filePath("home", user.Email, albumManifest), &manifest); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}
 	if manifest.Albums == nil {
@@ -322,7 +322,7 @@ func (d *Database) UnshareAlbum(owner User, albumID string) (retErr error) {
 // albumRef returns a reference to an album file, i.e. where it is stored.
 func (d *Database) albumRef(user User, albumID string) (*AlbumRef, error) {
 	var manifest AlbumManifest
-	if _, err := d.readDataFile(d.filePath("home", user.Email, albumManifest), &manifest); err != nil {
+	if _, err := d.md.ReadDataFile(d.filePath("home", user.Email, albumManifest), &manifest); err != nil {
 		return nil, err
 	}
 	a := manifest.Albums[albumID]
@@ -340,9 +340,9 @@ func (d *Database) addAlbumRef(memberID int64, albumID, file string) (retErr err
 	}
 
 	var manifest AlbumManifest
-	commit, err := d.openForUpdate(d.filePath("home", user.Email, albumManifest), &manifest)
+	commit, err := d.md.OpenForUpdate(d.filePath("home", user.Email, albumManifest), &manifest)
 	if err != nil {
-		log.Errorf("d.openForUpdate: %v", err)
+		log.Errorf("d.md.OpenForUpdate: %v", err)
 		return err
 	}
 	defer commit(true, &retErr)
@@ -365,9 +365,9 @@ func (d *Database) removeAlbumRef(memberID int64, albumID string) (retErr error)
 	}
 
 	var manifest AlbumManifest
-	commit, err := d.openForUpdate(d.filePath("home", user.Email, albumManifest), &manifest)
+	commit, err := d.md.OpenForUpdate(d.filePath("home", user.Email, albumManifest), &manifest)
 	if err != nil {
-		log.Errorf("d.openForUpdate: %v", err)
+		log.Errorf("d.md.OpenForUpdate: %v", err)
 		return err
 	}
 	defer commit(true, &retErr)

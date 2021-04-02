@@ -59,9 +59,9 @@ func (u User) ServerPublicKeyForExport() string {
 // AddUser creates a new user account for u.
 func (d *Database) AddUser(u User) (retErr error) {
 	var ul []userList
-	commit, err := d.openForUpdate(d.filePath(userListFile), &ul)
+	commit, err := d.md.OpenForUpdate(d.filePath(userListFile), &ul)
 	if err != nil {
-		log.Errorf("d.openForUpdate: %v", err)
+		log.Errorf("d.md.OpenForUpdate: %v", err)
 		return err
 	}
 	defer commit(true, &retErr)
@@ -87,13 +87,13 @@ func (d *Database) AddUser(u User) (retErr error) {
 	u.ServerKey = crypto.MakeSecretKey()
 	u.ServerSignKey = crypto.MakeSignSecretKey()
 	u.TokenSeq = 1
-	return d.saveDataFile(nil, d.filePath("home", u.Email, userFile), u)
+	return d.md.SaveDataFile(nil, d.filePath("home", u.Email, userFile), u)
 }
 
 // UpdateUser saves a user object.
 func (d *Database) UpdateUser(u User) error {
 	var f User
-	commit, err := d.openForUpdate(d.filePath("home", u.Email, userFile), &f)
+	commit, err := d.md.OpenForUpdate(d.filePath("home", u.Email, userFile), &f)
 	if err != nil {
 		return err
 	}
@@ -104,7 +104,7 @@ func (d *Database) UpdateUser(u User) error {
 // UserByID returns the User object with the given ID.
 func (d *Database) UserByID(id int64) (User, error) {
 	var ul []userList
-	if _, err := d.readDataFile(d.filePath(userListFile), &ul); err != nil {
+	if _, err := d.md.ReadDataFile(d.filePath(userListFile), &ul); err != nil {
 		return User{}, err
 	}
 	for _, u := range ul {
@@ -118,7 +118,7 @@ func (d *Database) UserByID(id int64) (User, error) {
 // User returns the User object with the given email address.
 func (d *Database) User(email string) (User, error) {
 	var u User
-	_, err := d.readDataFile(d.filePath("home", email, userFile), &u)
+	_, err := d.md.ReadDataFile(d.filePath("home", email, userFile), &u)
 	return u, err
 }
 
@@ -144,9 +144,9 @@ func (c Contact) Export() stingle.Contact {
 // addContactToUser adds contact to user's contact list.
 func (d *Database) addContactToUser(user, contact User) (c *Contact, retErr error) {
 	var contactList map[string]*Contact
-	commit, err := d.openForUpdate(d.filePath("home", user.Email, contactListFile), &contactList)
+	commit, err := d.md.OpenForUpdate(d.filePath("home", user.Email, contactListFile), &contactList)
 	if err != nil {
-		log.Errorf("d.openForUpdate: %v", err)
+		log.Errorf("d.md.OpenForUpdate: %v", err)
 		return nil, err
 	}
 	defer commit(true, &retErr)
@@ -175,7 +175,7 @@ func (d *Database) AddContact(user User, contactEmail string) (*Contact, error) 
 // lookupContacts returns a Contact for each UserIDs in the list.
 func (d *Database) lookupContacts(uids map[int64]bool) []Contact {
 	var ul []userList
-	if _, err := d.readDataFile(d.filePath(userListFile), &ul); err != nil {
+	if _, err := d.md.ReadDataFile(d.filePath(userListFile), &ul); err != nil {
 		return nil
 	}
 	var out []Contact
@@ -200,9 +200,9 @@ func (d *Database) lookupContacts(uids map[int64]bool) []Contact {
 func (d *Database) addCrossContacts(list []Contact) {
 	for _, c1 := range list {
 		var contactList map[string]*Contact
-		commit, err := d.openForUpdate(d.filePath("home", c1.Email, contactListFile), &contactList)
+		commit, err := d.md.OpenForUpdate(d.filePath("home", c1.Email, contactListFile), &contactList)
 		if err != nil {
-			log.Errorf("d.openForUpdate: %v", err)
+			log.Errorf("d.md.OpenForUpdate: %v", err)
 			continue
 		}
 		if contactList == nil {
@@ -232,7 +232,7 @@ func (d *Database) addCrossContacts(list []Contact) {
 // than ts.
 func (d *Database) ContactUpdates(email string, ts int64) ([]stingle.Contact, error) {
 	var contacts map[string]Contact
-	if _, err := d.readDataFile(d.filePath("home", email, contactListFile), &contacts); err != nil && !errors.Is(err, os.ErrNotExist) {
+	if _, err := d.md.ReadDataFile(d.filePath("home", email, contactListFile), &contacts); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}
 	if contacts == nil {
