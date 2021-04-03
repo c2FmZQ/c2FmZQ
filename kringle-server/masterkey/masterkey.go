@@ -18,6 +18,11 @@ import (
 	"kringle-server/log"
 )
 
+const (
+	// The size of an encrypted key.
+	EncryptedKeySize = 96
+)
+
 type MasterKey struct {
 	key []byte
 }
@@ -110,18 +115,14 @@ func (mk MasterKey) Hash(b []byte) []byte {
 	return mac.Sum(nil)
 }
 
-// Decrypt decrypts data using the master key. The data must begin with the
-// 16-byte iv and 32-byte hmac, and it must be a multiple of 16 bytes in total size.
+// Decrypt decrypts data that was encrypted with Encrypt and the same master key.
 func (mk MasterKey) Decrypt(data []byte) ([]byte, error) {
 	if len(mk.key) == 0 {
 		log.Fatal("master key is not set")
 	}
-	if len(data)%16 != 0 || len(data) < aes.BlockSize+32 {
-		return nil, fmt.Errorf("invalid data size: %d", len(data))
-	}
 	iv := data[:aes.BlockSize]
-	hm := data[aes.BlockSize : aes.BlockSize+32]
-	encData := data[aes.BlockSize+32:]
+	encData := data[aes.BlockSize : len(data)-32]
+	hm := data[len(data)-32:]
 	if !hmac.Equal(hm, mk.Hash(encData)) {
 		return nil, errors.New("invalid hmac")
 	}
@@ -130,20 +131,16 @@ func (mk MasterKey) Decrypt(data []byte) ([]byte, error) {
 		return nil, fmt.Errorf("aes.NewCipher failed: %w", err)
 	}
 	mode := cipher.NewCBCDecrypter(block, iv)
-	out := make([]byte, len(data)-aes.BlockSize-32)
-	mode.CryptBlocks(out, encData)
-	return out, nil
+	dec := make([]byte, len(data)-aes.BlockSize-32)
+	mode.CryptBlocks(dec, encData)
+	padSize := int(dec[0])
+	return dec[1 : len(dec)-padSize], nil
 }
 
-// Encrypt encrypts data using the master key. The data must be a multiple
-// of 16 bytes in size. The encrypted output includes the 16-byte iv, and hmac
-// at the beginning.
+// Encrypt encrypts data using the master key.
 func (mk MasterKey) Encrypt(data []byte) ([]byte, error) {
 	if len(mk.key) == 0 {
 		log.Fatal("master key is not set")
-	}
-	if len(data)%16 != 0 {
-		return nil, fmt.Errorf("invalid data size: %d", len(data))
 	}
 	block, err := aes.NewCipher(mk.key)
 	if err != nil {
@@ -153,19 +150,28 @@ func (mk MasterKey) Encrypt(data []byte) ([]byte, error) {
 	if _, err := io.ReadFull(rand.Reader, iv); err != nil {
 		return nil, err
 	}
+	padSize := 16 - (len(data)+1)%16
+	pData := make([]byte, len(data)+padSize+1)
+	pData[0] = byte(padSize)
+	copy(pData[1:], data)
+	if _, err := io.ReadFull(rand.Reader, pData[len(data)+1:]); err != nil {
+		return nil, fmt.Errorf("padding data: %w", err)
+	}
+
 	mode := cipher.NewCBCEncrypter(block, iv)
-	encData := make([]byte, len(data))
-	mode.CryptBlocks(encData, data)
+	encData := make([]byte, len(pData))
+	mode.CryptBlocks(encData, pData)
 	hmac := mk.Hash(encData)
 
-	out := make([]byte, len(data)+aes.BlockSize+32)
+	out := make([]byte, len(iv)+len(encData)+len(hmac))
 	copy(out, iv)
-	copy(out[aes.BlockSize:], hmac)
-	copy(out[aes.BlockSize+32:], encData)
+	copy(out[len(iv):], encData)
+	copy(out[len(iv)+len(encData):], hmac)
 	return out, nil
 }
 
-// NewEncryptedKey creates a new encrypted AES-256 key.
+// NewEncryptedKey creates a new encrypted AES-256 key. The size of the
+// encrypted key is EncryptedKeySize.
 func (mk MasterKey) NewEncryptedKey() ([]byte, error) {
 	key := make([]byte, 32)
 	if _, err := io.ReadFull(rand.Reader, key); err != nil {

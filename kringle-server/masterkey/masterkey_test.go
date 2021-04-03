@@ -35,16 +35,33 @@ func TestEncryptDecrypt(t *testing.T) {
 		t.Fatalf("Create: %v", err)
 	}
 
-	m := []byte("0123456789ABCDEF")
-	enc, err := mk.Encrypt(m)
-	if err != nil {
-		t.Fatalf("mk.Encrypt: %v", err)
+	m := []byte("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+	for i := 0; i < len(m); i++ {
+		enc, err := mk.Encrypt(m[:i])
+		if err != nil {
+			t.Fatalf("mk.Encrypt: %v", err)
+		}
+		dec, err := mk.Decrypt(enc)
+		if err != nil {
+			t.Fatalf("mk.Decrypt: %v", err)
+		}
+		if !reflect.DeepEqual(m[:i], dec) {
+			t.Errorf("Decrypted data doesn't match. Want %v, got %v", m[:i], dec)
+		}
 	}
-	dec, err := mk.Decrypt(enc)
+}
+
+func TestEncryptedKey(t *testing.T) {
+	mk, err := Create()
 	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	ek, err := mk.NewEncryptedKey()
+	if err != nil {
+		t.Fatalf("mk.NewEncryptedKey: %v", err)
+	}
+	if _, err := mk.Decrypt(ek); err != nil {
 		t.Fatalf("mk.Decrypt: %v", err)
-	}
-	if !reflect.DeepEqual(m, dec) {
-		t.Errorf("Decrypted data doesn't match. Want %v, got %v", m, dec)
 	}
 }

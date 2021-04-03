@@ -6,12 +6,14 @@ import (
 	"crypto/rand"
 	"fmt"
 	"io"
+
+	"kringle-server/masterkey"
 )
 
 // Encapsulates the data and logic to encrypt and decrypt a file.
 type Crypter struct {
-	ed     EncrypterDecrypter
-	header []byte
+	ed         EncrypterDecrypter
+	encFileKey []byte
 }
 
 func newCrypter(ed EncrypterDecrypter) *Crypter {
@@ -19,11 +21,11 @@ func newCrypter(ed EncrypterDecrypter) *Crypter {
 }
 
 func (c *Crypter) beginRead(r io.Reader) (*cipher.StreamReader, error) {
-	c.header = make([]byte, 64+aes.BlockSize)
-	if _, err := io.ReadFull(r, c.header); err != nil {
-		return nil, fmt.Errorf("reading header: %w", err)
+	c.encFileKey = make([]byte, masterkey.EncryptedKeySize)
+	if _, err := io.ReadFull(r, c.encFileKey); err != nil {
+		return nil, fmt.Errorf("reading encFileKey: %w", err)
 	}
-	key, err := c.ed.Decrypt(c.header)
+	key, err := c.ed.Decrypt(c.encFileKey)
 	if err != nil {
 		return nil, fmt.Errorf("decrypting file key: %w", err)
 	}
@@ -42,14 +44,14 @@ func (c *Crypter) beginRead(r io.Reader) (*cipher.StreamReader, error) {
 }
 
 func (c *Crypter) beginWrite(w io.Writer) (*cipher.StreamWriter, error) {
-	if len(c.header) == 0 {
-		key, err := c.ed.NewEncryptedKey()
+	if len(c.encFileKey) == 0 {
+		encKey, err := c.ed.NewEncryptedKey()
 		if err != nil {
 			return nil, err
 		}
-		c.header = key
+		c.encFileKey = encKey
 	}
-	key, err := c.ed.Decrypt(c.header)
+	key, err := c.ed.Decrypt(c.encFileKey)
 	if err != nil {
 		return nil, fmt.Errorf("decrypting file key: %w", err)
 	}
@@ -61,8 +63,8 @@ func (c *Crypter) beginWrite(w io.Writer) (*cipher.StreamWriter, error) {
 	if _, err := io.ReadFull(rand.Reader, iv); err != nil {
 		return nil, fmt.Errorf("creating file iv: %w", err)
 	}
-	if _, err := w.Write(c.header); err != nil {
-		return nil, fmt.Errorf("writing file header: %w", err)
+	if _, err := w.Write(c.encFileKey); err != nil {
+		return nil, fmt.Errorf("writing file encFileKey: %w", err)
 	}
 	if _, err := w.Write(iv); err != nil {
 		return nil, fmt.Errorf("writing file iv: %w", err)
