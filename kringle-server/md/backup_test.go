@@ -11,7 +11,7 @@ import (
 
 func TestBackupRestore(t *testing.T) {
 	dir := t.TempDir()
-	md := New(dir, fakeHeaderDecrypter)
+	md := New(dir, encrypterDecrypter())
 
 	if err := os.Mkdir(filepath.Join(dir, "data"), 0700); err != nil {
 		t.Fatalf("os.Mkdir: %v", err)
@@ -64,7 +64,7 @@ func TestBackupRestore(t *testing.T) {
 
 func TestBackupDelete(t *testing.T) {
 	dir := t.TempDir()
-	md := New(dir, fakeHeaderDecrypter)
+	md := New(dir, encrypterDecrypter())
 
 	if err := os.Mkdir(filepath.Join(dir, "data"), 0700); err != nil {
 		t.Fatalf("os.Mkdir: %v", err)
@@ -117,7 +117,8 @@ func TestBackupDelete(t *testing.T) {
 
 func TestRestorePendingOps(t *testing.T) {
 	dir := t.TempDir()
-	md := New(dir, fakeHeaderDecrypter)
+	ed := encrypterDecrypter()
+	md := New(dir, ed)
 
 	if err := os.Mkdir(filepath.Join(dir, "data"), 0700); err != nil {
 		t.Fatalf("os.Mkdir: %v", err)
@@ -142,7 +143,7 @@ func TestRestorePendingOps(t *testing.T) {
 	}
 
 	// New will notice the aborted operation and roll it back.
-	md = New(dir, fakeHeaderDecrypter)
+	md = New(dir, ed)
 
 	for i := 1; i <= 10; i++ {
 		file := filepath.Join("data", fmt.Sprintf("file%d", i))

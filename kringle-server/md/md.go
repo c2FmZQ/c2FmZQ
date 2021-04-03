@@ -10,13 +10,19 @@ import (
 	"kringle-server/log"
 )
 
+// Provides a way to create a new encrypted key, and to decrypt them.
+type EncrypterDecrypter interface {
+	NewEncryptedKey() ([]byte, error)
+	Decrypt([]byte) ([]byte, error)
+}
+
 // New returns a new Metadata rooted at dir. The caller must provide a
 // HeaderDecrypter that will be used to decrypt each file header and return
 // the SecretKey.
-func New(dir string, keyFromHeader HeaderDecrypter) *Metadata {
+func New(dir string, ed EncrypterDecrypter) *Metadata {
 	md := &Metadata{
-		dir:           dir,
-		keyFromHeader: keyFromHeader,
+		dir: dir,
+		ed:  ed,
 	}
 	if err := md.rollbackPendingOps(); err != nil {
 		log.Fatalf("md.rollbackPendingOps: %v", err)
@@ -26,8 +32,8 @@ func New(dir string, keyFromHeader HeaderDecrypter) *Metadata {
 
 // Offers the API to atomically read, write, and update encrypted files.
 type Metadata struct {
-	dir           string
-	keyFromHeader HeaderDecrypter
+	dir string
+	ed  EncrypterDecrypter
 }
 
 func createParentIfNotExist(filename string) error {

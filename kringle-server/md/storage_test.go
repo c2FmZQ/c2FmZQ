@@ -7,17 +7,21 @@ import (
 	"reflect"
 	"testing"
 	"time"
+
+	"kringle-server/masterkey"
 )
 
-func fakeHeaderDecrypter(hdr Header) (SecretKey, error) {
-	var sk SecretKey
-	copy(sk[:], hdr[16:])
-	return sk, nil
+func encrypterDecrypter() EncrypterDecrypter {
+	mk, err := masterkey.Create()
+	if err != nil {
+		panic(err)
+	}
+	return mk
 }
 
 func TestLock(t *testing.T) {
 	dir := t.TempDir()
-	md := New(dir, fakeHeaderDecrypter)
+	md := New(dir, encrypterDecrypter())
 	fn := "foo"
 
 	if err := md.Lock(fn); err != nil {
@@ -38,7 +42,7 @@ func TestLock(t *testing.T) {
 func TestOpenForUpdate(t *testing.T) {
 	dir := t.TempDir()
 	fn := "test.json"
-	md := New(dir, fakeHeaderDecrypter)
+	md := New(dir, encrypterDecrypter())
 
 	type Foo struct {
 		Foo string `json:"foo"`
@@ -74,7 +78,7 @@ func TestOpenForUpdate(t *testing.T) {
 func TestRollback(t *testing.T) {
 	dir := t.TempDir()
 	fn := "test.json"
-	md := New(dir, fakeHeaderDecrypter)
+	md := New(dir, encrypterDecrypter())
 
 	type Foo struct {
 		Foo string `json:"foo"`
@@ -110,7 +114,7 @@ func TestRollback(t *testing.T) {
 
 func TestOpenForUpdateDeferredDone(t *testing.T) {
 	dir := t.TempDir()
-	md := New(dir, fakeHeaderDecrypter)
+	md := New(dir, encrypterDecrypter())
 
 	// This function should return os.ErrNotExist because the file open for
 	// update can't be saved.

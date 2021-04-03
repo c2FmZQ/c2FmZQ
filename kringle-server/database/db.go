@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"kringle-server/log"
+	"kringle-server/masterkey"
 	"kringle-server/md"
 )
 
@@ -26,14 +27,18 @@ var (
 // New returns an initialized database that uses dir for storage.
 func New(dir, passphrase string) *Database {
 	db := &Database{dir: dir}
-	db.md = md.New(dir, db.decryptWithMasterKey)
+	mkFile := filepath.Join(dir, "master.key")
 	var err error
-	if db.masterKey, err = db.readMasterKey(passphrase); errors.Is(err, os.ErrNotExist) {
-		db.masterKey, err = db.createMasterKey(passphrase)
+	if db.masterKey, err = masterkey.Read(passphrase, mkFile); errors.Is(err, os.ErrNotExist) {
+		if db.masterKey, err = masterkey.Create(); err != nil {
+			log.Fatal("Failed to create master key")
+		}
+		err = db.masterKey.Save(passphrase, mkFile)
 	}
 	if err != nil {
 		log.Fatal("Failed to decrypt master key")
 	}
+	db.md = md.New(dir, db.masterKey)
 	return db
 }
 
@@ -41,7 +46,7 @@ func New(dir, passphrase string) *Database {
 // filesystem.
 type Database struct {
 	dir       string
-	masterKey []byte
+	masterKey *masterkey.MasterKey
 	md        *md.Metadata
 }
 
@@ -51,7 +56,7 @@ func (d Database) Dir() string {
 }
 
 func (d *Database) filePath(elems ...string) string {
-	name := d.masterHash([]byte(path.Join(elems...)))
+	name := d.masterKey.Hash([]byte(path.Join(elems...)))
 	dir := filepath.Join("metadata", fmt.Sprintf("%02X", name[0]), fmt.Sprintf("%02X", name[1]))
 	return filepath.Join(dir, base64.RawURLEncoding.EncodeToString(name))
 }

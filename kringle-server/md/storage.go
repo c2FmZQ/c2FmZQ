@@ -246,7 +246,7 @@ func (md *Metadata) DumpFile(filename string) error {
 		return err
 	}
 	defer f.Close()
-	c := newCrypter(md.keyFromHeader)
+	c := newCrypter(md.ed)
 	r, err := c.beginRead(f)
 	if err != nil {
 		return err
@@ -267,7 +267,7 @@ func (md *Metadata) ReadDataFile(filename string, obj interface{}) (*Crypter, er
 		return nil, err
 	}
 	defer f.Close()
-	c := newCrypter(md.keyFromHeader)
+	c := newCrypter(md.ed)
 	r, err := c.beginRead(f)
 	if err != nil {
 		return nil, err
@@ -287,7 +287,7 @@ func (md *Metadata) ReadDataFile(filename string, obj interface{}) (*Crypter, er
 func (md *Metadata) SaveDataFile(c *Crypter, filename string, obj interface{}) error {
 	filename = filepath.Join(md.dir, filename)
 	if c == nil {
-		c = newCrypter(md.keyFromHeader)
+		c = newCrypter(md.ed)
 		if err := createParentIfNotExist(filename); err != nil {
 			return err
 		}

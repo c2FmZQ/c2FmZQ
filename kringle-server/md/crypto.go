@@ -8,37 +8,26 @@ import (
 	"io"
 )
 
-// The header of a metadata file. It contains random bytes and an encrypted key.
-type Header [32 + aes.BlockSize]byte
-
-// An AES encryption key.
-type SecretKey [32]byte
-
-// A HeaderDecrypter decrypts the secret key from a Header.
-type HeaderDecrypter func(Header) (SecretKey, error)
-
 // Encapsulates the data and logic to encrypt and decrypt a file.
 type Crypter struct {
-	decryptKey HeaderDecrypter
-	header     []byte
+	ed     EncrypterDecrypter
+	header []byte
 }
 
-func newCrypter(f HeaderDecrypter) *Crypter {
-	return &Crypter{decryptKey: f}
+func newCrypter(ed EncrypterDecrypter) *Crypter {
+	return &Crypter{ed: ed}
 }
 
 func (c *Crypter) beginRead(r io.Reader) (*cipher.StreamReader, error) {
-	c.header = make([]byte, 32+aes.BlockSize)
+	c.header = make([]byte, 64+aes.BlockSize)
 	if _, err := io.ReadFull(r, c.header); err != nil {
 		return nil, fmt.Errorf("reading header: %w", err)
 	}
-	var hdr Header
-	copy(hdr[:], c.header)
-	key, err := c.decryptKey(hdr)
+	key, err := c.ed.Decrypt(c.header)
 	if err != nil {
 		return nil, fmt.Errorf("decrypting file key: %w", err)
 	}
-	block, err := aes.NewCipher(key[:])
+	block, err := aes.NewCipher(key)
 	if err != nil {
 		return nil, fmt.Errorf("aes.NewCipher: %w", err)
 	}
@@ -54,18 +43,17 @@ func (c *Crypter) beginRead(r io.Reader) (*cipher.StreamReader, error) {
 
 func (c *Crypter) beginWrite(w io.Writer) (*cipher.StreamWriter, error) {
 	if len(c.header) == 0 {
-		c.header = make([]byte, 32+aes.BlockSize)
-		if _, err := io.ReadFull(rand.Reader, c.header); err != nil {
-			return nil, fmt.Errorf("creating header: %w", err)
+		key, err := c.ed.NewEncryptedKey()
+		if err != nil {
+			return nil, err
 		}
+		c.header = key
 	}
-	var hdr Header
-	copy(hdr[:], c.header)
-	key, err := c.decryptKey(hdr)
+	key, err := c.ed.Decrypt(c.header)
 	if err != nil {
 		return nil, fmt.Errorf("decrypting file key: %w", err)
 	}
-	block, err := aes.NewCipher(key[:])
+	block, err := aes.NewCipher(key)
 	if err != nil {
 		return nil, fmt.Errorf("aes.NewCipher: %w", err)
 	}
