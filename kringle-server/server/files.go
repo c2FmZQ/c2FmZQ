@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"kringle-server/crypto/stinglecrypto"
 	"kringle-server/database"
 	"kringle-server/log"
 	"kringle-server/stingle"
@@ -321,9 +320,9 @@ func (s *Server) handleSignedDownload(w http.ResponseWriter, req *http.Request) 
 
 // makeDownloadURL creates a signed URL to download a file.
 func (s *Server) makeDownloadURL(user database.User, host, file, set string, isThumb bool) string {
-	tok := stinglecrypto.MintToken(
+	tok := stingle.MintToken(
 		user.ServerSignKey,
-		stinglecrypto.Token{
+		stingle.Token{
 			Scope:   "download",
 			Subject: user.Email,
 			Seq:     user.TokenSeq,

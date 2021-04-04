@@ -1,4 +1,4 @@
-// Package stingle contains all the datastructures specific to the Stingle API.
+// Package stingle contains datastructures and code specific to the Stingle API.
 package stingle
 
 import (

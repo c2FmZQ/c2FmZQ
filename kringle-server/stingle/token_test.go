@@ -1,4 +1,4 @@
-package stinglecrypto
+package stingle
 
 import (
 	"testing"

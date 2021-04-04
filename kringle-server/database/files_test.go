@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"kringle-server/crypto/stinglecrypto"
 	"kringle-server/database"
+	"kringle-server/stingle"
 )
 
 func addFile(db *database.Database, user database.User, name, set, albumID string) error {
@@ -48,7 +48,7 @@ func TestFiles(t *testing.T) {
 	dir := t.TempDir()
 	db := database.New(dir, "")
 	email := "alice@"
-	key := stinglecrypto.MakeSecretKey()
+	key := stingle.MakeSecretKey()
 	database.CurrentTimeForTesting = 10000
 
 	if err := addUser(db, email, key.PublicKey()); err != nil {

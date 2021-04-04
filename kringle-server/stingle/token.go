@@ -1,4 +1,4 @@
-package stinglecrypto
+package stingle
 
 import (
 	"encoding/base64"

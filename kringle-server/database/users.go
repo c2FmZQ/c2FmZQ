@@ -9,7 +9,6 @@ import (
 	"os"
 	"sort"
 
-	"kringle-server/crypto/stinglecrypto"
 	"kringle-server/log"
 	"kringle-server/stingle"
 )
@@ -28,17 +27,17 @@ type userList struct {
 
 // Encapsulates all the information about a user account.
 type User struct {
-	UserID        int64                       `json:"userId"`
-	Email         string                      `json:"email"`
-	Password      string                      `json:"password"`
-	Salt          string                      `json:"salt"`
-	HomeFolder    string                      `json:"homeFolder"`
-	KeyBundle     string                      `json:"keyBundle"`
-	IsBackup      string                      `json:"isBackup"`
-	ServerKey     stinglecrypto.SecretKey     `json:"serverKey"`
-	ServerSignKey stinglecrypto.SignSecretKey `json:"serverSignKey"`
-	PublicKey     stinglecrypto.PublicKey     `json:"publicKey"`
-	TokenSeq      int                         `json:"tokenSeq"`
+	UserID        int64                 `json:"userId"`
+	Email         string                `json:"email"`
+	Password      string                `json:"password"`
+	Salt          string                `json:"salt"`
+	HomeFolder    string                `json:"homeFolder"`
+	KeyBundle     string                `json:"keyBundle"`
+	IsBackup      string                `json:"isBackup"`
+	ServerKey     stingle.SecretKey     `json:"serverKey"`
+	ServerSignKey stingle.SignSecretKey `json:"serverSignKey"`
+	PublicKey     stingle.PublicKey     `json:"publicKey"`
+	TokenSeq      int                   `json:"tokenSeq"`
 }
 
 // Encapsulates the information about a user's contact (another user).
@@ -84,8 +83,8 @@ func (d *Database) AddUser(u User) (retErr error) {
 
 	u.UserID = uid
 	u.HomeFolder = hex.EncodeToString(hf)
-	u.ServerKey = stinglecrypto.MakeSecretKey()
-	u.ServerSignKey = stinglecrypto.MakeSignSecretKey()
+	u.ServerKey = stingle.MakeSecretKey()
+	u.ServerSignKey = stingle.MakeSignSecretKey()
 	u.TokenSeq = 1
 	return d.md.SaveDataFile(nil, d.filePath("home", u.Email, userFile), u)
 }
@@ -123,11 +122,11 @@ func (d *Database) User(email string) (User, error) {
 }
 
 // SignKeyForUser returns the server's SignSecretKey associated with this user.
-func (d *Database) SignKeyForUser(email string) stinglecrypto.SignSecretKey {
+func (d *Database) SignKeyForUser(email string) stingle.SignSecretKey {
 	if u, err := d.User(email); err == nil {
 		return u.ServerSignKey
 	}
-	return stinglecrypto.SignSecretKey{}
+	return stingle.SignSecretKey{}
 }
 
 // Export converts a Contact to stingle.Contact.

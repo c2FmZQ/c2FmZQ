@@ -1,6 +1,4 @@
-// package stinglecrypto implements some wrappers around the sodium library to
-// use with the Stingle API.
-package stinglecrypto
+package stingle
 
 import (
 	"bytes"

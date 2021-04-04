@@ -13,7 +13,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"kringle-server/basicauth"
-	"kringle-server/crypto/stinglecrypto"
 	"kringle-server/database"
 	"kringle-server/log"
 	"kringle-server/stingle"
@@ -168,7 +167,7 @@ func (s *Server) Shutdown() error {
 // It is an encrypted json object representing key:value pairs.
 // Returns the decrypted key:value pairs as a map.
 func (s *Server) decodeParams(params string, user database.User) (map[string]string, error) {
-	m, err := stinglecrypto.DecryptMessage(params, user.PublicKey, user.ServerKey)
+	m, err := stingle.DecryptMessage(params, user.PublicKey, user.ServerKey)
 	if err != nil {
 		return nil, err
 	}
@@ -208,16 +207,16 @@ func (s *Server) noauth(f func(*http.Request) *stingle.Response) http.HandlerFun
 // checkToken validates the signed token that was given to the client when it
 // logged in. The client presents this token with most API requests.
 // Returns the decoded token, and the authenticated user.
-func (s *Server) checkToken(tok, scope string) (stinglecrypto.Token, database.User, error) {
-	token, err := stinglecrypto.DecodeToken(tok)
+func (s *Server) checkToken(tok, scope string) (stingle.Token, database.User, error) {
+	token, err := stingle.DecodeToken(tok)
 	if err != nil {
-		return stinglecrypto.Token{}, database.User{}, err
+		return stingle.Token{}, database.User{}, err
 	}
 	user, err := s.db.User(token.Subject)
 	if err != nil {
 		return token, database.User{}, err
 	}
-	if err := stinglecrypto.ValidateToken(user.ServerSignKey, token); err != nil {
+	if err := stingle.ValidateToken(user.ServerSignKey, token); err != nil {
 		return token, database.User{}, err
 	}
 	if token.Seq != user.TokenSeq {

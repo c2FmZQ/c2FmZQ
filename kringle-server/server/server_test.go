@@ -14,7 +14,6 @@ import (
 	"testing"
 	"time"
 
-	"kringle-server/crypto/stinglecrypto"
 	"kringle-server/database"
 	"kringle-server/log"
 	"kringle-server/server"
@@ -45,7 +44,7 @@ func startServer(t *testing.T) (string, func()) {
 
 // newClient returns a new test client that uses sock to connect to the server.
 func newClient(sock string) *client {
-	sk := stinglecrypto.MakeSecretKey()
+	sk := stingle.MakeSecretKey()
 	return &client{
 		sock:      sock,
 		secretKey: sk,
@@ -60,15 +59,15 @@ type client struct {
 	password        string
 	salt            string
 	isBackup        string
-	secretKey       stinglecrypto.SecretKey
-	serverPublicKey stinglecrypto.PublicKey
+	secretKey       stingle.SecretKey
+	serverPublicKey stingle.PublicKey
 	keyBundle       string
 	token           string
 }
 
 func (c *client) encodeParams(params map[string]string) string {
 	j, _ := json.Marshal(params)
-	return stinglecrypto.EncryptMessage(j, c.serverPublicKey, c.secretKey)
+	return stingle.EncryptMessage(j, c.serverPublicKey, c.secretKey)
 }
 
 func nowString() string {
