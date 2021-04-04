@@ -12,7 +12,7 @@ import (
 	"sort"
 	"time"
 
-	"kringle-server/crypto/aes"
+	"kringle-server/crypto"
 	"kringle-server/log"
 )
 
@@ -152,11 +152,11 @@ func (md *Metadata) OpenManyForUpdate(files []string, objects []interface{}) (fu
 	}
 	type readValue struct {
 		i   int
-		k   *aes.EncryptionKey
+		k   *crypto.EncryptionKey
 		err error
 	}
 	ch := make(chan readValue)
-	keys := make([]*aes.EncryptionKey, len(files))
+	keys := make([]*crypto.EncryptionKey, len(files))
 	for i := range files {
 		go func(i int, file string, obj interface{}) {
 			k, err := md.ReadDataFile(file, obj)
@@ -206,7 +206,7 @@ func (md *Metadata) OpenManyForUpdate(files []string, objects []interface{}) (fu
 			}
 			ch := make(chan error)
 			for i := range files {
-				go func(k *aes.EncryptionKey, file string, obj interface{}) {
+				go func(k *crypto.EncryptionKey, file string, obj interface{}) {
 					ch <- md.SaveDataFile(k, file, obj)
 				}(keys[i], files[i], objects[i])
 			}
@@ -268,7 +268,7 @@ func (md *Metadata) DumpFile(filename string) error {
 }
 
 // ReadDataFile reads a json object from a file.
-func (md *Metadata) ReadDataFile(filename string, obj interface{}) (*aes.EncryptionKey, error) {
+func (md *Metadata) ReadDataFile(filename string, obj interface{}) (*crypto.EncryptionKey, error) {
 	f, err := os.Open(filepath.Join(md.dir, filename))
 	if err != nil {
 		return nil, err
@@ -298,7 +298,7 @@ func (md *Metadata) ReadDataFile(filename string, obj interface{}) (*aes.Encrypt
 }
 
 // SaveDataFile atomically replace a json object in a file.
-func (md *Metadata) SaveDataFile(k *aes.EncryptionKey, filename string, obj interface{}) error {
+func (md *Metadata) SaveDataFile(k *crypto.EncryptionKey, filename string, obj interface{}) error {
 	filename = filepath.Join(md.dir, filename)
 	if k == nil {
 		// No file key provided, created a new one.

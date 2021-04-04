@@ -8,11 +8,11 @@ import (
 	"testing"
 	"time"
 
-	"kringle-server/crypto/aes"
+	"kringle-server/crypto"
 )
 
-func encrypterDecrypter() aes.EncryptionKey {
-	mk, err := aes.CreateMasterKey()
+func encrypterDecrypter() crypto.EncryptionKey {
+	mk, err := crypto.CreateMasterKey()
 	if err != nil {
 		panic(err)
 	}

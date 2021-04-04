@@ -7,14 +7,14 @@ import (
 	"os"
 	"path/filepath"
 
-	"kringle-server/crypto/aes"
+	"kringle-server/crypto"
 	"kringle-server/log"
 )
 
 // New returns a new Metadata rooted at dir. The caller must provide an
 // EncryptionKey that will be used to encrypt and decrypt per-file encryption
 // keys.
-func New(dir string, masterKey aes.EncryptionKey) *Metadata {
+func New(dir string, masterKey crypto.EncryptionKey) *Metadata {
 	md := &Metadata{
 		dir:       dir,
 		masterKey: masterKey,
@@ -28,7 +28,7 @@ func New(dir string, masterKey aes.EncryptionKey) *Metadata {
 // Offers the API to atomically read, write, and update encrypted files.
 type Metadata struct {
 	dir       string
-	masterKey aes.EncryptionKey
+	masterKey crypto.EncryptionKey
 }
 
 func createParentIfNotExist(filename string) error {

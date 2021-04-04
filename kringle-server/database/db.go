@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"kringle-server/crypto/aes"
+	"kringle-server/crypto"
 	"kringle-server/log"
 	"kringle-server/md"
 )
@@ -29,8 +29,8 @@ func New(dir, passphrase string) *Database {
 	db := &Database{dir: dir}
 	mkFile := filepath.Join(dir, "master.key")
 	var err error
-	if db.masterKey, err = aes.ReadMasterKey(passphrase, mkFile); errors.Is(err, os.ErrNotExist) {
-		if db.masterKey, err = aes.CreateMasterKey(); err != nil {
+	if db.masterKey, err = crypto.ReadMasterKey(passphrase, mkFile); errors.Is(err, os.ErrNotExist) {
+		if db.masterKey, err = crypto.CreateMasterKey(); err != nil {
 			log.Fatal("Failed to create master key")
 		}
 		err = db.masterKey.Save(passphrase, mkFile)
@@ -46,7 +46,7 @@ func New(dir, passphrase string) *Database {
 // filesystem.
 type Database struct {
 	dir       string
-	masterKey *aes.MasterKey
+	masterKey *crypto.MasterKey
 	md        *md.Metadata
 }
 
