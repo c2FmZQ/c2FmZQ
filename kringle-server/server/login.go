@@ -2,10 +2,12 @@ package server
 
 import (
 	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"net/http"
 	"time"
 
+	"golang.org/x/crypto/bcrypt"
 	"kringle-server/database"
 	"kringle-server/log"
 	"kringle-server/stingle"
@@ -39,14 +41,20 @@ func (s *Server) handleCreateAccount(req *http.Request) *stingle.Response {
 	if err != nil {
 		return stingle.ResponseNOK().AddError("KeyBundle cannot be parsed")
 	}
+	hashed, err := bcrypt.GenerateFromPassword([]byte(req.PostFormValue("password")), 12)
+	if err != nil {
+		log.Errorf("bcrypt.GenerateFromPassword: %v", err)
+		return stingle.ResponseNOK()
+	}
+
 	if err := s.db.AddUser(
 		database.User{
-			Email:     email,
-			Password:  req.PostFormValue("password"),
-			Salt:      req.PostFormValue("salt"),
-			KeyBundle: req.PostFormValue("keyBundle"),
-			IsBackup:  req.PostFormValue("isBackup"),
-			PublicKey: pk,
+			Email:          email,
+			HashedPassword: base64.StdEncoding.EncodeToString(hashed),
+			Salt:           req.PostFormValue("salt"),
+			KeyBundle:      req.PostFormValue("keyBundle"),
+			IsBackup:       req.PostFormValue("isBackup"),
+			PublicKey:      pk,
 		}); err != nil {
 		log.Errorf("AddUser: %v", err)
 		return stingle.ResponseNOK()
@@ -95,7 +103,15 @@ func (s *Server) handleLogin(req *http.Request) *stingle.Response {
 	email := req.PostFormValue("email")
 	pass := req.PostFormValue("password")
 	u, err := s.db.User(email)
-	if err != nil || u.Password != pass {
+	if err != nil {
+		return stingle.ResponseNOK().AddError("Invalid credentials")
+	}
+	hashed, err := base64.StdEncoding.DecodeString(u.HashedPassword)
+	if err != nil {
+		log.Errorf("base64.StdEncoding.DecodeString: %v", err)
+		return stingle.ResponseNOK()
+	}
+	if err != nil || bcrypt.CompareHashAndPassword(hashed, []byte(pass)) != nil {
 		return stingle.ResponseNOK().AddError("Invalid credentials")
 	}
 	return stingle.ResponseOK().
@@ -147,7 +163,12 @@ func (s *Server) handleChangePass(user database.User, req *http.Request) *stingl
 		log.Errorf("decodeParams: %v", err)
 		return stingle.ResponseNOK()
 	}
-	user.Password = params["newPassword"]
+	hashed, err := bcrypt.GenerateFromPassword([]byte(params["newPassword"]), 12)
+	if err != nil {
+		log.Errorf("bcrypt.GenerateFromPassword: %v", err)
+		return stingle.ResponseNOK()
+	}
+	user.HashedPassword = base64.StdEncoding.EncodeToString(hashed)
 	user.Salt = params["newSalt"]
 	user.KeyBundle = params["keyBundle"]
 	user.TokenSeq++
@@ -242,7 +263,12 @@ func (s *Server) handleRecoverAccount(req *http.Request) *stingle.Response {
 		log.Errorf("decodeParams: %v", err)
 		return stingle.ResponseNOK()
 	}
-	user.Password = params["newPassword"]
+	hashed, err := bcrypt.GenerateFromPassword([]byte(params["newPassword"]), 12)
+	if err != nil {
+		log.Errorf("bcrypt.GenerateFromPassword: %v", err)
+		return stingle.ResponseNOK()
+	}
+	user.HashedPassword = base64.StdEncoding.EncodeToString(hashed)
 	user.Salt = params["newSalt"]
 	user.KeyBundle = params["keyBundle"]
 	user.TokenSeq++

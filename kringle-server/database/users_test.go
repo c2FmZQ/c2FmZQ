@@ -10,12 +10,12 @@ import (
 
 func addUser(db *database.Database, email string, pk stingle.PublicKey) error {
 	u := database.User{
-		Email:     email,
-		Password:  email + "-Password",
-		Salt:      email + "-Salt",
-		KeyBundle: email + "KeyBundle",
-		IsBackup:  "0",
-		PublicKey: pk,
+		Email:          email,
+		HashedPassword: email + "-Password",
+		Salt:           email + "-Salt",
+		KeyBundle:      email + "KeyBundle",
+		IsBackup:       "0",
+		PublicKey:      pk,
 	}
 	return db.AddUser(u)
 }
@@ -51,13 +51,13 @@ func TestUsers(t *testing.T) {
 	}
 
 	alice := users["alice@"]
-	alice.Password = "Alice's new password"
+	alice.HashedPassword = "Alice's new password"
 	if err := db.UpdateUser(alice); err != nil {
 		t.Errorf("UpdateUser(%v) failed: %v", alice, err)
 	}
 	if u, err := db.User("alice@"); err != nil {
 		t.Errorf("User(alice@q) failed: %v", err)
-	} else if want, got := alice.Password, u.Password; want != got {
+	} else if want, got := alice.HashedPassword, u.HashedPassword; want != got {
 		t.Errorf("UpdateUser() failed to update the user: want %q, got %q", want, got)
 	}
 

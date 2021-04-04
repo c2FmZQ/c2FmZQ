@@ -31,17 +31,17 @@ type userList struct {
 
 // Encapsulates all the information about a user account.
 type User struct {
-	UserID        int64                 `json:"userId"`
-	Email         string                `json:"email"`
-	Password      string                `json:"password"`
-	Salt          string                `json:"salt"`
-	HomeFolder    string                `json:"homeFolder"`
-	KeyBundle     string                `json:"keyBundle"`
-	IsBackup      string                `json:"isBackup"`
-	ServerKey     stingle.SecretKey     `json:"serverKey"`
-	ServerSignKey stingle.SignSecretKey `json:"serverSignKey"`
-	PublicKey     stingle.PublicKey     `json:"publicKey"`
-	TokenSeq      int                   `json:"tokenSeq"`
+	UserID         int64                 `json:"userId"`
+	Email          string                `json:"email"`
+	HashedPassword string                `json:"hashedPassword"`
+	Salt           string                `json:"salt"`
+	HomeFolder     string                `json:"homeFolder"`
+	KeyBundle      string                `json:"keyBundle"`
+	IsBackup       string                `json:"isBackup"`
+	ServerKey      stingle.SecretKey     `json:"serverKey"`
+	ServerSignKey  stingle.SignSecretKey `json:"serverSignKey"`
+	PublicKey      stingle.PublicKey     `json:"publicKey"`
+	TokenSeq       int                   `json:"tokenSeq"`
 }
 
 // Encapsulates the information about a user's contact (another user).
