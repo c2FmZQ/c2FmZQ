@@ -123,12 +123,12 @@ func (d Database) DumpUsers() {
 		log.Errorf("ReadDataFile: %v", err)
 	}
 	for _, u := range ul {
-		user, err := d.User(u.Email)
+		user, err := d.UserByID(u.UserID)
 		if err != nil {
 			log.Errorf("User(%q): %v", u.Email, err)
 		}
-		fmt.Printf("ID %d [%s]: %s\n", u.UserID, u.Email, d.filePath("home", u.Email, userFile))
-		fmt.Printf("  -contacts: %s\n", d.filePath("home", user.Email, contactListFile))
+		fmt.Printf("ID %d [%s]: %s\n", u.UserID, u.Email, d.filePath(user.home(userFile)))
+		fmt.Printf("  -contacts: %s\n", d.filePath(user.home(contactListFile)))
 		fmt.Printf("  -trash: %s\n", d.fileSetPath(user, TrashSet))
 		fmt.Printf("  -gallery: %s\n", d.fileSetPath(user, GallerySet))
 		albums, err := d.AlbumRefs(user)

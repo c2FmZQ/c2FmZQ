@@ -212,7 +212,7 @@ func (s *Server) checkToken(tok, scope string) (stingle.Token, database.User, er
 	if err != nil {
 		return stingle.Token{}, database.User{}, err
 	}
-	user, err := s.db.User(token.Subject)
+	user, err := s.db.UserByID(token.Subject)
 	if err != nil {
 		return token, database.User{}, err
 	}

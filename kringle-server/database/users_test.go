@@ -75,7 +75,7 @@ func TestUsers(t *testing.T) {
 		}
 	}
 
-	cu, err := db.ContactUpdates(alice.Email, 0)
+	cu, err := db.ContactUpdates(alice, 0)
 	if err != nil {
 		t.Errorf("ContactUpdates(%q) failed: %v", alice.Email, err)
 	}

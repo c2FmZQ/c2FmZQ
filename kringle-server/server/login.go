@@ -102,7 +102,7 @@ func (s *Server) handleLogin(req *http.Request) *stingle.Response {
 		AddPart("keyBundle", u.KeyBundle).
 		AddPart("serverPublicKey", u.ServerPublicKeyForExport()).
 		AddPart("token", stingle.MintToken(u.ServerSignKey,
-			stingle.Token{Scope: "session", Subject: u.Email, Seq: u.TokenSeq},
+			stingle.Token{Scope: "session", Subject: u.UserID, Seq: u.TokenSeq},
 			180*24*time.Hour)).
 		AddPart("userId", fmt.Sprintf("%d", u.UserID)).
 		AddPart("isKeyBackedUp", u.IsBackup).
@@ -164,7 +164,7 @@ func (s *Server) handleChangePass(user database.User, req *http.Request) *stingl
 	}
 	return stingle.ResponseOK().
 		AddPart("token", stingle.MintToken(s.db.SignKeyForUser(user.Email),
-			stingle.Token{Scope: "session", Subject: user.Email, Seq: user.TokenSeq},
+			stingle.Token{Scope: "session", Subject: user.UserID, Seq: user.TokenSeq},
 			180*24*time.Hour))
 }
 

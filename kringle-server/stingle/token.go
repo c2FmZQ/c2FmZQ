@@ -13,7 +13,7 @@ import (
 // Holds signed, tamper-proof data used to authenticate requests.
 type Token struct {
 	// Who this token was issued to.
-	Subject string `json:"sub"`
+	Subject int64 `json:"sub"`
 	// The user's current token seq number.
 	Seq int `json:"seq"`
 	// The reason/purpose of the token.

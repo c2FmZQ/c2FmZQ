@@ -5,8 +5,10 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"sort"
 
 	"kringle-server/log"
@@ -55,6 +57,12 @@ func (u User) ServerPublicKeyForExport() string {
 	return base64.StdEncoding.EncodeToString(u.ServerKey.PublicKey().Bytes)
 }
 
+func (u User) home(elems ...string) string {
+	e := []string{"home", fmt.Sprintf("%d", u.UserID)}
+	e = append(e, elems...)
+	return filepath.Join(e...)
+}
+
 // AddUser creates a new user account for u.
 func (d *Database) AddUser(u User) (retErr error) {
 	var ul []userList
@@ -86,13 +94,13 @@ func (d *Database) AddUser(u User) (retErr error) {
 	u.ServerKey = stingle.MakeSecretKey()
 	u.ServerSignKey = stingle.MakeSignSecretKey()
 	u.TokenSeq = 1
-	return d.md.SaveDataFile(nil, d.filePath("home", u.Email, userFile), u)
+	return d.md.SaveDataFile(nil, d.filePath(u.home(userFile)), u)
 }
 
 // UpdateUser saves a user object.
 func (d *Database) UpdateUser(u User) error {
 	var f User
-	commit, err := d.md.OpenForUpdate(d.filePath("home", u.Email, userFile), &f)
+	commit, err := d.md.OpenForUpdate(d.filePath(u.home(userFile)), &f)
 	if err != nil {
 		return err
 	}
@@ -102,23 +110,23 @@ func (d *Database) UpdateUser(u User) error {
 
 // UserByID returns the User object with the given ID.
 func (d *Database) UserByID(id int64) (User, error) {
+	var u User
+	_, err := d.md.ReadDataFile(d.filePath("home", fmt.Sprintf("%d", id), userFile), &u)
+	return u, err
+}
+
+// User returns the User object with the given email address.
+func (d *Database) User(email string) (User, error) {
 	var ul []userList
 	if _, err := d.md.ReadDataFile(d.filePath(userListFile), &ul); err != nil {
 		return User{}, err
 	}
 	for _, u := range ul {
-		if u.UserID == id {
-			return d.User(u.Email)
+		if u.Email == email {
+			return d.UserByID(u.UserID)
 		}
 	}
 	return User{}, os.ErrNotExist
-}
-
-// User returns the User object with the given email address.
-func (d *Database) User(email string) (User, error) {
-	var u User
-	_, err := d.md.ReadDataFile(d.filePath("home", email, userFile), &u)
-	return u, err
 }
 
 // SignKeyForUser returns the server's SignSecretKey associated with this user.
@@ -143,7 +151,7 @@ func (c Contact) Export() stingle.Contact {
 // addContactToUser adds contact to user's contact list.
 func (d *Database) addContactToUser(user, contact User) (c *Contact, retErr error) {
 	var contactList map[string]*Contact
-	commit, err := d.md.OpenForUpdate(d.filePath("home", user.Email, contactListFile), &contactList)
+	commit, err := d.md.OpenForUpdate(d.filePath(user.home(contactListFile)), &contactList)
 	if err != nil {
 		log.Errorf("d.md.OpenForUpdate: %v", err)
 		return nil, err
@@ -199,7 +207,7 @@ func (d *Database) lookupContacts(uids map[int64]bool) []Contact {
 func (d *Database) addCrossContacts(list []Contact) {
 	for _, c1 := range list {
 		var contactList map[string]*Contact
-		commit, err := d.md.OpenForUpdate(d.filePath("home", c1.Email, contactListFile), &contactList)
+		commit, err := d.md.OpenForUpdate(d.filePath("home", fmt.Sprintf("%d", c1.UserID), contactListFile), &contactList)
 		if err != nil {
 			log.Errorf("d.md.OpenForUpdate: %v", err)
 			continue
@@ -229,9 +237,9 @@ func (d *Database) addCrossContacts(list []Contact) {
 
 // ContactUpdates returns changes to a user's contact list that are more recent
 // than ts.
-func (d *Database) ContactUpdates(email string, ts int64) ([]stingle.Contact, error) {
+func (d *Database) ContactUpdates(user User, ts int64) ([]stingle.Contact, error) {
 	var contacts map[string]Contact
-	if _, err := d.md.ReadDataFile(d.filePath("home", email, contactListFile), &contacts); err != nil && !errors.Is(err, os.ErrNotExist) {
+	if _, err := d.md.ReadDataFile(d.filePath(user.home(contactListFile)), &contacts); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}
 	if contacts == nil {

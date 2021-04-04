@@ -324,7 +324,7 @@ func (s *Server) makeDownloadURL(user database.User, host, file, set string, isT
 		user.ServerSignKey,
 		stingle.Token{
 			Scope:   "download",
-			Subject: user.Email,
+			Subject: user.UserID,
 			Seq:     user.TokenSeq,
 			Set:     set,
 			File:    file,

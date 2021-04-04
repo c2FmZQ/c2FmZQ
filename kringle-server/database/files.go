@@ -67,7 +67,7 @@ func (d *Database) incRefCount(blob string, delta int) int {
 }
 
 func (d *Database) fileSetPath(user User, set string) string {
-	return d.filePath("home", user.Email, fmt.Sprintf(fileSetPattern, set))
+	return d.filePath(user.home(fmt.Sprintf(fileSetPattern, set)))
 }
 
 func (d *Database) addFileToFileSet(user User, file FileSpec) (retErr error) {

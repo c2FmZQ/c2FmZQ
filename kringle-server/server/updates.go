@@ -58,7 +58,7 @@ func (s *Server) handleGetUpdates(user database.User, req *http.Request) *stingl
 		log.Errorf("FileUpdates() failed: %v", err)
 		return stingle.ResponseNOK()
 	}
-	contacts, err := s.db.ContactUpdates(user.Email, cntST)
+	contacts, err := s.db.ContactUpdates(user, cntST)
 	if err != nil {
 		log.Errorf("ContactUpdates() failed: %v", err)
 		return stingle.ResponseNOK()

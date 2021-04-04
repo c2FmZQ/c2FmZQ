@@ -7,13 +7,13 @@ import (
 
 func TestTokens(t *testing.T) {
 	key := MakeSignSecretKey()
-	tok := MintToken(key, Token{Scope: "foo", Subject: "blah blah"}, time.Hour)
+	tok := MintToken(key, Token{Scope: "foo", Subject: 44545}, time.Hour)
 
 	decoded, err := DecodeToken(tok)
 	if err != nil {
 		t.Fatalf("DecodeToken failed: %v", err)
 	}
-	if decoded.Scope != "foo" || decoded.Subject != "blah blah" {
+	if decoded.Scope != "foo" || decoded.Subject != 44545 {
 		t.Errorf("Unexpected token. Got %+v, want {'foo', 'blah blah'}", decoded)
 	}
 
