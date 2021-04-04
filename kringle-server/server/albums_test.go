@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"sort"
+	"strings"
 	"testing"
 
 	"kringle-server/database"
@@ -24,6 +26,15 @@ func createAccountsAndLogin(sock string) (*client, *client, *client, error) {
 		return nil, nil, nil, err
 	}
 	return alice, bob, carol, nil
+}
+
+func membersString(ids ...int64) string {
+	members := []string{}
+	for _, v := range ids {
+		members = append(members, fmt.Sprintf("%d", v))
+	}
+	sort.Strings(members)
+	return strings.Join(members, ",")
 }
 
 func TestAddDeleteAlbum(t *testing.T) {
@@ -124,7 +135,7 @@ func TestShareAlbum(t *testing.T) {
 			"isLocked":      "0",
 			"isOwner":       "1",
 			"isShared":      "1",
-			"members":       "1,2",
+			"members":       membersString(alice.userID, bob.userID),
 			"metadata":      "album metadata",
 			"permissions":   "1111",
 			"publicKey":     "album publicKey",
@@ -151,7 +162,7 @@ func TestShareAlbum(t *testing.T) {
 			"isLocked":      "0",
 			"isOwner":       "0",
 			"isShared":      "1",
-			"members":       "1,2",
+			"members":       membersString(alice.userID, bob.userID),
 			"metadata":      "album metadata",
 			"permissions":   "1111",
 			"publicKey":     "album publicKey",
@@ -190,7 +201,7 @@ func TestShareAlbum(t *testing.T) {
 			"isLocked":      "0",
 			"isOwner":       "0",
 			"isShared":      "1",
-			"members":       "1,2,3",
+			"members":       membersString(alice.userID, bob.userID, carol.userID),
 			"metadata":      "album metadata",
 			"permissions":   "1111",
 			"publicKey":     "album publicKey",
@@ -259,7 +270,7 @@ func TestAlbumEdits(t *testing.T) {
 			"isLocked":      "0",
 			"isOwner":       "1",
 			"isShared":      "1",
-			"members":       "1,2,3",
+			"members":       membersString(alice.userID, bob.userID, carol.userID),
 			"metadata":      "new-metadata",
 			"permissions":   "1101",
 			"publicKey":     "album publicKey",
@@ -296,7 +307,7 @@ func TestAlbumEdits(t *testing.T) {
 			"isLocked":      "0",
 			"isOwner":       "1",
 			"isShared":      "1",
-			"members":       "1",
+			"members":       membersString(alice.userID),
 			"metadata":      "new-metadata",
 			"permissions":   "1101",
 			"publicKey":     "album publicKey",

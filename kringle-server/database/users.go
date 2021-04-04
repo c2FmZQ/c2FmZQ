@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
+	"math/big"
 	"os"
 	"path/filepath"
 	"sort"
@@ -72,16 +74,25 @@ func (d *Database) AddUser(u User) (retErr error) {
 		return err
 	}
 	defer commit(true, &retErr)
-	var uid int64
+	uids := make(map[int64]bool)
 	for _, i := range ul {
 		if i.Email == u.Email {
 			return os.ErrExist
 		}
-		if i.UserID > uid {
-			uid = i.UserID
+		uids[i.UserID] = true
+	}
+
+	var uid int64
+	for {
+		bi, err := rand.Int(rand.Reader, big.NewInt(int64(math.MaxInt32-1000000)))
+		if err != nil {
+			commit(false, nil)
+			return err
+		}
+		if uid = bi.Int64() + 1000000; !uids[uid] {
+			break
 		}
 	}
-	uid += 1
 	ul = append(ul, userList{UserID: uid, Email: u.Email})
 
 	hf := make([]byte, 16)

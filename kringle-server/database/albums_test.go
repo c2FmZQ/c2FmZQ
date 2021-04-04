@@ -3,11 +3,22 @@ package database_test
 import (
 	"fmt"
 	"github.com/go-test/deep"
+	"sort"
+	"strings"
 	"testing"
 
 	"kringle-server/database"
 	"kringle-server/stingle"
 )
+
+func membersString(ids ...int64) string {
+	members := []string{}
+	for _, v := range ids {
+		members = append(members, fmt.Sprintf("%d", v))
+	}
+	sort.Strings(members)
+	return strings.Join(members, ",")
+}
 
 func addAlbum(db *database.Database, user database.User, albumID string) error {
 	as := database.AlbumSpec{
@@ -86,7 +97,7 @@ func TestAlbums(t *testing.T) {
 		AlbumID:     "my-album",
 		IsShared:    "1",
 		Permissions: "1111",
-		Members:     fmt.Sprintf("%d,%d", user.UserID, bobUser.UserID),
+		Members:     membersString(user.UserID, bobUser.UserID),
 	}
 	sharingKeys := map[string]string{fmt.Sprintf("%d", bobUser.UserID): "bob's sharing key"}
 	if err := db.ShareAlbum(user, &stingleAlbum, sharingKeys); err != nil {
@@ -98,7 +109,7 @@ func TestAlbums(t *testing.T) {
 	}
 
 	expAlbumSpec := database.AlbumSpec{
-		OwnerID:       1,
+		OwnerID:       user.UserID,
 		AlbumID:       "my-album",
 		DateCreated:   1000,
 		DateModified:  10000,
@@ -108,8 +119,8 @@ func TestAlbums(t *testing.T) {
 		IsShared:      true,
 		Permissions:   "1111",
 		Cover:         "",
-		Members:       map[int64]bool{1: true, 2: true},
-		SharingKeys:   map[int64]string{2: "bob's sharing key"},
+		Members:       map[int64]bool{user.UserID: true, bobUser.UserID: true},
+		SharingKeys:   map[int64]string{bobUser.UserID: "bob's sharing key"},
 	}
 	if diff := deep.Equal(expAlbumSpec, *fs.Album); diff != nil {
 		t.Errorf("Album data has unexpected value: %v", diff)
@@ -133,7 +144,7 @@ func TestAlbums(t *testing.T) {
 			Permissions:   "1111",
 			IsLocked:      "0",
 			Cover:         "",
-			Members:       "1,2",
+			Members:       membersString(user.UserID, bobUser.UserID),
 			SyncLocal:     "",
 		},
 	}
@@ -159,7 +170,7 @@ func TestAlbums(t *testing.T) {
 			Permissions:   "1111",
 			IsLocked:      "0",
 			Cover:         "",
-			Members:       "1,2",
+			Members:       membersString(user.UserID, bobUser.UserID),
 			SyncLocal:     "",
 		},
 	}
