@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"kringle-server/crypto"
+	"kringle-server/crypto/stinglecrypto"
 	"kringle-server/database"
 )
 
@@ -48,7 +48,7 @@ func TestFiles(t *testing.T) {
 	dir := t.TempDir()
 	db := database.New(dir, "")
 	email := "alice@"
-	key := crypto.MakeSecretKey()
+	key := stinglecrypto.MakeSecretKey()
 	database.CurrentTimeForTesting = 10000
 
 	if err := addUser(db, email, key.PublicKey()); err != nil {

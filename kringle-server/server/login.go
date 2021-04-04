@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"kringle-server/crypto"
+	"kringle-server/crypto/stinglecrypto"
 	"kringle-server/database"
 	"kringle-server/log"
 	"kringle-server/stingle"
@@ -36,7 +36,7 @@ func (s *Server) handleCreateAccount(req *http.Request) *stingle.Response {
 	if _, err := s.db.User(email); err == nil {
 		return stingle.ResponseNOK().AddError("User already exists")
 	}
-	pk, err := crypto.DecodeKeyBundle(req.PostFormValue("keyBundle"))
+	pk, err := stinglecrypto.DecodeKeyBundle(req.PostFormValue("keyBundle"))
 	if err != nil {
 		return stingle.ResponseNOK().AddError("KeyBundle cannot be parsed")
 	}
@@ -102,8 +102,8 @@ func (s *Server) handleLogin(req *http.Request) *stingle.Response {
 	return stingle.ResponseOK().
 		AddPart("keyBundle", u.KeyBundle).
 		AddPart("serverPublicKey", u.ServerPublicKeyForExport()).
-		AddPart("token", crypto.MintToken(u.ServerSignKey,
-			crypto.Token{Scope: "session", Subject: u.Email, Seq: u.TokenSeq},
+		AddPart("token", stinglecrypto.MintToken(u.ServerSignKey,
+			stinglecrypto.Token{Scope: "session", Subject: u.Email, Seq: u.TokenSeq},
 			180*24*time.Hour)).
 		AddPart("userId", fmt.Sprintf("%d", u.UserID)).
 		AddPart("isKeyBackedUp", u.IsBackup).
@@ -152,7 +152,7 @@ func (s *Server) handleChangePass(user database.User, req *http.Request) *stingl
 	user.Salt = params["newSalt"]
 	user.KeyBundle = params["keyBundle"]
 	user.TokenSeq++
-	pk, err := crypto.DecodeKeyBundle(user.KeyBundle)
+	pk, err := stinglecrypto.DecodeKeyBundle(user.KeyBundle)
 	if err != nil {
 		log.Errorf("DecodeKeyBundle: %v", err)
 		return stingle.ResponseNOK()
@@ -164,8 +164,8 @@ func (s *Server) handleChangePass(user database.User, req *http.Request) *stingl
 		return stingle.ResponseNOK()
 	}
 	return stingle.ResponseOK().
-		AddPart("token", crypto.MintToken(s.db.SignKeyForUser(user.Email),
-			crypto.Token{Scope: "session", Subject: user.Email, Seq: user.TokenSeq},
+		AddPart("token", stinglecrypto.MintToken(s.db.SignKeyForUser(user.Email),
+			stinglecrypto.Token{Scope: "session", Subject: user.Email, Seq: user.TokenSeq},
 			180*24*time.Hour))
 }
 
@@ -210,7 +210,7 @@ func (s *Server) handleCheckKey(req *http.Request) *stingle.Response {
 		return stingle.ResponseNOK()
 	}
 	return stingle.ResponseOK().
-		AddPart("challenge", crypto.SealBox(append([]byte("validkey_"), rnd...), u.PublicKey)).
+		AddPart("challenge", stinglecrypto.SealBox(append([]byte("validkey_"), rnd...), u.PublicKey)).
 		AddPart("isKeyBackedUp", u.IsBackup).
 		AddPart("serverPK", u.ServerPublicKeyForExport())
 }
@@ -247,7 +247,7 @@ func (s *Server) handleRecoverAccount(req *http.Request) *stingle.Response {
 	user.Salt = params["newSalt"]
 	user.KeyBundle = params["keyBundle"]
 	user.TokenSeq++
-	pk, err := crypto.DecodeKeyBundle(user.KeyBundle)
+	pk, err := stinglecrypto.DecodeKeyBundle(user.KeyBundle)
 	if err != nil {
 		log.Errorf("DecodeKeyBundle: %v", err)
 		return stingle.ResponseNOK()
@@ -304,7 +304,7 @@ func (s *Server) handleReuploadKeys(user database.User, req *http.Request) *stin
 		return stingle.ResponseNOK()
 	}
 	user.KeyBundle = params["keyBundle"]
-	pk, err := crypto.DecodeKeyBundle(user.KeyBundle)
+	pk, err := stinglecrypto.DecodeKeyBundle(user.KeyBundle)
 	if err != nil {
 		log.Errorf("DecodeKeyBundle: %v", err)
 		return stingle.ResponseNOK()

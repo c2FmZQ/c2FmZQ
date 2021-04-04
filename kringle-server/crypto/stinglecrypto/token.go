@@ -1,4 +1,4 @@
-package crypto
+package stinglecrypto
 
 import (
 	"encoding/base64"

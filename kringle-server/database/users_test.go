@@ -4,11 +4,11 @@ import (
 	"github.com/go-test/deep"
 	"testing"
 
-	"kringle-server/crypto"
+	"kringle-server/crypto/stinglecrypto"
 	"kringle-server/database"
 )
 
-func addUser(db *database.Database, email string, pk crypto.PublicKey) error {
+func addUser(db *database.Database, email string, pk stinglecrypto.PublicKey) error {
 	u := database.User{
 		Email:     email,
 		Password:  email + "-Password",
@@ -27,10 +27,10 @@ func TestUsers(t *testing.T) {
 
 	// Add, lookup, modify users.
 	emails := []string{"alice@", "bob@", "charlie@"}
-	keys := make(map[string]crypto.SecretKey)
+	keys := make(map[string]stinglecrypto.SecretKey)
 	users := make(map[string]database.User)
 	for _, e := range emails {
-		keys[e] = crypto.MakeSecretKey()
+		keys[e] = stinglecrypto.MakeSecretKey()
 		if err := addUser(db, e, keys[e].PublicKey()); err != nil {
 			t.Fatalf("addUser(%q, pk) failed: %v", e, err)
 		}

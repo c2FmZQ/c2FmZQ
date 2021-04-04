@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"testing"
 
-	"kringle-server/crypto"
+	"kringle-server/crypto/stinglecrypto"
 )
 
 func createAccountAndLogin(sock, email string) (*client, error) {
@@ -60,7 +60,7 @@ func TestLogin(t *testing.T) {
 	if err := c.changePass(); err == nil {
 		t.Error("c.changePass should have failed but succeeded")
 	}
-	c.secretKey = crypto.MakeSecretKey()
+	c.secretKey = stinglecrypto.MakeSecretKey()
 	if err := c.recoverAccount(); err == nil {
 		t.Error("c.recoverAccount should have failed but succeeded")
 	}
@@ -80,7 +80,7 @@ func (c *client) createAccount(email string) error {
 	c.email = email
 	c.password = "PASSWORD"
 	c.salt = "SALT"
-	c.keyBundle = crypto.MakeKeyBundle(c.secretKey.PublicKey())
+	c.keyBundle = stinglecrypto.MakeKeyBundle(c.secretKey.PublicKey())
 	c.isBackup = "0"
 	form := url.Values{}
 	form.Set("email", c.email)
@@ -193,7 +193,7 @@ func (c *client) checkKey() error {
 	if want, got := []byte(c.serverPublicKey.Bytes), pk; !reflect.DeepEqual(want, got) {
 		return fmt.Errorf("checkKey: unexpected serverPK: want %#v, got %#v", want, got)
 	}
-	dec, err := crypto.SealBoxOpen(sr.Parts["challenge"].(string), c.secretKey)
+	dec, err := stinglecrypto.SealBoxOpen(sr.Parts["challenge"].(string), c.secretKey)
 	if err != nil {
 		return fmt.Errorf("checkKey challenge error: %v", err)
 	}

@@ -1,5 +1,6 @@
-// package crypto implements some wrappers around the sodium library.
-package crypto
+// package stinglecrypto implements some wrappers around the sodium library to
+// use with the Stingle API.
+package stinglecrypto
 
 import (
 	"bytes"
