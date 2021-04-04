@@ -12,6 +12,7 @@ import (
 	"sort"
 	"time"
 
+	"kringle-server/crypto/aes"
 	"kringle-server/log"
 )
 
@@ -151,15 +152,15 @@ func (md *Metadata) OpenManyForUpdate(files []string, objects []interface{}) (fu
 	}
 	type readValue struct {
 		i   int
-		c   *CryptoHandle
+		k   *aes.EncryptionKey
 		err error
 	}
 	ch := make(chan readValue)
-	crypters := make([]*CryptoHandle, len(files))
+	keys := make([]*aes.EncryptionKey, len(files))
 	for i := range files {
 		go func(i int, file string, obj interface{}) {
-			crypter, err := md.ReadDataFile(file, obj)
-			ch <- readValue{i, crypter, err}
+			k, err := md.ReadDataFile(file, obj)
+			ch <- readValue{i, k, err}
 		}(i, files[i], objects[i])
 	}
 
@@ -169,7 +170,7 @@ func (md *Metadata) OpenManyForUpdate(files []string, objects []interface{}) (fu
 		if v.err != nil && !errors.Is(v.err, os.ErrNotExist) {
 			errorList = append(errorList, v.err)
 		}
-		crypters[v.i] = v.c
+		keys[v.i] = v.k
 	}
 	if errorList != nil {
 		md.UnlockMany(files)
@@ -205,9 +206,9 @@ func (md *Metadata) OpenManyForUpdate(files []string, objects []interface{}) (fu
 			}
 			ch := make(chan error)
 			for i := range files {
-				go func(c *CryptoHandle, file string, obj interface{}) {
-					ch <- md.SaveDataFile(c, file, obj)
-				}(crypters[i], files[i], objects[i])
+				go func(k *aes.EncryptionKey, file string, obj interface{}) {
+					ch <- md.SaveDataFile(k, file, obj)
+				}(keys[i], files[i], objects[i])
 			}
 			var errorList []error
 			for _ = range files {
@@ -246,11 +247,17 @@ func (md *Metadata) DumpFile(filename string) error {
 		return err
 	}
 	defer f.Close()
-	c := newCryptoHandle(md.ek)
-	r, err := c.beginRead(f)
+	// Read the encrypted file key.
+	k, err := md.masterKey.ReadEncryptedKey(f)
 	if err != nil {
 		return err
 	}
+	// Use the file key to decrypt the rest of the file.
+	r, err := k.StartReader(f)
+	if err != nil {
+		return err
+	}
+	// Decompress the content of the file.
 	gz, err := gzip.NewReader(r)
 	if err != nil {
 		return err
@@ -261,34 +268,45 @@ func (md *Metadata) DumpFile(filename string) error {
 }
 
 // ReadDataFile reads a json object from a file.
-func (md *Metadata) ReadDataFile(filename string, obj interface{}) (*CryptoHandle, error) {
+func (md *Metadata) ReadDataFile(filename string, obj interface{}) (*aes.EncryptionKey, error) {
 	f, err := os.Open(filepath.Join(md.dir, filename))
 	if err != nil {
 		return nil, err
 	}
 	defer f.Close()
-	c := newCryptoHandle(md.ek)
-	r, err := c.beginRead(f)
+	// Read the encrypted file key.
+	k, err := md.masterKey.ReadEncryptedKey(f)
 	if err != nil {
 		return nil, err
 	}
+	// Use the file key to decrypt the rest of the file.
+	r, err := k.StartReader(f)
+	if err != nil {
+		return nil, err
+	}
+	// Decompress the content of the file.
 	gz, err := gzip.NewReader(r)
 	if err != nil {
 		return nil, err
 	}
 	defer gz.Close()
+	// Decode JSON object.
 	if err := json.NewDecoder(gz).Decode(obj); err != nil {
 		return nil, err
 	}
-	return c, nil
+	return k, nil
 }
 
 // SaveDataFile atomically replace a json object in a file.
-func (md *Metadata) SaveDataFile(c *CryptoHandle, filename string, obj interface{}) error {
+func (md *Metadata) SaveDataFile(k *aes.EncryptionKey, filename string, obj interface{}) error {
 	filename = filepath.Join(md.dir, filename)
-	if c == nil {
-		c = newCryptoHandle(md.ek)
-		if err := createParentIfNotExist(filename); err != nil {
+	if k == nil {
+		// No file key provided, created a new one.
+		var err error
+		if k, err = md.masterKey.NewEncryptionKey(); err != nil {
+			return err
+		}
+		if err = createParentIfNotExist(filename); err != nil {
 			return err
 		}
 	}
@@ -297,15 +315,23 @@ func (md *Metadata) SaveDataFile(c *CryptoHandle, filename string, obj interface
 	if err != nil {
 		return err
 	}
-	w, err := c.beginWrite(f)
+	// Write the encrypted file key first.
+	if err := k.WriteEncryptedKey(f); err != nil {
+		f.Close()
+		return err
+	}
+	// Use the file key to encrypt the rest of the file.
+	w, err := k.StartWriter(f)
 	if err != nil {
 		f.Close()
 		return err
 	}
+	// Compress the content.
 	gz, err := gzip.NewWriterLevel(w, gzip.BestCompression)
 	if err != nil {
 		return err
 	}
+	// Encode the JSON object.
 	enc := json.NewEncoder(gz)
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(obj); err != nil {
@@ -320,5 +346,6 @@ func (md *Metadata) SaveDataFile(c *CryptoHandle, filename string, obj interface
 	if err := w.Close(); err != nil {
 		return err
 	}
+	// Atomcically replace the file.
 	return os.Rename(t, filename)
 }

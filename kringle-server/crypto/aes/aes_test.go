@@ -1,6 +1,7 @@
 package aes
 
 import (
+	"bytes"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -57,11 +58,21 @@ func TestEncryptedKey(t *testing.T) {
 		t.Fatalf("CreateMasterKey: %v", err)
 	}
 
-	ek, err := mk.NewEncryptedKey()
+	ek, err := mk.NewEncryptionKey()
 	if err != nil {
-		t.Fatalf("mk.NewEncryptedKey: %v", err)
+		t.Fatalf("mk.NewEncryptionKey: %v", err)
 	}
-	if _, err := mk.Decrypt(ek); err != nil {
-		t.Fatalf("mk.Decrypt: %v", err)
+
+	var buf bytes.Buffer
+	if err := ek.WriteEncryptedKey(&buf); err != nil {
+		t.Fatalf("ek.WriteEncryptedKey: %v", err)
+	}
+
+	ek2, err := mk.ReadEncryptedKey(&buf)
+	if err != nil {
+		t.Fatalf("mk.ReadEncryptedKey: %v", err)
+	}
+	if !reflect.DeepEqual(ek, ek2) {
+		t.Errorf("Unexpected key. Want %+v, got %+v", ek, ek2)
 	}
 }
