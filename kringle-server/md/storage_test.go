@@ -8,15 +8,15 @@ import (
 	"testing"
 	"time"
 
-	"kringle-server/masterkey"
+	"kringle-server/crypto/aes"
 )
 
-func encrypterDecrypter() EncrypterDecrypter {
-	mk, err := masterkey.Create()
+func encrypterDecrypter() aes.EncryptionKey {
+	mk, err := aes.CreateMasterKey()
 	if err != nil {
 		panic(err)
 	}
-	return mk
+	return mk.EncryptionKey
 }
 
 func TestLock(t *testing.T) {

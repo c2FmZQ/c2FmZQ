@@ -151,11 +151,11 @@ func (md *Metadata) OpenManyForUpdate(files []string, objects []interface{}) (fu
 	}
 	type readValue struct {
 		i   int
-		c   *Crypter
+		c   *CryptoHandle
 		err error
 	}
 	ch := make(chan readValue)
-	crypters := make([]*Crypter, len(files))
+	crypters := make([]*CryptoHandle, len(files))
 	for i := range files {
 		go func(i int, file string, obj interface{}) {
 			crypter, err := md.ReadDataFile(file, obj)
@@ -205,7 +205,7 @@ func (md *Metadata) OpenManyForUpdate(files []string, objects []interface{}) (fu
 			}
 			ch := make(chan error)
 			for i := range files {
-				go func(c *Crypter, file string, obj interface{}) {
+				go func(c *CryptoHandle, file string, obj interface{}) {
 					ch <- md.SaveDataFile(c, file, obj)
 				}(crypters[i], files[i], objects[i])
 			}
@@ -246,7 +246,7 @@ func (md *Metadata) DumpFile(filename string) error {
 		return err
 	}
 	defer f.Close()
-	c := newCrypter(md.ed)
+	c := newCryptoHandle(md.ek)
 	r, err := c.beginRead(f)
 	if err != nil {
 		return err
@@ -261,13 +261,13 @@ func (md *Metadata) DumpFile(filename string) error {
 }
 
 // ReadDataFile reads a json object from a file.
-func (md *Metadata) ReadDataFile(filename string, obj interface{}) (*Crypter, error) {
+func (md *Metadata) ReadDataFile(filename string, obj interface{}) (*CryptoHandle, error) {
 	f, err := os.Open(filepath.Join(md.dir, filename))
 	if err != nil {
 		return nil, err
 	}
 	defer f.Close()
-	c := newCrypter(md.ed)
+	c := newCryptoHandle(md.ek)
 	r, err := c.beginRead(f)
 	if err != nil {
 		return nil, err
@@ -284,10 +284,10 @@ func (md *Metadata) ReadDataFile(filename string, obj interface{}) (*Crypter, er
 }
 
 // SaveDataFile atomically replace a json object in a file.
-func (md *Metadata) SaveDataFile(c *Crypter, filename string, obj interface{}) error {
+func (md *Metadata) SaveDataFile(c *CryptoHandle, filename string, obj interface{}) error {
 	filename = filepath.Join(md.dir, filename)
 	if c == nil {
-		c = newCrypter(md.ed)
+		c = newCryptoHandle(md.ek)
 		if err := createParentIfNotExist(filename); err != nil {
 			return err
 		}

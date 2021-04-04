@@ -1,4 +1,4 @@
-package masterkey
+package aes
 
 import (
 	"path/filepath"
@@ -9,30 +9,30 @@ import (
 func TestMasterKey(t *testing.T) {
 	dir := t.TempDir()
 	keyFile := filepath.Join(dir, "key")
-	mk, err := Create()
+	mk, err := CreateMasterKey()
 	if err != nil {
-		t.Fatalf("Create: %v", err)
+		t.Fatalf("CreateMasterKey: %v", err)
 	}
 	if err := mk.Save("foo", keyFile); err != nil {
 		t.Fatalf("mk.Save: %v", err)
 	}
 
-	got, err := Read("foo", keyFile)
+	got, err := ReadMasterKey("foo", keyFile)
 	if err != nil {
-		t.Fatalf("got.Read('foo'): %v", err)
+		t.Fatalf("ReadMasterKey('foo'): %v", err)
 	}
 	if want := mk; !reflect.DeepEqual(want, got) {
 		t.Errorf("Mismatch keys: %v != %v", want, got)
 	}
-	if _, err := Read("bar", keyFile); err == nil {
-		t.Errorf("got.Read('bar') should have failed, but didn't")
+	if _, err := ReadMasterKey("bar", keyFile); err == nil {
+		t.Errorf("ReadMasterKey('bar') should have failed, but didn't")
 	}
 }
 
 func TestEncryptDecrypt(t *testing.T) {
-	mk, err := Create()
+	mk, err := CreateMasterKey()
 	if err != nil {
-		t.Fatalf("Create: %v", err)
+		t.Fatalf("CreateMasterKey: %v", err)
 	}
 
 	m := []byte("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
@@ -52,9 +52,9 @@ func TestEncryptDecrypt(t *testing.T) {
 }
 
 func TestEncryptedKey(t *testing.T) {
-	mk, err := Create()
+	mk, err := CreateMasterKey()
 	if err != nil {
-		t.Fatalf("Create: %v", err)
+		t.Fatalf("CreateMasterKey: %v", err)
 	}
 
 	ek, err := mk.NewEncryptedKey()
