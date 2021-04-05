@@ -31,6 +31,11 @@ A malicious server _could_ replace the contact's User ID and public key with
 someone else's, and make the user think they're sharing with their friend while
 actually sharing with an attacker.
 
+When viewing a shared album, the app / user has to trust that the shared content is
+"safe". Since the server can't decrypt the content, it has no way to sanitize it
+either. A malicious user _could_ share content that aims to exploit some unpatched
+vulnerability in the app's code.
+
 ## How to run the server
 
 The server is self-contained. It doesn't depend on any external resources. It
