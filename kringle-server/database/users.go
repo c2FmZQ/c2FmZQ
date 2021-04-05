@@ -176,11 +176,11 @@ func (d *Database) addContactToUser(user, contact User) (c *Contact, retErr erro
 		d.filePath(user.home(contactListFile)),
 		d.filePath(contact.home(contactListFile)),
 	}
-	objects := []interface{}{
+	contactLists := []*ContactList{
 		&userContacts,
 		&contactContacts,
 	}
-	commit, err := d.md.OpenManyForUpdate(files, objects)
+	commit, err := d.md.OpenManyForUpdate(files, contactLists)
 	if err != nil {
 		log.Errorf("d.md.OpenManyForUpdate: %v", err)
 		return nil, err
@@ -240,20 +240,19 @@ func (d *Database) lookupContacts(uids map[int64]bool) []Contact {
 // addCrossContacts adds contacts to each other.
 func (d *Database) addCrossContacts(list []Contact) {
 	files := make([]string, len(list))
-	contactLists := make([]ContactList, len(list))
-	objects := make([]interface{}, len(list))
+	contactLists := make([]*ContactList, len(list))
 	for i, c := range list {
 		files[i] = d.filePath("home", fmt.Sprintf("%d", c.UserID), contactListFile)
-		objects[i] = &contactLists[i]
+		contactLists[i] = &ContactList{}
 	}
-	commit, err := d.md.OpenManyForUpdate(files, objects)
+	commit, err := d.md.OpenManyForUpdate(files, contactLists)
 	if err != nil {
 		log.Errorf("d.md.OpenManyForUpdate: %v", err)
 		return
 	}
 	count := 0
 	for i, c1 := range list {
-		contactList := &contactLists[i]
+		contactList := contactLists[i]
 		if contactList.Contacts == nil {
 			contactList.Contacts = make(map[int64]*Contact)
 		}

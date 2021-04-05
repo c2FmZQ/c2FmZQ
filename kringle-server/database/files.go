@@ -200,13 +200,10 @@ func (d *Database) fileSetsForUpdate(user User, sets, albumIDs []string) (func(b
 	}
 
 	fileSets := make([]*FileSet, len(filenames))
-	objects := make([]interface{}, len(filenames))
 	for i := range fileSets {
-		fs := FileSet{}
-		fileSets[i] = &fs
-		objects[i] = &fs
+		fileSets[i] = &FileSet{}
 	}
-	commit, err := d.md.OpenManyForUpdate(filenames, objects)
+	commit, err := d.md.OpenManyForUpdate(filenames, fileSets)
 	if err != nil {
 		return nil, nil, err
 	}

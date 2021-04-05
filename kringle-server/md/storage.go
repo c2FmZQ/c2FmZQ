@@ -9,6 +9,7 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"time"
 
@@ -143,9 +144,13 @@ func (md *Metadata) OpenForUpdate(f string, obj interface{}) (func(commit bool, 
 //     bar.Y = "new Y"
 //     return commit(true, nil) // commit
 //  }
-func (md *Metadata) OpenManyForUpdate(files []string, objects []interface{}) (func(commit bool, errp *error) error, error) {
-	if len(files) != len(objects) {
-		log.Panicf("len(files) != len(objects), %d != %d", len(files), len(objects))
+func (md *Metadata) OpenManyForUpdate(files []string, objects interface{}) (func(commit bool, errp *error) error, error) {
+	if reflect.TypeOf(objects).Kind() != reflect.Slice {
+		log.Panic("objects must be a slice")
+	}
+	objValue := reflect.ValueOf(objects)
+	if len(files) != objValue.Len() {
+		log.Panicf("len(files) != len(objects), %d != %d", len(files), objValue.Len())
 	}
 	if err := md.LockMany(files); err != nil {
 		return nil, err
@@ -161,7 +166,7 @@ func (md *Metadata) OpenManyForUpdate(files []string, objects []interface{}) (fu
 		go func(i int, file string, obj interface{}) {
 			k, err := md.ReadDataFile(file, obj)
 			ch <- readValue{i, k, err}
-		}(i, files[i], objects[i])
+		}(i, files[i], objValue.Index(i).Interface())
 	}
 
 	var errorList []error
@@ -208,7 +213,7 @@ func (md *Metadata) OpenManyForUpdate(files []string, objects []interface{}) (fu
 			for i := range files {
 				go func(k *crypto.EncryptionKey, file string, obj interface{}) {
 					ch <- md.SaveDataFile(k, file, obj)
-				}(keys[i], files[i], objects[i])
+				}(keys[i], files[i], objValue.Index(i).Interface())
 			}
 			var errorList []error
 			for _ = range files {
