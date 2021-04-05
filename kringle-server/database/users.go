@@ -44,6 +44,13 @@ type User struct {
 	TokenSeq       int                   `json:"tokenSeq"`
 }
 
+// A user's contact list information.
+type ContactList struct {
+	Contacts map[int64]*Contact `json:"contacts"`
+	In       map[int64]bool     `json:"in"`
+	Deletes  []DeleteEvent      `json:"deletes"`
+}
+
 // Encapsulates the information about a user's contact (another user).
 type Contact struct {
 	UserID       int64  `json:"userId"`
@@ -161,24 +168,40 @@ func (c Contact) Export() stingle.Contact {
 
 // addContactToUser adds contact to user's contact list.
 func (d *Database) addContactToUser(user, contact User) (c *Contact, retErr error) {
-	var contactList map[string]*Contact
-	commit, err := d.md.OpenForUpdate(d.filePath(user.home(contactListFile)), &contactList)
+	var (
+		userContacts    ContactList
+		contactContacts ContactList
+	)
+	files := []string{
+		d.filePath(user.home(contactListFile)),
+		d.filePath(contact.home(contactListFile)),
+	}
+	objects := []interface{}{
+		&userContacts,
+		&contactContacts,
+	}
+	commit, err := d.md.OpenManyForUpdate(files, objects)
 	if err != nil {
-		log.Errorf("d.md.OpenForUpdate: %v", err)
+		log.Errorf("d.md.OpenManyForUpdate: %v", err)
 		return nil, err
 	}
 	defer commit(true, &retErr)
 
-	if contactList == nil {
-		contactList = make(map[string]*Contact)
+	if userContacts.Contacts == nil {
+		userContacts.Contacts = make(map[int64]*Contact)
 	}
-	contactList[contact.Email] = &Contact{
+	userContacts.Contacts[contact.UserID] = &Contact{
 		UserID:       contact.UserID,
 		Email:        contact.Email,
 		PublicKey:    base64.StdEncoding.EncodeToString(contact.PublicKey.Bytes),
 		DateModified: nowInMS(),
 	}
-	return contactList[contact.Email], nil
+	if contactContacts.In == nil {
+		contactContacts.In = make(map[int64]bool)
+	}
+	contactContacts.In[user.UserID] = true
+
+	return userContacts.Contacts[contact.UserID], nil
 }
 
 // AddContact adds the user with the given email address to user's contact list.
@@ -199,9 +222,9 @@ func (d *Database) lookupContacts(uids map[int64]bool) []Contact {
 	var out []Contact
 	for _, u := range ul {
 		if uids[u.UserID] {
-			user, err := d.User(u.Email)
+			user, err := d.UserByID(u.UserID)
 			if err != nil {
-				log.Errorf("d.User(%q) failed, but user in %q: %v", u.Email, userListFile, err)
+				log.Errorf("d.UserByID(%q) failed, but user in %q: %v", u.UserID, userListFile, err)
 				continue
 			}
 			out = append(out, Contact{
@@ -216,48 +239,59 @@ func (d *Database) lookupContacts(uids map[int64]bool) []Contact {
 
 // addCrossContacts adds contacts to each other.
 func (d *Database) addCrossContacts(list []Contact) {
-	for _, c1 := range list {
-		var contactList map[string]*Contact
-		commit, err := d.md.OpenForUpdate(d.filePath("home", fmt.Sprintf("%d", c1.UserID), contactListFile), &contactList)
-		if err != nil {
-			log.Errorf("d.md.OpenForUpdate: %v", err)
-			continue
+	files := make([]string, len(list))
+	contactLists := make([]ContactList, len(list))
+	objects := make([]interface{}, len(list))
+	for i, c := range list {
+		files[i] = d.filePath("home", fmt.Sprintf("%d", c.UserID), contactListFile)
+		objects[i] = &contactLists[i]
+	}
+	commit, err := d.md.OpenManyForUpdate(files, objects)
+	if err != nil {
+		log.Errorf("d.md.OpenManyForUpdate: %v", err)
+		return
+	}
+	count := 0
+	for i, c1 := range list {
+		contactList := &contactLists[i]
+		if contactList.Contacts == nil {
+			contactList.Contacts = make(map[int64]*Contact)
 		}
-		if contactList == nil {
-			contactList = make(map[string]*Contact)
+		if contactList.In == nil {
+			contactList.In = make(map[int64]bool)
 		}
-		count := 0
 		for _, c2 := range list {
 			if c1.UserID == c2.UserID {
 				continue
 			}
-			if contactList[c2.Email] == nil {
+			if contactList.Contacts[c2.UserID] == nil {
 				count++
 				c := c2
 				c.DateModified = nowInMS()
-				contactList[c2.Email] = &c
+				contactList.Contacts[c2.UserID] = &c
+				contactList.In[c2.UserID] = true
 			}
 		}
-		if err := commit(true, nil); err != nil {
-			log.Errorf("Failed to save user %d's contact list: %v", c1.UserID, err)
-		} else {
-			log.Debugf("Added %d contact(s) to user %d", count, c1.UserID)
-		}
+	}
+	if err := commit(true, nil); err != nil {
+		log.Errorf("Failed to save user contact lists: %v", err)
+	} else {
+		log.Debugf("Added %d contact(s) to %d user(s)", count, len(list))
 	}
 }
 
 // ContactUpdates returns changes to a user's contact list that are more recent
 // than ts.
 func (d *Database) ContactUpdates(user User, ts int64) ([]stingle.Contact, error) {
-	var contacts map[string]Contact
-	if _, err := d.md.ReadDataFile(d.filePath(user.home(contactListFile)), &contacts); err != nil && !errors.Is(err, os.ErrNotExist) {
+	var contactList ContactList
+	if _, err := d.md.ReadDataFile(d.filePath(user.home(contactListFile)), &contactList); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}
-	if contacts == nil {
-		contacts = make(map[string]Contact)
+	if contactList.Contacts == nil {
+		contactList.Contacts = make(map[int64]*Contact)
 	}
 	out := []stingle.Contact{}
-	for _, v := range contacts {
+	for _, v := range contactList.Contacts {
 		if v.DateModified > ts {
 			sc := stingle.Contact{
 				UserID:       number(v.UserID),
