@@ -20,7 +20,7 @@ import (
 
 const (
 	// The size of an encrypted key.
-	EncryptedKeySize = 96
+	encryptedKeySize = 97
 )
 
 type MasterKey struct {
@@ -125,9 +125,13 @@ func (k EncryptionKey) Decrypt(data []byte) ([]byte, error) {
 	if len(k.key) == 0 {
 		log.Fatal("key is not set")
 	}
-	iv := data[:aes.BlockSize]
-	encData := data[aes.BlockSize : len(data)-32]
-	hm := data[len(data)-32:]
+	version, data := data[0], data[1:]
+	if version != 1 {
+		return nil, fmt.Errorf("unexpected version %d", version)
+	}
+	iv, data := data[:aes.BlockSize], data[aes.BlockSize:]
+	encData, data := data[:len(data)-32], data[len(data)-32:]
+	hm := data[:32]
 	if !hmac.Equal(hm, k.Hash(encData)) {
 		return nil, errors.New("invalid hmac")
 	}
@@ -136,7 +140,7 @@ func (k EncryptionKey) Decrypt(data []byte) ([]byte, error) {
 		return nil, fmt.Errorf("aes.NewCipher failed: %w", err)
 	}
 	mode := cipher.NewCBCDecrypter(block, iv)
-	dec := make([]byte, len(data)-aes.BlockSize-32)
+	dec := make([]byte, len(encData))
 	mode.CryptBlocks(dec, encData)
 	padSize := int(dec[0])
 	return dec[1 : len(dec)-padSize], nil
@@ -168,10 +172,11 @@ func (k EncryptionKey) Encrypt(data []byte) ([]byte, error) {
 	mode.CryptBlocks(encData, pData)
 	hmac := k.Hash(encData)
 
-	out := make([]byte, len(iv)+len(encData)+len(hmac))
-	copy(out, iv)
-	copy(out[len(iv):], encData)
-	copy(out[len(iv)+len(encData):], hmac)
+	out := make([]byte, 1+len(iv)+len(encData)+len(hmac))
+	out[0] = 1 // version
+	copy(out[1:], iv)
+	copy(out[1+len(iv):], encData)
+	copy(out[1+len(iv)+len(encData):], hmac)
 	return out, nil
 }
 
@@ -190,7 +195,7 @@ func (k EncryptionKey) NewEncryptionKey() (*EncryptionKey, error) {
 
 // DecryptKey decrypts an encrypted key.
 func (k EncryptionKey) DecryptKey(b []byte) (*EncryptionKey, error) {
-	if len(b) != EncryptedKeySize {
+	if len(b) != encryptedKeySize {
 		return nil, fmt.Errorf("invalid encrypted key size: %d", len(b))
 	}
 	key, err := k.Decrypt(b)
@@ -210,6 +215,13 @@ func (k EncryptionKey) StartReader(r io.Reader) (*cipher.StreamReader, error) {
 	block, err := aes.NewCipher(k.key)
 	if err != nil {
 		return nil, fmt.Errorf("aes.NewCipher: %w", err)
+	}
+	version := make([]byte, 1)
+	if _, err := io.ReadFull(r, version); err != nil {
+		return nil, fmt.Errorf("reading file version: %w", err)
+	}
+	if version[0] != 1 {
+		return nil, fmt.Errorf("unexpected file version %d", version[0])
 	}
 	iv := make([]byte, block.BlockSize())
 	if _, err := io.ReadFull(r, iv); err != nil {
@@ -231,6 +243,10 @@ func (k EncryptionKey) StartWriter(w io.Writer) (*cipher.StreamWriter, error) {
 	if _, err := io.ReadFull(rand.Reader, iv); err != nil {
 		return nil, fmt.Errorf("creating file iv: %w", err)
 	}
+	version := []byte{1}
+	if _, err := w.Write(version); err != nil {
+		return nil, fmt.Errorf("writing file version: %w", err)
+	}
 	if _, err := w.Write(iv); err != nil {
 		return nil, fmt.Errorf("writing file iv: %w", err)
 	}
@@ -242,15 +258,18 @@ func (k EncryptionKey) StartWriter(w io.Writer) (*cipher.StreamWriter, error) {
 
 // ReadEncryptedKey reads an encrypted key and decrypts it.
 func (k EncryptionKey) ReadEncryptedKey(r io.Reader) (*EncryptionKey, error) {
-	key := make([]byte, EncryptedKeySize)
-	if _, err := io.ReadFull(r, key); err != nil {
+	buf := make([]byte, encryptedKeySize)
+	if _, err := io.ReadFull(r, buf); err != nil {
 		return nil, fmt.Errorf("reading enc file key: %w", err)
 	}
-	return k.DecryptKey(key)
+	return k.DecryptKey(buf)
 }
 
 // WriteEncryptedKey writes the encrypted key to the writer.
 func (k EncryptionKey) WriteEncryptedKey(w io.Writer) error {
-	_, err := w.Write(k.encrypted_key)
+	n, err := w.Write(k.encrypted_key)
+	if n != encryptedKeySize {
+		return fmt.Errorf("wrote encrypted key of unexpected size: %d", n)
+	}
 	return err
 }
