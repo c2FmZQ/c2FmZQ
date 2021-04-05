@@ -107,7 +107,7 @@ func (d *Database) makeFilePath() (string, error) {
 		return "", err
 	}
 	dir := filepath.Join("blobs", fmt.Sprintf("%02X", name[0]), fmt.Sprintf("%02X", name[1]))
-	if err := os.MkdirAll(dir, 0700); err != nil {
+	if err := os.MkdirAll(filepath.Join(d.Dir(), dir), 0700); err != nil {
 		return "", err
 	}
 	return filepath.Join(dir, base64.RawURLEncoding.EncodeToString(name)), nil
