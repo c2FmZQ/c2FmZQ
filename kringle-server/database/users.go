@@ -269,8 +269,8 @@ func (d *Database) addCrossContacts(list []Contact) {
 				c := c2
 				c.DateModified = nowInMS()
 				contactList.Contacts[c2.UserID] = &c
-				contactList.In[c2.UserID] = true
 			}
+			contactList.In[c2.UserID] = true
 		}
 	}
 	if err := commit(true, nil); err != nil {
