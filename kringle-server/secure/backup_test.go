@@ -1,4 +1,4 @@
-package md
+package secure
 
 import (
 	"errors"
@@ -11,7 +11,7 @@ import (
 
 func TestBackupRestore(t *testing.T) {
 	dir := t.TempDir()
-	md := New(dir, encrypterDecrypter())
+	s := NewStorage(dir, encrypterDecrypter())
 
 	if err := os.Mkdir(filepath.Join(dir, "data"), 0700); err != nil {
 		t.Fatalf("os.Mkdir: %v", err)
@@ -24,14 +24,14 @@ func TestBackupRestore(t *testing.T) {
 		}
 		files = append(files, file)
 	}
-	bck, err := md.createBackup(files)
+	bck, err := s.createBackup(files)
 	if err != nil {
-		t.Fatalf("md.createBackup: %v", err)
+		t.Fatalf("s.createBackup: %v", err)
 	}
 
 	var got backup
-	if _, err := md.ReadDataFile(filepath.Join("pending", fmt.Sprintf("%d", bck.TS.UnixNano())), &got); err != nil {
-		t.Fatalf("md.ReadDataFile: %v", err)
+	if _, err := s.ReadDataFile(filepath.Join("pending", fmt.Sprintf("%d", bck.TS.UnixNano())), &got); err != nil {
+		t.Fatalf("s.ReadDataFile: %v", err)
 	}
 	if want := files; !reflect.DeepEqual(want, got.Files) {
 		t.Errorf("Unexpected pending op files. Want %+v, got %+v", want, got)
@@ -45,7 +45,7 @@ func TestBackupRestore(t *testing.T) {
 		files = append(files, file)
 	}
 	bck.restore()
-	if _, err := md.ReadDataFile(filepath.Join("pending", fmt.Sprintf("%d", bck.TS.UnixNano())), &got); !errors.Is(err, os.ErrNotExist) {
+	if _, err := s.ReadDataFile(filepath.Join("pending", fmt.Sprintf("%d", bck.TS.UnixNano())), &got); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("pending ops file should have been deleted: %v", err)
 	}
 
@@ -64,7 +64,7 @@ func TestBackupRestore(t *testing.T) {
 
 func TestBackupDelete(t *testing.T) {
 	dir := t.TempDir()
-	md := New(dir, encrypterDecrypter())
+	s := NewStorage(dir, encrypterDecrypter())
 
 	if err := os.Mkdir(filepath.Join(dir, "data"), 0700); err != nil {
 		t.Fatalf("os.Mkdir: %v", err)
@@ -77,14 +77,14 @@ func TestBackupDelete(t *testing.T) {
 		}
 		files = append(files, file)
 	}
-	bck, err := md.createBackup(files)
+	bck, err := s.createBackup(files)
 	if err != nil {
-		t.Fatalf("md.createBackup: %v", err)
+		t.Fatalf("s.createBackup: %v", err)
 	}
 
 	var got backup
-	if _, err := md.ReadDataFile(filepath.Join("pending", fmt.Sprintf("%d", bck.TS.UnixNano())), &got); err != nil {
-		t.Fatalf("md.ReadDataFile: %v", err)
+	if _, err := s.ReadDataFile(filepath.Join("pending", fmt.Sprintf("%d", bck.TS.UnixNano())), &got); err != nil {
+		t.Fatalf("s.ReadDataFile: %v", err)
 	}
 	if want := files; !reflect.DeepEqual(want, got.Files) {
 		t.Errorf("Unexpected pending op files. Want %+v, got %+v", want, got)
@@ -98,7 +98,7 @@ func TestBackupDelete(t *testing.T) {
 		files = append(files, file)
 	}
 	bck.delete()
-	if _, err := md.ReadDataFile(filepath.Join("pending", fmt.Sprintf("%d", bck.TS.UnixNano())), &got); !errors.Is(err, os.ErrNotExist) {
+	if _, err := s.ReadDataFile(filepath.Join("pending", fmt.Sprintf("%d", bck.TS.UnixNano())), &got); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("pending ops file should have been deleted: %v", err)
 	}
 
@@ -118,7 +118,7 @@ func TestBackupDelete(t *testing.T) {
 func TestRestorePendingOps(t *testing.T) {
 	dir := t.TempDir()
 	ed := encrypterDecrypter()
-	md := New(dir, ed)
+	s := NewStorage(dir, ed)
 
 	if err := os.Mkdir(filepath.Join(dir, "data"), 0700); err != nil {
 		t.Fatalf("os.Mkdir: %v", err)
@@ -131,8 +131,8 @@ func TestRestorePendingOps(t *testing.T) {
 		}
 		files = append(files, file)
 	}
-	if _, err := md.createBackup(files); err != nil {
-		t.Fatalf("md.createBackup: %v", err)
+	if _, err := s.createBackup(files); err != nil {
+		t.Fatalf("s.createBackup: %v", err)
 	}
 	for i := 1; i <= 10; i++ {
 		file := filepath.Join("data", fmt.Sprintf("file%d", i))
@@ -142,8 +142,8 @@ func TestRestorePendingOps(t *testing.T) {
 		files = append(files, file)
 	}
 
-	// New will notice the aborted operation and roll it back.
-	md = New(dir, ed)
+	// NewStorage will notice the aborted operation and roll it back.
+	s = NewStorage(dir, ed)
 
 	for i := 1; i <= 10; i++ {
 		file := filepath.Join("data", fmt.Sprintf("file%d", i))

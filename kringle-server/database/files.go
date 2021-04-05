@@ -46,7 +46,7 @@ type BlobSpec struct {
 
 func (d *Database) incRefCount(blob string, delta int) int {
 	var blobSpec BlobSpec
-	commit, err := d.md.OpenForUpdate(blob+".ref", &blobSpec)
+	commit, err := d.storage.OpenForUpdate(blob+".ref", &blobSpec)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		log.Fatalf("incRefCount(%q, %d) failed: %v", blob, delta, err)
 	}
@@ -82,9 +82,9 @@ func (d *Database) addFileToFileSet(user User, file FileSpec) (retErr error) {
 		fileName = d.fileSetPath(user, file.Set)
 	}
 	var fileSet FileSet
-	commit, err := d.md.OpenForUpdate(fileName, &fileSet)
+	commit, err := d.storage.OpenForUpdate(fileName, &fileSet)
 	if err != nil {
-		log.Errorf("d.md.OpenForUpdate(%q): %v", fileName, err)
+		log.Errorf("d.storage.OpenForUpdate(%q): %v", fileName, err)
 		return err
 	}
 	defer commit(true, &retErr)
@@ -165,7 +165,7 @@ func (d *Database) FileSet(user User, set, albumID string) (*FileSet, error) {
 		fileName = d.fileSetPath(user, set)
 	}
 	var fileSet FileSet
-	if _, err := d.md.ReadDataFile(fileName, &fileSet); err != nil && !errors.Is(err, os.ErrNotExist) {
+	if _, err := d.storage.ReadDataFile(fileName, &fileSet); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}
 	if fileSet.Files == nil {
@@ -203,7 +203,7 @@ func (d *Database) fileSetsForUpdate(user User, sets, albumIDs []string) (func(b
 	for i := range fileSets {
 		fileSets[i] = &FileSet{}
 	}
-	commit, err := d.md.OpenManyForUpdate(filenames, fileSets)
+	commit, err := d.storage.OpenManyForUpdate(filenames, fileSets)
 	if err != nil {
 		return nil, nil, err
 	}

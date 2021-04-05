@@ -1,4 +1,4 @@
-package md
+package secure
 
 import (
 	"compress/gzip"
@@ -31,8 +31,8 @@ var (
 // acquire it until it is released.
 //
 // There is logic in place to remove stale locks after a while.
-func (md *Metadata) Lock(fn string) error {
-	lockf := filepath.Join(md.dir, fn) + ".lock"
+func (s *Storage) Lock(fn string) error {
+	lockf := filepath.Join(s.dir, fn) + ".lock"
 	if err := createParentIfNotExist(lockf); err != nil {
 		return err
 	}
@@ -58,14 +58,14 @@ func (md *Metadata) Lock(fn string) error {
 // concurrently, there won't be any deadlock.
 //
 // When the function returns successfully, all the files are locked.
-func (md *Metadata) LockMany(filenames []string) error {
+func (s *Storage) LockMany(filenames []string) error {
 	sorted := make([]string, len(filenames))
 	copy(sorted, filenames)
 	sort.Strings(sorted)
 	var locks []string
 	for _, f := range sorted {
-		if err := md.Lock(f); err != nil {
-			md.UnlockMany(locks)
+		if err := s.Lock(f); err != nil {
+			s.UnlockMany(locks)
 			return err
 		}
 		locks = append(locks, f)
@@ -74,8 +74,8 @@ func (md *Metadata) LockMany(filenames []string) error {
 }
 
 // Unlock released the lock file for the given filename.
-func (md *Metadata) Unlock(fn string) error {
-	lockf := filepath.Join(md.dir, fn) + ".lock"
+func (s *Storage) Unlock(fn string) error {
+	lockf := filepath.Join(s.dir, fn) + ".lock"
 	if err := os.Remove(lockf); err != nil {
 		return err
 	}
@@ -83,12 +83,12 @@ func (md *Metadata) Unlock(fn string) error {
 }
 
 // UnlockMany unlocks multiples files locked by LockMany().
-func (md *Metadata) UnlockMany(filenames []string) error {
+func (s *Storage) UnlockMany(filenames []string) error {
 	sorted := make([]string, len(filenames))
 	copy(sorted, filenames)
 	sort.Sort(sort.Reverse(sort.StringSlice(filenames)))
 	for _, f := range sorted {
-		if err := md.Unlock(f); err != nil {
+		if err := s.Unlock(f); err != nil {
 			return err
 		}
 	}
@@ -113,7 +113,7 @@ func tryToRemoveStaleLock(lockf string, deadline time.Duration) {
 // Example:
 //   func foo() (retErr error) {
 //     var foo FooStruct
-//     commit, err := md.OpenForUpdate(filename, &foo)
+//     commit, err := s.OpenForUpdate(filename, &foo)
 //     if err != nil {
 //       panic(err)
 //     }
@@ -122,8 +122,8 @@ func tryToRemoveStaleLock(lockf string, deadline time.Duration) {
 //     foo.Bar = X
 //     return commit(true, nil) // commit
 //  }
-func (md *Metadata) OpenForUpdate(f string, obj interface{}) (func(commit bool, errp *error) error, error) {
-	return md.OpenManyForUpdate([]string{f}, []interface{}{obj})
+func (s *Storage) OpenForUpdate(f string, obj interface{}) (func(commit bool, errp *error) error, error) {
+	return s.OpenManyForUpdate([]string{f}, []interface{}{obj})
 }
 
 // OpenManyForUpdate is like OpenForUpdate, but for multiple files.
@@ -134,7 +134,7 @@ func (md *Metadata) OpenForUpdate(f string, obj interface{}) (func(commit bool, 
 //     var foo FooStruct
 //     var bar BarStruct
 //     // foo is read from file1, bar is read from file2.
-//     commit, err := md.OpenManyForUpdate([]string{file1, file2}, []interface{}{&foo, &bar})
+//     commit, err := s.OpenManyForUpdate([]string{file1, file2}, []interface{}{&foo, &bar})
 //     if err != nil {
 //       panic(err)
 //     }
@@ -144,7 +144,7 @@ func (md *Metadata) OpenForUpdate(f string, obj interface{}) (func(commit bool, 
 //     bar.Y = "new Y"
 //     return commit(true, nil) // commit
 //  }
-func (md *Metadata) OpenManyForUpdate(files []string, objects interface{}) (func(commit bool, errp *error) error, error) {
+func (s *Storage) OpenManyForUpdate(files []string, objects interface{}) (func(commit bool, errp *error) error, error) {
 	if reflect.TypeOf(objects).Kind() != reflect.Slice {
 		log.Panic("objects must be a slice")
 	}
@@ -152,7 +152,7 @@ func (md *Metadata) OpenManyForUpdate(files []string, objects interface{}) (func
 	if len(files) != objValue.Len() {
 		log.Panicf("len(files) != len(objects), %d != %d", len(files), objValue.Len())
 	}
-	if err := md.LockMany(files); err != nil {
+	if err := s.LockMany(files); err != nil {
 		return nil, err
 	}
 	type readValue struct {
@@ -164,7 +164,7 @@ func (md *Metadata) OpenManyForUpdate(files []string, objects interface{}) (func
 	keys := make([]*crypto.EncryptionKey, len(files))
 	for i := range files {
 		go func(i int, file string, obj interface{}) {
-			k, err := md.ReadDataFile(file, obj)
+			k, err := s.ReadDataFile(file, obj)
 			ch <- readValue{i, k, err}
 		}(i, files[i], objValue.Index(i).Interface())
 	}
@@ -178,8 +178,8 @@ func (md *Metadata) OpenManyForUpdate(files []string, objects interface{}) (func
 		keys[v.i] = v.k
 	}
 	if errorList != nil {
-		md.UnlockMany(files)
-		return nil, fmt.Errorf("md.ReadDataFile: %v", errorList)
+		s.UnlockMany(files)
+		return nil, fmt.Errorf("s.ReadDataFile: %v", errorList)
 	}
 
 	var called, committed bool
@@ -200,11 +200,11 @@ func (md *Metadata) OpenManyForUpdate(files []string, objects interface{}) (func
 			// original data, and restore it if anything goes wrong.
 			//
 			// If the process dies in the middle of saving the data, the backup will be
-			// restored automatically when the process restarts. See md.New().
+			// restored automatically when the process restarts. See NewStorage().
 			var backup *backup
 			if len(files) > 1 {
 				var err error
-				if backup, err = md.createBackup(files); err != nil {
+				if backup, err = s.createBackup(files); err != nil {
 					*errp = err
 					return *errp
 				}
@@ -212,7 +212,7 @@ func (md *Metadata) OpenManyForUpdate(files []string, objects interface{}) (func
 			ch := make(chan error)
 			for i := range files {
 				go func(k *crypto.EncryptionKey, file string, obj interface{}) {
-					ch <- md.SaveDataFile(k, file, obj)
+					ch <- s.SaveDataFile(k, file, obj)
 				}(keys[i], files[i], objValue.Index(i).Interface())
 			}
 			var errorList []error
@@ -226,7 +226,7 @@ func (md *Metadata) OpenManyForUpdate(files []string, objects interface{}) (func
 					backup.restore()
 				}
 				if *errp == nil {
-					*errp = fmt.Errorf("md.SaveDataFile: %v", errorList)
+					*errp = fmt.Errorf("s.SaveDataFile: %v", errorList)
 				}
 			} else {
 				if backup != nil {
@@ -235,7 +235,7 @@ func (md *Metadata) OpenManyForUpdate(files []string, objects interface{}) (func
 				committed = true
 			}
 		}
-		if err := md.UnlockMany(files); err != nil && *errp == nil {
+		if err := s.UnlockMany(files); err != nil && *errp == nil {
 			*errp = err
 		}
 		if !commit && *errp == nil {
@@ -246,14 +246,14 @@ func (md *Metadata) OpenManyForUpdate(files []string, objects interface{}) (func
 }
 
 // DumpFile writes the decrypted content of a file to stdout.
-func (md *Metadata) DumpFile(filename string) error {
-	f, err := os.Open(filepath.Join(md.dir, filename))
+func (s *Storage) DumpFile(filename string) error {
+	f, err := os.Open(filepath.Join(s.dir, filename))
 	if err != nil {
 		return err
 	}
 	defer f.Close()
 	// Read the encrypted file key.
-	k, err := md.masterKey.ReadEncryptedKey(f)
+	k, err := s.masterKey.ReadEncryptedKey(f)
 	if err != nil {
 		return err
 	}
@@ -273,14 +273,14 @@ func (md *Metadata) DumpFile(filename string) error {
 }
 
 // ReadDataFile reads a json object from a file.
-func (md *Metadata) ReadDataFile(filename string, obj interface{}) (*crypto.EncryptionKey, error) {
-	f, err := os.Open(filepath.Join(md.dir, filename))
+func (s *Storage) ReadDataFile(filename string, obj interface{}) (*crypto.EncryptionKey, error) {
+	f, err := os.Open(filepath.Join(s.dir, filename))
 	if err != nil {
 		return nil, err
 	}
 	defer f.Close()
 	// Read the encrypted file key.
-	k, err := md.masterKey.ReadEncryptedKey(f)
+	k, err := s.masterKey.ReadEncryptedKey(f)
 	if err != nil {
 		return nil, err
 	}
@@ -303,12 +303,12 @@ func (md *Metadata) ReadDataFile(filename string, obj interface{}) (*crypto.Encr
 }
 
 // SaveDataFile atomically replace a json object in a file.
-func (md *Metadata) SaveDataFile(k *crypto.EncryptionKey, filename string, obj interface{}) error {
-	filename = filepath.Join(md.dir, filename)
+func (s *Storage) SaveDataFile(k *crypto.EncryptionKey, filename string, obj interface{}) error {
+	filename = filepath.Join(s.dir, filename)
 	if k == nil {
 		// No file key provided, created a new one.
 		var err error
-		if k, err = md.masterKey.NewEncryptionKey(); err != nil {
+		if k, err = s.masterKey.NewEncryptionKey(); err != nil {
 			return err
 		}
 		if err = createParentIfNotExist(filename); err != nil {

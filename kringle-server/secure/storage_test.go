@@ -1,4 +1,4 @@
-package md
+package secure
 
 import (
 	"errors"
@@ -21,20 +21,20 @@ func encrypterDecrypter() crypto.EncryptionKey {
 
 func TestLock(t *testing.T) {
 	dir := t.TempDir()
-	md := New(dir, encrypterDecrypter())
+	s := NewStorage(dir, encrypterDecrypter())
 	fn := "foo"
 
-	if err := md.Lock(fn); err != nil {
+	if err := s.Lock(fn); err != nil {
 		t.Fatalf("Lock() failed: %v", err)
 	}
 	go func() {
 		time.Sleep(100 * time.Millisecond)
-		md.Unlock(fn)
+		s.Unlock(fn)
 	}()
-	if err := md.Lock(fn); err != nil {
+	if err := s.Lock(fn); err != nil {
 		t.Errorf("Lock() failed: %v", err)
 	}
-	if err := md.Unlock(fn); err != nil {
+	if err := s.Unlock(fn); err != nil {
 		t.Errorf("Unlock() failed: %v", err)
 	}
 }
@@ -42,22 +42,22 @@ func TestLock(t *testing.T) {
 func TestOpenForUpdate(t *testing.T) {
 	dir := t.TempDir()
 	fn := "test.json"
-	md := New(dir, encrypterDecrypter())
+	s := NewStorage(dir, encrypterDecrypter())
 
 	type Foo struct {
 		Foo string `json:"foo"`
 	}
 	foo := Foo{"foo"}
-	if err := md.SaveDataFile(nil, fn, foo); err != nil {
-		t.Fatalf("md.SaveDataFile failed: %v", err)
+	if err := s.SaveDataFile(nil, fn, foo); err != nil {
+		t.Fatalf("s.SaveDataFile failed: %v", err)
 	}
 	var bar Foo
-	commit, err := md.OpenForUpdate(fn, &bar)
+	commit, err := s.OpenForUpdate(fn, &bar)
 	if err != nil {
-		t.Fatalf("md.OpenForUpdate failed: %v", err)
+		t.Fatalf("s.OpenForUpdate failed: %v", err)
 	}
 	if !reflect.DeepEqual(foo, bar) {
-		t.Fatalf("md.OpenForUpdate() got %+v, want %+v", bar, foo)
+		t.Fatalf("s.OpenForUpdate() got %+v, want %+v", bar, foo)
 	}
 	bar.Foo = "bar"
 	if err := commit(true, nil); err != nil {
@@ -67,8 +67,8 @@ func TestOpenForUpdate(t *testing.T) {
 		t.Errorf("unexpected error. Want %v, got %v", ErrAlreadyCommitted, err)
 	}
 
-	if _, err := md.ReadDataFile(fn, &foo); err != nil {
-		t.Fatalf("md.ReadDataFile() failed: %v", err)
+	if _, err := s.ReadDataFile(fn, &foo); err != nil {
+		t.Fatalf("s.ReadDataFile() failed: %v", err)
 	}
 	if !reflect.DeepEqual(foo, bar) {
 		t.Fatalf("d.openForUpdate() got %+v, want %+v", foo, bar)
@@ -78,22 +78,22 @@ func TestOpenForUpdate(t *testing.T) {
 func TestRollback(t *testing.T) {
 	dir := t.TempDir()
 	fn := "test.json"
-	md := New(dir, encrypterDecrypter())
+	s := NewStorage(dir, encrypterDecrypter())
 
 	type Foo struct {
 		Foo string `json:"foo"`
 	}
 	foo := Foo{"foo"}
-	if err := md.SaveDataFile(nil, fn, foo); err != nil {
-		t.Fatalf("md.SaveDataFile failed: %v", err)
+	if err := s.SaveDataFile(nil, fn, foo); err != nil {
+		t.Fatalf("s.SaveDataFile failed: %v", err)
 	}
 	var bar Foo
-	commit, err := md.OpenForUpdate(fn, &bar)
+	commit, err := s.OpenForUpdate(fn, &bar)
 	if err != nil {
-		t.Fatalf("md.OpenForUpdate failed: %v", err)
+		t.Fatalf("s.OpenForUpdate failed: %v", err)
 	}
 	if !reflect.DeepEqual(foo, bar) {
-		t.Fatalf("md.OpenForUpdate() got %+v, want %+v", bar, foo)
+		t.Fatalf("s.OpenForUpdate() got %+v, want %+v", bar, foo)
 	}
 	bar.Foo = "bar"
 	if err := commit(false, nil); err != ErrRolledBack {
@@ -104,17 +104,17 @@ func TestRollback(t *testing.T) {
 	}
 
 	var foo2 Foo
-	if _, err := md.ReadDataFile(fn, &foo2); err != nil {
-		t.Fatalf("md.ReadDataFile() failed: %v", err)
+	if _, err := s.ReadDataFile(fn, &foo2); err != nil {
+		t.Fatalf("s.ReadDataFile() failed: %v", err)
 	}
 	if !reflect.DeepEqual(foo, foo2) {
-		t.Fatalf("md.OpenForUpdate() got %+v, want %+v", foo2, foo)
+		t.Fatalf("s.OpenForUpdate() got %+v, want %+v", foo2, foo)
 	}
 }
 
 func TestOpenForUpdateDeferredDone(t *testing.T) {
 	dir := t.TempDir()
-	md := New(dir, encrypterDecrypter())
+	s := NewStorage(dir, encrypterDecrypter())
 
 	// This function should return os.ErrNotExist because the file open for
 	// update can't be saved.
@@ -124,9 +124,9 @@ func TestOpenForUpdateDeferredDone(t *testing.T) {
 			Foo string `json:"foo"`
 		}
 		var foo Foo
-		commit, err := md.OpenForUpdate(fn, &foo)
+		commit, err := s.OpenForUpdate(fn, &foo)
 		if err != nil {
-			t.Fatalf("md.OpenForUpdate failed: %v", err)
+			t.Fatalf("s.OpenForUpdate failed: %v", err)
 		}
 		defer commit(true, &retErr)
 		if err := os.RemoveAll(filepath.Join(dir, "sub")); err != nil {

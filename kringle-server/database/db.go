@@ -16,7 +16,7 @@ import (
 
 	"kringle-server/crypto"
 	"kringle-server/log"
-	"kringle-server/md"
+	"kringle-server/secure"
 )
 
 var (
@@ -38,7 +38,7 @@ func New(dir, passphrase string) *Database {
 	if err != nil {
 		log.Fatal("Failed to decrypt master key")
 	}
-	db.md = md.New(dir, db.masterKey.EncryptionKey)
+	db.storage = secure.NewStorage(dir, db.masterKey.EncryptionKey)
 	return db
 }
 
@@ -47,7 +47,7 @@ func New(dir, passphrase string) *Database {
 type Database struct {
 	dir       string
 	masterKey *crypto.MasterKey
-	md        *md.Metadata
+	storage   *secure.Storage
 }
 
 // Dir returns the directory where the database stores its data.
@@ -114,12 +114,12 @@ func showCallStack() {
 }
 
 func (d Database) DumpFile(filename string) error {
-	return d.md.DumpFile(filename)
+	return d.storage.DumpFile(filename)
 }
 
 func (d Database) DumpUsers() {
 	var ul []userList
-	if _, err := d.md.ReadDataFile(d.filePath(userListFile), &ul); err != nil {
+	if _, err := d.storage.ReadDataFile(d.filePath(userListFile), &ul); err != nil {
 		log.Errorf("ReadDataFile: %v", err)
 	}
 	for _, u := range ul {

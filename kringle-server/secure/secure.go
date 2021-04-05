@@ -1,5 +1,5 @@
-// Package md stores arbitrary metadata in encrypted files.
-package md
+// Package secure stores arbitrary metadata in encrypted files.
+package secure
 
 import (
 	"errors"
@@ -11,22 +11,22 @@ import (
 	"kringle-server/log"
 )
 
-// New returns a new Metadata rooted at dir. The caller must provide an
+// NewStorage returns a new Storage rooted at dir. The caller must provide an
 // EncryptionKey that will be used to encrypt and decrypt per-file encryption
 // keys.
-func New(dir string, masterKey crypto.EncryptionKey) *Metadata {
-	md := &Metadata{
+func NewStorage(dir string, masterKey crypto.EncryptionKey) *Storage {
+	s := &Storage{
 		dir:       dir,
 		masterKey: masterKey,
 	}
-	if err := md.rollbackPendingOps(); err != nil {
-		log.Fatalf("md.rollbackPendingOps: %v", err)
+	if err := s.rollbackPendingOps(); err != nil {
+		log.Fatalf("s.rollbackPendingOps: %v", err)
 	}
-	return md
+	return s
 }
 
 // Offers the API to atomically read, write, and update encrypted files.
-type Metadata struct {
+type Storage struct {
 	dir       string
 	masterKey crypto.EncryptionKey
 }

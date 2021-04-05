@@ -1,4 +1,4 @@
-package md
+package secure
 
 import (
 	"errors"
@@ -11,33 +11,33 @@ import (
 	"kringle-server/log"
 )
 
-func (md *Metadata) createBackup(files []string) (*backup, error) {
-	b := &backup{dir: md.dir, TS: time.Now(), Files: files}
+func (s *Storage) createBackup(files []string) (*backup, error) {
+	b := &backup{dir: s.dir, TS: time.Now(), Files: files}
 	if err := b.backup(); err != nil {
 		return nil, err
 	}
 	b.pending = filepath.Join("pending", fmt.Sprintf("%d", b.TS.UnixNano()))
-	if err := md.SaveDataFile(nil, b.pending, b); err != nil {
+	if err := s.SaveDataFile(nil, b.pending, b); err != nil {
 		return nil, err
 	}
 	return b, nil
 }
 
-func (md *Metadata) rollbackPendingOps() error {
-	m, err := filepath.Glob(filepath.Join(md.dir, "pending", "*"))
+func (s *Storage) rollbackPendingOps() error {
+	m, err := filepath.Glob(filepath.Join(s.dir, "pending", "*"))
 	if err != nil {
 		return err
 	}
 	for _, f := range m {
-		rel, err := filepath.Rel(md.dir, f)
+		rel, err := filepath.Rel(s.dir, f)
 		if err != nil {
 			return err
 		}
 		var b backup
-		if _, err := md.ReadDataFile(rel, &b); err != nil {
+		if _, err := s.ReadDataFile(rel, &b); err != nil {
 			return err
 		}
-		b.dir = md.dir
+		b.dir = s.dir
 		b.pending = rel
 		// Make sure pending is this backup is really abandoned.
 		time.Sleep(time.Until(b.TS.Add(5 * time.Second)))
@@ -46,7 +46,7 @@ func (md *Metadata) rollbackPendingOps() error {
 		}
 		log.Infof("Rolled back pending operation %d [%v]", b.TS.UnixNano(), b.Files)
 		// The abandoned files were most likely locked.
-		md.UnlockMany(b.Files)
+		s.UnlockMany(b.Files)
 	}
 	return nil
 }
