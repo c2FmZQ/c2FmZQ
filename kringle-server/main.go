@@ -14,9 +14,9 @@ import (
 	"os"
 	"os/signal"
 	"strings"
-	"syscall"
 	"time"
 
+	"golang.org/x/sys/unix"
 	"golang.org/x/term"
 	"kringle-server/database"
 	"kringle-server/log"
@@ -34,6 +34,10 @@ var (
 
 	passphraseFile = flag.String("passphrase_file", "", "The name of the file containing the passphrase that protects the server's metadata. If left empty, the server will prompt for a passphrase when it starts.")
 	htdigestFile   = flag.String("htdigest_file", "", "The name of the htdigest file to use for basic auth for some endpoints, e.g. /metrics")
+
+	mlockall = flag.Bool("mlockall", false, "Whether to prevent memory from being swapped to disk.")
+	setuid   = flag.Int("uid", -1, "The uid to use.")
+	setgid   = flag.Int("gid", -1, "The gid to use.")
 )
 
 func usage() {
@@ -47,6 +51,8 @@ func main() {
 	flag.Usage = usage
 	flag.Parse()
 	log.Level = *logLevel
+
+	lockMemory()
 
 	if *dbFlag == "" {
 		log.Error("--db must be set")
@@ -69,8 +75,8 @@ func main() {
 	done := make(chan struct{})
 	go func() {
 		ch := make(chan os.Signal, 1)
-		signal.Notify(ch, syscall.SIGINT)
-		signal.Notify(ch, syscall.SIGTERM)
+		signal.Notify(ch, unix.SIGINT)
+		signal.Notify(ch, unix.SIGTERM)
 		sig := <-ch
 		log.Infof("Received signal %d (%s)", sig, sig)
 		if err := s.Shutdown(); err != nil {
@@ -92,6 +98,24 @@ func main() {
 	}
 	<-done
 	log.Info("Server exited cleanly.")
+}
+
+func lockMemory() {
+	if *mlockall {
+		if err := unix.Mlockall(unix.MCL_FUTURE | unix.MCL_CURRENT); err != nil {
+			log.Fatalf("unix.Mlockall: %v", err)
+		}
+	}
+	if *setgid >= 0 {
+		if err := unix.Setresgid(*setgid, *setgid, *setgid); err != nil {
+			log.Fatalf("unix.Setresgid(%d): %v", *setgid, err)
+		}
+	}
+	if *setuid >= 0 {
+		if err := unix.Setresuid(*setuid, *setuid, *setuid); err != nil {
+			log.Fatalf("unix.Setresuid(%d): %v", *setuid, err)
+		}
+	}
 }
 
 func passphrase() string {
