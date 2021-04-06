@@ -1,3 +1,5 @@
+// Package crypto implements a few abstractions around the go crypto packages
+// to manage encryption keys, encrypt small data, and streams.
 package crypto
 
 import (
@@ -23,13 +25,18 @@ const (
 	encryptedKeySize = 97
 )
 
+// MasterKey is an encryption key that is normally stored on disk encrypted with
+// a passphrase. It is used to create file keys used to encrypt the content of
+// files.
 type MasterKey struct {
 	EncryptionKey
 }
 
+// EncryptionKey is an encryption key that can be used to encrypt and decrypt
+// data and streams.
 type EncryptionKey struct {
-	key           []byte
-	encrypted_key []byte
+	key          []byte
+	encryptedKey []byte
 }
 
 // CreateMasterKey creates a new master key.
@@ -113,7 +120,7 @@ func (mk MasterKey) Save(passphrase, file string) error {
 	return nil
 }
 
-// Hash returns a hash of b.
+// Hash returns the HMAC-SHA256 hash of b.
 func (k EncryptionKey) Hash(b []byte) []byte {
 	mac := hmac.New(sha256.New, k.key)
 	mac.Write(b)
@@ -180,7 +187,7 @@ func (k EncryptionKey) Encrypt(data []byte) ([]byte, error) {
 	return out, nil
 }
 
-// NewEncryptionKey creates a new AES-256 key.
+// NewEncryptionKey creates a new AES-256 encryption key.
 func (k EncryptionKey) NewEncryptionKey() (*EncryptionKey, error) {
 	key := make([]byte, 32)
 	if _, err := io.ReadFull(rand.Reader, key); err != nil {
@@ -190,27 +197,28 @@ func (k EncryptionKey) NewEncryptionKey() (*EncryptionKey, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &EncryptionKey{key: key, encrypted_key: enc}, nil
+	return &EncryptionKey{key: key, encryptedKey: enc}, nil
 }
 
 // DecryptKey decrypts an encrypted key.
-func (k EncryptionKey) DecryptKey(b []byte) (*EncryptionKey, error) {
-	if len(b) != encryptedKeySize {
-		return nil, fmt.Errorf("invalid encrypted key size: %d", len(b))
+func (k EncryptionKey) DecryptKey(encryptedKey []byte) (*EncryptionKey, error) {
+	if len(encryptedKey) != encryptedKeySize {
+		return nil, fmt.Errorf("invalid encrypted key size: %d", len(encryptedKey))
 	}
-	key, err := k.Decrypt(b)
+	key, err := k.Decrypt(encryptedKey)
 	if err != nil {
 		return nil, err
 	}
 	if len(key) != 32 {
 		return nil, errors.New("invalid key")
 	}
-	encrypted_key := make([]byte, len(b))
-	copy(encrypted_key, b)
-	return &EncryptionKey{key: key, encrypted_key: encrypted_key}, nil
+	ek := &EncryptionKey{key: key}
+	ek.encryptedKey = make([]byte, len(encryptedKey))
+	copy(ek.encryptedKey, encryptedKey)
+	return ek, nil
 }
 
-// StartReader opens a reader to decrypt data.
+// StartReader opens a reader to decrypt a stream of data.
 func (k EncryptionKey) StartReader(r io.Reader) (*cipher.StreamReader, error) {
 	block, err := aes.NewCipher(k.key)
 	if err != nil {
@@ -233,7 +241,7 @@ func (k EncryptionKey) StartReader(r io.Reader) (*cipher.StreamReader, error) {
 	}, nil
 }
 
-// StartWriter opens a writer to encrypt data.
+// StartWriter opens a writer to encrypt a stream of data.
 func (k EncryptionKey) StartWriter(w io.Writer) (*cipher.StreamWriter, error) {
 	block, err := aes.NewCipher(k.key)
 	if err != nil {
@@ -267,7 +275,7 @@ func (k EncryptionKey) ReadEncryptedKey(r io.Reader) (*EncryptionKey, error) {
 
 // WriteEncryptedKey writes the encrypted key to the writer.
 func (k EncryptionKey) WriteEncryptedKey(w io.Writer) error {
-	n, err := w.Write(k.encrypted_key)
+	n, err := w.Write(k.encryptedKey)
 	if n != encryptedKeySize {
 		return fmt.Errorf("wrote encrypted key of unexpected size: %d", n)
 	}

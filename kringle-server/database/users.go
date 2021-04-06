@@ -31,33 +31,55 @@ type userList struct {
 
 // Encapsulates all the information about a user account.
 type User struct {
-	UserID         int64                 `json:"userId"`
-	Email          string                `json:"email"`
-	HashedPassword string                `json:"hashedPassword"`
-	Salt           string                `json:"salt"`
-	HomeFolder     string                `json:"homeFolder"`
-	KeyBundle      string                `json:"keyBundle"`
-	IsBackup       string                `json:"isBackup"`
-	ServerKey      stingle.SecretKey     `json:"serverKey"`
-	ServerSignKey  stingle.SignSecretKey `json:"serverSignKey"`
-	PublicKey      stingle.PublicKey     `json:"publicKey"`
-	TokenSeq       int                   `json:"tokenSeq"`
+	// The unique user ID of the user.
+	UserID int64 `json:"userId"`
+	// The unique email address of the user.
+	Email string `json:"email"`
+	// A hash of the user's password.
+	HashedPassword string `json:"hashedPassword"`
+	// The salt used by the user to create the password.
+	Salt string `json:"salt"`
+	// The user's home folder on the app. Not used by the server.
+	HomeFolder string `json:"homeFolder"`
+	// The user's key bundle. It contains the user's public key, and
+	// optionally, their encrypted secret key.
+	KeyBundle string `json:"keyBundle"`
+	// Whether KeyBundle contains the encrypted secret key.
+	IsBackup string `json:"isBackup"`
+	// The server's secret key used with this user.
+	ServerKey stingle.SecretKey `json:"serverKey"`
+	// The server's secret key used for signing tokens for this user.
+	ServerSignKey stingle.SignSecretKey `json:"serverSignKey"`
+	// The user's public key, extracted from the key bundle.
+	PublicKey stingle.PublicKey `json:"publicKey"`
+	// A sequence number of valid tokens. Only tokens with this sequence
+	// number are valid. The number of incremented when the user logs out
+	// or changes their password.
+	TokenSeq int `json:"tokenSeq"`
 }
 
 // A user's contact list information.
 type ContactList struct {
+	// All the user's contacts, keyed by UserID.
 	Contacts map[int64]*Contact `json:"contacts"`
-	In       map[int64]bool     `json:"in"`
-	Deletes  []DeleteEvent      `json:"deletes"`
+	// All users who have this user in their contact list.
+	In map[int64]bool `json:"in"`
+	// Delete events for contacts.
+	Deletes []DeleteEvent `json:"deletes"`
 }
 
 // Encapsulates the information about a user's contact (another user).
 type Contact struct {
-	UserID       int64  `json:"userId"`
-	Email        string `json:"email"`
-	PublicKey    string `json:"publicKey"`
-	DateUsed     int64  `json:"dateUsed,omitempty"`
-	DateModified int64  `json:"dateModified,omitempty"`
+	// The contact's UserID.
+	UserID int64 `json:"userId"`
+	// The contact's email address.
+	Email string `json:"email"`
+	// The contact's public key.
+	PublicKey string `json:"publicKey"`
+	// ?
+	DateUsed int64 `json:"dateUsed,omitempty"`
+	// The time when the contact was added or modified.
+	DateModified int64 `json:"dateModified,omitempty"`
 }
 
 // ServerPublicKeyForExport returns the server's public key associated with this
@@ -115,7 +137,7 @@ func (d *Database) AddUser(u User) (retErr error) {
 	return d.storage.SaveDataFile(nil, d.filePath(u.home(userFile)), u)
 }
 
-// UpdateUser saves a user object.
+// UpdateUser adds or updates a user object.
 func (d *Database) UpdateUser(u User) error {
 	var f User
 	commit, err := d.storage.OpenForUpdate(d.filePath(u.home(userFile)), &f)

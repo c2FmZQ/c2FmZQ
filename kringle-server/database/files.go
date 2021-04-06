@@ -20,30 +20,50 @@ const (
 	AlbumSet   = "2"
 )
 
+// FileSet encapsulates to information of a file set, i.e. a group of files
+// like the Gallery, the Trash, or albums.
 type FileSet struct {
-	Album   *AlbumSpec           `json:"album,omitempty"`
-	Files   map[string]*FileSpec `json:"files"`
-	Deletes []DeleteEvent        `json:"deletes,omitempty"`
+	// If the file set is an album, Album points to the album spec.
+	Album *AlbumSpec `json:"album,omitempty"`
+	// All the files in the file set, keyed by file name.
+	Files map[string]*FileSpec `json:"files"`
+	// The deletion events for the file set.
+	Deletes []DeleteEvent `json:"deletes,omitempty"`
 }
 
+// FileSpec encapsulates the information of a file.
 type FileSpec struct {
-	File           string `json:"file"`
-	Headers        string `json:"headers"`
-	Set            string `json:"set"`
-	DateCreated    int64  `json:"dateCreated"`
-	AlbumID        string `json:"albumId,omitempty"`
-	DateModified   int64  `json:"dateModified"`
-	Version        string `json:"version"`
-	StoreFile      string `json:"storeFile"`
-	StoreFileSize  int64  `json:"storeFilesize"`
-	StoreThumb     string `json:"storeThumb"`
-	StoreThumbSize int64  `json:"storeThumbSize"`
+	// The file name.
+	File string `json:"file"`
+	// The file headers, i.e. encrypted file key.
+	Headers string `json:"headers"`
+	// The set in which the file is.
+	Set string `json:"set"`
+	// The time when the file was created.
+	DateCreated int64 `json:"dateCreated"`
+	// The album ID, if the file set is an album.
+	AlbumID string `json:"albumId,omitempty"`
+	// The time when the file was modified, e.g. added to a set.
+	DateModified int64 `json:"dateModified"`
+	// Version?
+	Version string `json:"version"`
+	// The file path where the file content is stored.
+	StoreFile string `json:"storeFile"`
+	// The size of the file content.
+	StoreFileSize int64 `json:"storeFilesize"`
+	// The file path where the file thumbnail is stored.
+	StoreThumb string `json:"storeThumb"`
+	// The size of the file thumbnail.
+	StoreThumbSize int64 `json:"storeThumbSize"`
 }
 
+// BlobSpec encapsulated the information of a blob (the content of a file).
 type BlobSpec struct {
+	// The number of FileSpecs that point to this blob.
 	RefCount int `json:"refCount"`
 }
 
+// incRefCount increases the RefCount of a blob by delta, which can be negative.
 func (d *Database) incRefCount(blob string, delta int) int {
 	var blobSpec BlobSpec
 	commit, err := d.storage.OpenForUpdate(blob+".ref", &blobSpec)
@@ -66,10 +86,12 @@ func (d *Database) incRefCount(blob string, delta int) int {
 	return blobSpec.RefCount
 }
 
+// fileSetPath returns the path where a file set is stored.
 func (d *Database) fileSetPath(user User, set string) string {
 	return d.filePath(user.home(fmt.Sprintf(fileSetPattern, set)))
 }
 
+// addFileToFileSet adds file to one of user's file sets.
 func (d *Database) addFileToFileSet(user User, file FileSpec) (retErr error) {
 	var fileName string
 	if file.Set == AlbumSet {
@@ -101,6 +123,7 @@ func (d *Database) addFileToFileSet(user User, file FileSpec) (retErr error) {
 	return nil
 }
 
+// makeFilePath creates a random file name for a new file.
 func (d *Database) makeFilePath() (string, error) {
 	name := make([]byte, 32)
 	if _, err := rand.Read(name); err != nil {
@@ -110,6 +133,9 @@ func (d *Database) makeFilePath() (string, error) {
 	return filepath.Join(dir, base64.RawURLEncoding.EncodeToString(name)), nil
 }
 
+// AddFile adds a new file to the database. The file content and thumbnail are
+// already on disk in temporary files (file.StoreFile and file.StoreThumb). They
+// will be moved to random file names.
 func (d *Database) AddFile(user User, file FileSpec) error {
 	fn, err := d.makeFilePath()
 	if err != nil {
@@ -150,6 +176,7 @@ func (d *Database) AddFile(user User, file FileSpec) error {
 	return nil
 }
 
+// FileSet retrives a given file set, for reading only.
 func (d *Database) FileSet(user User, set, albumID string) (*FileSet, error) {
 	var fileName string
 	if set == AlbumSet {
@@ -174,6 +201,7 @@ func (d *Database) FileSet(user User, set, albumID string) (*FileSet, error) {
 	return &fileSet, nil
 }
 
+// fileSetForUpdate retrieves a file set for update.
 func (d *Database) fileSetForUpdate(user User, set, albumID string) (func(bool, *error) error, *FileSet, error) {
 	commit, fileSets, err := d.fileSetsForUpdate(user, []string{set}, []string{albumID})
 	if err != nil {
@@ -182,6 +210,7 @@ func (d *Database) fileSetForUpdate(user User, set, albumID string) (func(bool, 
 	return commit, fileSets[0], nil
 }
 
+// fileSetsForUpdate retrieves any number of file sets for atomic update.
 func (d *Database) fileSetsForUpdate(user User, sets, albumIDs []string) (func(bool, *error) error, []*FileSet, error) {
 	var filenames []string
 	for i := range sets {
@@ -215,16 +244,26 @@ func (d *Database) fileSetsForUpdate(user User, sets, albumIDs []string) (func(b
 	return commit, fileSets, nil
 }
 
+// MoveFileParams specifies what a move operation does.
 type MoveFileParams struct {
-	SetFrom     string
-	SetTo       string
+	// The set where the files originate.
+	SetFrom string
+	// The set where the files are going.
+	SetTo string
+	// The album where the files originate, or empty if not an album.
 	AlbumIDFrom string
-	AlbumIDTo   string
-	IsMoving    bool
-	Filenames   []string
-	Headers     []string
+	// The album where the files are going, or empty if not an album.
+	AlbumIDTo string
+	// True is the files are moving. False if they are being copied.
+	IsMoving bool
+	// The files moving or being copied.
+	Filenames []string
+	// The new headers for the files, or empty if the headers aren't
+	// changing.
+	Headers []string
 }
 
+// MoveFile moves or copies files between file sets.
 func (d *Database) MoveFile(user User, p MoveFileParams) (retErr error) {
 	if p.SetTo == p.SetFrom && p.AlbumIDTo == p.AlbumIDFrom {
 		return errors.New("src and dest are the same")
@@ -286,6 +325,7 @@ func (d *Database) MoveFile(user User, p MoveFileParams) (retErr error) {
 	return nil
 }
 
+// EmptyTrash deletes the files in the Trash set that were added up to time t.
 func (d *Database) EmptyTrash(user User, t int64) (retErr error) {
 	commit, fs, err := d.fileSetForUpdate(user, TrashSet, "")
 	if err != nil {
@@ -311,6 +351,7 @@ func (d *Database) EmptyTrash(user User, t int64) (retErr error) {
 	return nil
 }
 
+// DeleteFiles deletes specific files from the Trash set.
 func (d *Database) DeleteFiles(user User, files []string) (retErr error) {
 	commit, fs, err := d.fileSetForUpdate(user, TrashSet, "")
 	if err != nil {
@@ -334,6 +375,7 @@ func (d *Database) DeleteFiles(user User, files []string) (retErr error) {
 	return nil
 }
 
+// findFileInSet retrieves a given file from a user's file set.
 func (d *Database) findFileInSet(user User, set, albumID, filename string) (*FileSpec, error) {
 	fs, err := d.FileSet(user, set, albumID)
 	if err != nil {
@@ -345,6 +387,7 @@ func (d *Database) findFileInSet(user User, set, albumID, filename string) (*Fil
 	return nil, os.ErrNotExist
 }
 
+// downloadFileSpec opens a file for reading.
 func (d *Database) downloadFileSpec(fileSpec *FileSpec, thumb bool) (*os.File, error) {
 	if thumb {
 		return os.Open(filepath.Join(d.Dir(), fileSpec.StoreThumb))
@@ -352,6 +395,7 @@ func (d *Database) downloadFileSpec(fileSpec *FileSpec, thumb bool) (*os.File, e
 	return os.Open(filepath.Join(d.Dir(), fileSpec.StoreFile))
 }
 
+// DownloadFile locates a file and opens it for reading.
 func (d *Database) DownloadFile(user User, set, filename string, thumb bool) (*os.File, error) {
 	if set != AlbumSet {
 		fileSpec, err := d.findFileInSet(user, set, "", filename)

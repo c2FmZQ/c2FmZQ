@@ -1,5 +1,5 @@
-// Package database implements all the storage requirement of the kringle server
-// using a local filesystem. It doesn't use any external database server.
+// Package database implements all the storage requirement of the kringle
+// server.
 package database
 
 import (
@@ -36,14 +36,14 @@ func New(dir, passphrase string) *Database {
 		err = db.masterKey.Save(passphrase, mkFile)
 	}
 	if err != nil {
-		log.Fatal("Failed to decrypt master key")
+		log.Fatalf("Failed to decrypt master key: %v", err)
 	}
 	db.storage = secure.NewStorage(dir, db.masterKey.EncryptionKey)
 	return db
 }
 
-// Implements all the storage requirements of the kringle server using a local
-// filesystem.
+// Database implements all the storage requirements of the kringle server using
+// encrypted storage on a local filesystem.
 type Database struct {
 	dir       string
 	masterKey *crypto.MasterKey
@@ -55,6 +55,7 @@ func (d Database) Dir() string {
 	return d.dir
 }
 
+// filePath returns a cryptographically secure hash of a logical file name.
 func (d *Database) filePath(elems ...string) string {
 	name := d.masterKey.Hash([]byte(path.Join(elems...)))
 	dir := filepath.Join("metadata", fmt.Sprintf("%02X", name[0]), fmt.Sprintf("%02X", name[1]))
@@ -77,10 +78,13 @@ func boolToNumber(b bool) json.Number {
 	return json.Number("0")
 }
 
+// number converts an integer to a json.Number.
 func number(n int64) json.Number {
 	return json.Number(fmt.Sprintf("%d", n))
 }
 
+// createParentIfNotExist creates filename's parent directory if it doesn't
+// already exist.
 func createParentIfNotExist(filename string) error {
 	dir, _ := filepath.Split(filename)
 	if _, err := os.Stat(dir); errors.Is(err, os.ErrNotExist) {
@@ -91,6 +95,7 @@ func createParentIfNotExist(filename string) error {
 	return nil
 }
 
+// showCallStack logs the current call stack, for debugging.
 func showCallStack() {
 	pc := make([]uintptr, 10)
 	n := runtime.Callers(2, pc)
@@ -113,10 +118,12 @@ func showCallStack() {
 	}
 }
 
+// DumpFile shows the content of a file to stdout.
 func (d Database) DumpFile(filename string) error {
 	return d.storage.DumpFile(filename)
 }
 
+// DumpUsers shows information about all the users to stdout.
 func (d Database) DumpUsers() {
 	var ul []userList
 	if _, err := d.storage.ReadDataFile(d.filePath(userListFile), &ul); err != nil {

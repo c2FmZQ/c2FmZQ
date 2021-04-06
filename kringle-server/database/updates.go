@@ -10,13 +10,16 @@ import (
 	"kringle-server/stingle"
 )
 
+// DeleteEvent encapsulates a deletion event. The File and AlbumID fields are
+// different meanings depending on the value of Type.
 type DeleteEvent struct {
 	File    string `json:"file"`
 	AlbumID string `json:"albumId"`
-	Type    int    `json:"type"`
-	Date    int64  `json:"date"`
+	Type    int    `json:"type"` // See stingle/types.go
+	Date    int64  `json:"date"` // The time of the deletion.
 }
 
+// fileUpdatesForSet finds which files were added to the file set since ts.
 func (d *Database) fileUpdatesForSet(user User, set, albumID string, ts int64, ch chan<- stingle.File, wg *sync.WaitGroup) {
 	defer wg.Done()
 	fs, err := d.FileSet(user, set, albumID)
@@ -39,6 +42,8 @@ func (d *Database) fileUpdatesForSet(user User, set, albumID string, ts int64, c
 	}
 }
 
+// FileUpdates returns all the files that were added to a file set since time
+// ts.
 func (d *Database) FileUpdates(user User, set string, ts int64) ([]stingle.File, error) {
 	ch := make(chan stingle.File)
 	var wg sync.WaitGroup
@@ -76,6 +81,8 @@ func (d *Database) FileUpdates(user User, set string, ts int64) ([]stingle.File,
 	return out, nil
 }
 
+// deleteUpdatesForSet finds which files were deleted from the file set since
+// ts.
 func (d *Database) deleteUpdatesForSet(user User, set, albumID string, ts int64, ch chan<- stingle.DeleteEvent, wg *sync.WaitGroup) {
 	defer wg.Done()
 	fs, err := d.FileSet(user, set, albumID)
@@ -95,6 +102,8 @@ func (d *Database) deleteUpdatesForSet(user User, set, albumID string, ts int64,
 	}
 }
 
+// DeleteUpdates returns all the files that were deleted from a file set since
+// time ts.
 func (d *Database) DeleteUpdates(user User, ts int64) ([]stingle.DeleteEvent, error) {
 	out := []stingle.DeleteEvent{}
 
@@ -159,6 +168,8 @@ func (d *Database) getFileSizes(user User, set, albumID string, ch chan<- fileSi
 	}
 }
 
+// SpaceUsed calculates the sum of all the file sizes in a user's file sets,
+// counting each file only once, even if it is in multiple sets.
 func (d *Database) SpaceUsed(user User) (int64, error) {
 	var manifest AlbumManifest
 	if _, err := d.storage.ReadDataFile(d.filePath(user.home(albumManifest)), &manifest); err != nil && !errors.Is(err, os.ErrNotExist) {
