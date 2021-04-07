@@ -41,15 +41,15 @@ func (s *Server) handleUpload(req *http.Request) *stingle.Response {
 		log.Errorf("receiveUpload: %v", err)
 		return stingle.ResponseNOK()
 	}
-	_, user, err := s.checkToken(up.Token, "session")
+	_, user, err := s.checkToken(up.token, "session")
 	if err != nil {
 		return stingle.ResponseNOK()
 	}
 
-	if up.Set == database.AlbumSet {
-		albumSpec, err := s.db.Album(user, up.AlbumID)
+	if up.set == database.AlbumSet {
+		albumSpec, err := s.db.Album(user, up.albumID)
 		if err != nil {
-			log.Errorf("db.Album(%q, %q) failed: %v", user.Email, up.AlbumID, err)
+			log.Errorf("db.Album(%q, %q) failed: %v", user.Email, up.albumID, err)
 			return stingle.ResponseNOK()
 		}
 		if albumSpec.OwnerID != user.UserID && !albumSpec.Permissions.AllowAdd() {
@@ -57,7 +57,7 @@ func (s *Server) handleUpload(req *http.Request) *stingle.Response {
 		}
 	}
 
-	if err := s.db.AddFile(user, up.FileSpec); err != nil {
+	if err := s.db.AddFile(user, up.FileSpec, up.name, up.set, up.albumID); err != nil {
 		log.Errorf("AddFile: %v", err)
 		return stingle.ResponseNOK()
 	}

@@ -12,13 +12,16 @@ import (
 )
 
 // The return value of receiveUpload.
-type Upload struct {
+type upload struct {
 	database.FileSpec
-	Token string
+	token   string
+	name    string
+	set     string
+	albumID string
 }
 
 // receiveUpload processes a multipart/form-data.
-func receiveUpload(dir string, req *http.Request) (*Upload, error) {
+func receiveUpload(dir string, req *http.Request) (*upload, error) {
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return nil, err
 	}
@@ -27,7 +30,7 @@ func receiveUpload(dir string, req *http.Request) (*Upload, error) {
 		return nil, err
 	}
 
-	var upload Upload
+	var upload upload
 
 	for {
 		p, err := mr.NextPart()
@@ -47,7 +50,7 @@ func receiveUpload(dir string, req *http.Request) (*Upload, error) {
 				return nil, err
 			}
 
-			upload.FileSpec.File = p.FileName()
+			upload.name = p.FileName()
 			if p.FormName() == "file" {
 				upload.FileSpec.StoreFile = f.Name()
 				upload.FileSpec.StoreFileSize = size
@@ -74,13 +77,13 @@ func receiveUpload(dir string, req *http.Request) (*Upload, error) {
 			case "headers":
 				upload.FileSpec.Headers = slurp
 			case "set":
-				upload.FileSpec.Set = slurp
+				upload.set = slurp
 			case "dateCreated":
 				if upload.FileSpec.DateCreated, err = strconv.ParseInt(slurp, 10, 64); err != nil {
 					return nil, err
 				}
 			case "albumId":
-				upload.FileSpec.AlbumID = slurp
+				upload.albumID = slurp
 			case "dateModified":
 				if upload.FileSpec.DateModified, err = strconv.ParseInt(slurp, 10, 64); err != nil {
 					return nil, err
@@ -88,7 +91,7 @@ func receiveUpload(dir string, req *http.Request) (*Upload, error) {
 			case "version":
 				upload.FileSpec.Version = slurp
 			case "token":
-				upload.Token = slurp
+				upload.token = slurp
 			default:
 				log.Errorf("receiveUpload: unexpected form input: %q=%q", p.FormName(), slurp)
 			}

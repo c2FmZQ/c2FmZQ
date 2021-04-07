@@ -15,10 +15,7 @@ import (
 
 func addFile(db *database.Database, user database.User, name, set, albumID string) error {
 	fs := database.FileSpec{
-		File:           name,
 		Headers:        name + "-headers",
-		Set:            set,
-		AlbumID:        albumID,
 		DateCreated:    1,
 		DateModified:   2,
 		Version:        "1",
@@ -33,7 +30,7 @@ func addFile(db *database.Database, user database.User, name, set, albumID strin
 	if err := os.WriteFile(fs.StoreThumb, []byte("thumb content"), 0600); err != nil {
 		return err
 	}
-	return db.AddFile(user, fs)
+	return db.AddFile(user, fs, name, set, albumID)
 }
 
 func numFilesInSet(t *testing.T, db *database.Database, user database.User, set, albumID string) int {

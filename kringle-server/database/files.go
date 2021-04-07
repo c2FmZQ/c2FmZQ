@@ -33,16 +33,10 @@ type FileSet struct {
 
 // FileSpec encapsulates the information of a file.
 type FileSpec struct {
-	// The file name.
-	File string `json:"file"`
 	// The file headers, i.e. encrypted file key.
 	Headers string `json:"headers"`
-	// The set in which the file is.
-	Set string `json:"set"`
 	// The time when the file was created.
 	DateCreated int64 `json:"dateCreated"`
-	// The album ID, if the file set is an album.
-	AlbumID string `json:"albumId,omitempty"`
 	// The time when the file was modified, e.g. added to a set.
 	DateModified int64 `json:"dateModified"`
 	// Version?
@@ -92,16 +86,16 @@ func (d *Database) fileSetPath(user User, set string) string {
 }
 
 // addFileToFileSet adds file to one of user's file sets.
-func (d *Database) addFileToFileSet(user User, file FileSpec) (retErr error) {
+func (d *Database) addFileToFileSet(user User, file FileSpec, name, set, albumID string) (retErr error) {
 	var fileName string
-	if file.Set == AlbumSet {
-		albumRef, err := d.albumRef(user, file.AlbumID)
+	if set == AlbumSet {
+		albumRef, err := d.albumRef(user, albumID)
 		if err != nil {
 			return err
 		}
 		fileName = albumRef.File
 	} else {
-		fileName = d.fileSetPath(user, file.Set)
+		fileName = d.fileSetPath(user, set)
 	}
 	var fileSet FileSet
 	commit, err := d.storage.OpenForUpdate(fileName, &fileSet)
@@ -117,7 +111,7 @@ func (d *Database) addFileToFileSet(user User, file FileSpec) (retErr error) {
 	if fileSet.Deletes == nil {
 		fileSet.Deletes = []DeleteEvent{}
 	}
-	fileSet.Files[file.File] = &file
+	fileSet.Files[name] = &file
 	d.incRefCount(file.StoreFile, 1)
 	d.incRefCount(file.StoreThumb, 1)
 	return nil
@@ -136,7 +130,7 @@ func (d *Database) makeFilePath() (string, error) {
 // AddFile adds a new file to the database. The file content and thumbnail are
 // already on disk in temporary files (file.StoreFile and file.StoreThumb). They
 // will be moved to random file names.
-func (d *Database) AddFile(user User, file FileSpec) error {
+func (d *Database) AddFile(user User, file FileSpec, name, set, albumID string) error {
 	fn, err := d.makeFilePath()
 	if err != nil {
 		log.Errorf("makeFilePath() failed: %v", err)
@@ -164,7 +158,7 @@ func (d *Database) AddFile(user User, file FileSpec) error {
 	file.StoreThumb = tn
 	file.DateModified = nowInMS()
 
-	if err := d.addFileToFileSet(user, file); err != nil {
+	if err := d.addFileToFileSet(user, file, name, set, albumID); err != nil {
 		if err := os.Remove(filepath.Join(d.Dir(), fn)); err != nil {
 			log.Errorf("os.Remove(%q) failed: %v", fn, err)
 		}
@@ -284,8 +278,6 @@ func (d *Database) MoveFile(user User, p MoveFileParams) (retErr error) {
 			continue
 		}
 		toFile := *fromFile
-		toFile.Set = p.SetTo
-		toFile.AlbumID = p.AlbumIDTo
 		if len(p.Headers) == len(p.Filenames) {
 			toFile.Headers = p.Headers[i]
 		}

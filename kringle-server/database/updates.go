@@ -28,15 +28,15 @@ func (d *Database) fileUpdatesForSet(user User, set, albumID string, ts int64, c
 		return
 	}
 
-	for _, v := range fs.Files {
+	for k, v := range fs.Files {
 		if v.DateModified > ts {
 			ch <- stingle.File{
-				File:         v.File,
+				File:         k,
 				Version:      v.Version,
 				DateCreated:  number(v.DateCreated),
 				DateModified: number(v.DateModified),
 				Headers:      v.Headers,
-				AlbumID:      v.AlbumID,
+				AlbumID:      albumID,
 			}
 		}
 	}
@@ -163,8 +163,8 @@ func (d *Database) getFileSizes(user User, set, albumID string, ch chan<- fileSi
 		// Only charge file size to owner of the album.
 		return
 	}
-	for _, f := range fs.Files {
-		ch <- fileSize{f.File, f.StoreFileSize + f.StoreThumbSize}
+	for k, f := range fs.Files {
+		ch <- fileSize{k, f.StoreFileSize + f.StoreThumbSize}
 	}
 }
 
