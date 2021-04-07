@@ -1,24 +1,35 @@
 package stingle
 
 import (
+	"bytes"
 	"reflect"
 	"testing"
-
-	"github.com/jamesruan/sodium"
 )
 
-func TestBundle(t *testing.T) {
-	sk := MakeSecretKey()
+func TestEncryptDecrypt(t *testing.T) {
+	senderKey := MakeSecretKey()
+	receiverKey := MakeSecretKey()
 
-	b := MakeKeyBundle(sk.PublicKey())
-	t.Logf("bundle: %s", b)
+	msg := []byte("blah blah blah 123")
+	encrypted := EncryptMessage(msg, receiverKey.PublicKey(), senderKey)
 
-	pk, err := DecodeKeyBundle(b)
-	if err != nil {
-		t.Fatalf("DecodeKeyBundle: %v", err)
+	if got, err := DecryptMessage(encrypted, senderKey.PublicKey(), receiverKey); err != nil {
+		t.Errorf("DecryptMessage failed, err: %v", err)
+	} else if !bytes.Equal(got, msg) {
+		t.Errorf("DecryptMessage got %q, want %q", got, msg)
 	}
+}
 
-	if !reflect.DeepEqual(sodium.BoxPublicKey(pk), sodium.BoxPublicKey(sk.PublicKey())) {
-		t.Errorf("Public keys don't match. Want %v, got %v", sk.PublicKey(), pk)
+func TestSealBox(t *testing.T) {
+	key := MakeSecretKey()
+	msg := []byte("foo bar")
+	enc := SealBox(msg, key.PublicKey())
+
+	dec, err := SealBoxOpen(enc, key)
+	if err != nil {
+		t.Fatalf("SealBoxOpen failed: %v", err)
+	}
+	if want, got := msg, dec; !reflect.DeepEqual(want, got) {
+		t.Errorf("SealBoxOpen returned unexpected result: Want %q, got %q", want, got)
 	}
 }

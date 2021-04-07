@@ -1,13 +1,13 @@
 package stingle
 
 import (
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
-
-	"github.com/jamesruan/sodium"
 )
 
 // Holds signed, tamper-proof data used to authenticate requests.
@@ -37,7 +37,7 @@ func MintToken(key SignSecretKey, tok Token, exp time.Duration) string {
 	tok.IssuedAt = time.Now().Unix()
 	tok.Expiration = time.Now().Add(exp).Unix()
 	ser, _ := json.Marshal(tok)
-	tok.Signature = hex.EncodeToString(sodium.Bytes(ser).SignDetached(sodium.SignSecretKey(key)).Bytes)
+	tok.Signature = hex.EncodeToString(key.Sign(ser))
 	ser, _ = json.Marshal(tok)
 	return base64.RawURLEncoding.EncodeToString(ser)
 }
@@ -67,8 +67,8 @@ func ValidateToken(sk SignSecretKey, tok Token) error {
 	if err != nil {
 		return err
 	}
-	if err := sodium.Bytes(ser).SignVerifyDetached(sodium.Signature{sodium.Bytes(sig)}, sodium.SignPublicKey(sk.PublicKey())); err != nil {
-		return err
+	if subtle.ConstantTimeCompare(sk.Sign(ser), sig) != 1 {
+		return errors.New("signature doesn't match")
 	}
 	if now := time.Now().Unix(); tok.Expiration < now {
 		return fmt.Errorf("token is expired (%d < %d)", tok.Expiration, now)

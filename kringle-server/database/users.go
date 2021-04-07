@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"io"
 	"math"
 	"math/big"
 	"os"
@@ -85,7 +84,7 @@ type Contact struct {
 // ServerPublicKeyForExport returns the server's public key associated with this
 // user.
 func (u User) ServerPublicKeyForExport() string {
-	return base64.StdEncoding.EncodeToString(u.ServerKey.PublicKey().Bytes)
+	return base64.StdEncoding.EncodeToString(u.ServerKey.PublicKey().ToBytes())
 }
 
 func (u User) home(elems ...string) string {
@@ -124,13 +123,8 @@ func (d *Database) AddUser(u User) (retErr error) {
 	}
 	ul = append(ul, userList{UserID: uid, Email: u.Email})
 
-	hf := make([]byte, 16)
-	if _, err := io.ReadFull(rand.Reader, hf); err != nil {
-		return err
-	}
-
 	u.UserID = uid
-	u.HomeFolder = hex.EncodeToString(hf)
+	u.HomeFolder = hex.EncodeToString(d.masterKey.Hash([]byte(u.Email)))
 	u.ServerKey = stingle.MakeSecretKey()
 	u.ServerSignKey = stingle.MakeSignSecretKey()
 	u.TokenSeq = 1
@@ -215,7 +209,7 @@ func (d *Database) addContactToUser(user, contact User) (c *Contact, retErr erro
 	userContacts.Contacts[contact.UserID] = &Contact{
 		UserID:       contact.UserID,
 		Email:        contact.Email,
-		PublicKey:    base64.StdEncoding.EncodeToString(contact.PublicKey.Bytes),
+		PublicKey:    base64.StdEncoding.EncodeToString(contact.PublicKey.ToBytes()),
 		DateModified: nowInMS(),
 	}
 	if contactContacts.In == nil {
@@ -252,7 +246,7 @@ func (d *Database) lookupContacts(uids map[int64]bool) []Contact {
 			out = append(out, Contact{
 				UserID:    user.UserID,
 				Email:     user.Email,
-				PublicKey: base64.StdEncoding.EncodeToString(user.PublicKey.Bytes),
+				PublicKey: base64.StdEncoding.EncodeToString(user.PublicKey.ToBytes()),
 			})
 		}
 	}

@@ -141,7 +141,7 @@ func (c *client) login() error {
 	if err != nil {
 		return err
 	}
-	c.serverPublicKey.Bytes = pk
+	c.serverPublicKey = stingle.PublicKeyFromBytes(pk)
 	token, ok := sr.Parts["token"].(string)
 	if !ok || token == "" {
 		return fmt.Errorf("login: invalid token: %#v", sr.Parts["token"])
@@ -167,7 +167,7 @@ func (c *client) getServerPK() error {
 	if err != nil {
 		return err
 	}
-	if want, got := []byte(c.serverPublicKey.Bytes), pk; !reflect.DeepEqual(want, got) {
+	if want, got := []byte(c.serverPublicKey.ToBytes()), pk; !reflect.DeepEqual(want, got) {
 		return fmt.Errorf("login: unexpected serverPK: want %#v, got %#v", want, got)
 	}
 	return nil
@@ -190,7 +190,7 @@ func (c *client) checkKey() error {
 	if err != nil {
 		return err
 	}
-	if want, got := []byte(c.serverPublicKey.Bytes), pk; !reflect.DeepEqual(want, got) {
+	if want, got := []byte(c.serverPublicKey.ToBytes()), pk; !reflect.DeepEqual(want, got) {
 		return fmt.Errorf("checkKey: unexpected serverPK: want %#v, got %#v", want, got)
 	}
 	dec, err := stingle.SealBoxOpen(sr.Parts["challenge"].(string), c.secretKey)

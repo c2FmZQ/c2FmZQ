@@ -64,3 +64,11 @@ With the default Dockerfile, the server expects the following files in ${SECRETD
 - **privkey.pem** contains the TLS private key in PEM format.
 - **fullchain.pem** contains the TLS certificates in PEM format.
 
+Or, build a binary for arm and run the server on a NAS, raspberry pi, etc.
+
+```bash
+$ cd kringle-server
+$ GOOS=linux GOARCH=arm go build -o kringle-server-arm
+$ scp kringle-server-arm root@NAS:.
+```
+

@@ -141,7 +141,7 @@ func TestShareAlbum(t *testing.T) {
 			"publicKey":     "album publicKey",
 		}).
 		AddPartList("contacts", map[string]interface{}{
-			"dateModified": "2000", "email": "bob", "publicKey": base64.StdEncoding.EncodeToString(bob.secretKey.PublicKey().Bytes), "userId": fmt.Sprintf("%d", bob.userID),
+			"dateModified": "2000", "email": "bob", "publicKey": base64.StdEncoding.EncodeToString(bob.secretKey.PublicKey().ToBytes()), "userId": fmt.Sprintf("%d", bob.userID),
 		})
 
 	if diff := diffUpdates(want, got); diff != "" {
@@ -168,7 +168,7 @@ func TestShareAlbum(t *testing.T) {
 			"publicKey":     "album publicKey",
 		}).
 		AddPartList("contacts", map[string]interface{}{
-			"dateModified": "2000", "email": "alice", "publicKey": base64.StdEncoding.EncodeToString(alice.secretKey.PublicKey().Bytes), "userId": fmt.Sprintf("%d", alice.userID),
+			"dateModified": "2000", "email": "alice", "publicKey": base64.StdEncoding.EncodeToString(alice.secretKey.PublicKey().ToBytes()), "userId": fmt.Sprintf("%d", alice.userID),
 		})
 
 	if diff := diffUpdates(want, got); diff != "" {
@@ -208,10 +208,10 @@ func TestShareAlbum(t *testing.T) {
 		}).
 		AddPartList("contacts",
 			map[string]interface{}{
-				"dateModified": "3000", "email": "alice", "publicKey": base64.StdEncoding.EncodeToString(alice.secretKey.PublicKey().Bytes), "userId": fmt.Sprintf("%d", alice.userID),
+				"dateModified": "3000", "email": "alice", "publicKey": base64.StdEncoding.EncodeToString(alice.secretKey.PublicKey().ToBytes()), "userId": fmt.Sprintf("%d", alice.userID),
 			},
 			map[string]interface{}{
-				"dateModified": "3000", "email": "bob", "publicKey": base64.StdEncoding.EncodeToString(bob.secretKey.PublicKey().Bytes), "userId": fmt.Sprintf("%d", bob.userID),
+				"dateModified": "3000", "email": "bob", "publicKey": base64.StdEncoding.EncodeToString(bob.secretKey.PublicKey().ToBytes()), "userId": fmt.Sprintf("%d", bob.userID),
 			})
 
 	if diff := diffUpdates(want, got); diff != "" {
@@ -276,9 +276,9 @@ func TestAlbumEdits(t *testing.T) {
 			"publicKey":     "album publicKey",
 		}).
 		AddPartList("contacts", map[string]interface{}{
-			"dateModified": "1000", "email": "bob", "publicKey": base64.StdEncoding.EncodeToString(bob.secretKey.PublicKey().Bytes), "userId": fmt.Sprintf("%d", bob.userID),
+			"dateModified": "1000", "email": "bob", "publicKey": base64.StdEncoding.EncodeToString(bob.secretKey.PublicKey().ToBytes()), "userId": fmt.Sprintf("%d", bob.userID),
 		}, map[string]interface{}{
-			"dateModified": "1000", "email": "carol", "publicKey": base64.StdEncoding.EncodeToString(carol.secretKey.PublicKey().Bytes), "userId": fmt.Sprintf("%d", carol.userID),
+			"dateModified": "1000", "email": "carol", "publicKey": base64.StdEncoding.EncodeToString(carol.secretKey.PublicKey().ToBytes()), "userId": fmt.Sprintf("%d", carol.userID),
 		})
 
 	if diff := diffUpdates(want, got); diff != "" {
