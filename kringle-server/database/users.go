@@ -4,7 +4,6 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"math"
 	"math/big"
@@ -128,7 +127,21 @@ func (d *Database) AddUser(u User) (retErr error) {
 	u.ServerKey = stingle.MakeSecretKey()
 	u.ServerSignKey = stingle.MakeSignSecretKey()
 	u.TokenSeq = 1
-	return d.storage.SaveDataFile(nil, d.filePath(u.home(userFile)), u)
+	if err := d.storage.SaveDataFile(nil, d.filePath(u.home(userFile)), u); err != nil {
+		return err
+	}
+
+	for _, f := range []string{
+		d.fileSetPath(u, TrashSet),
+		d.fileSetPath(u, GallerySet),
+		d.filePath(u.home(albumManifest)),
+		d.filePath(u.home(contactListFile)),
+	} {
+		if err := d.storage.CreateEmptyFile(f); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // UpdateUser adds or updates a user object.
@@ -299,7 +312,7 @@ func (d *Database) addCrossContacts(list []Contact) {
 // than ts.
 func (d *Database) ContactUpdates(user User, ts int64) ([]stingle.Contact, error) {
 	var contactList ContactList
-	if _, err := d.storage.ReadDataFile(d.filePath(user.home(contactListFile)), &contactList); err != nil && !errors.Is(err, os.ErrNotExist) {
+	if _, err := d.storage.ReadDataFile(d.filePath(user.home(contactListFile)), &contactList); err != nil {
 		return nil, err
 	}
 	if contactList.Contacts == nil {

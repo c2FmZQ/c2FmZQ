@@ -198,14 +198,14 @@ func (s *Storage) OpenManyForUpdate(files []string, objects interface{}) (func(c
 	var errorList []error
 	for _ = range files {
 		v := <-ch
-		if v.err != nil && !errors.Is(v.err, os.ErrNotExist) {
+		if v.err != nil {
 			errorList = append(errorList, v.err)
 		}
 		keys[v.i] = v.k
 	}
 	if errorList != nil {
 		s.UnlockMany(files)
-		return nil, fmt.Errorf("s.ReadDataFile: %v", errorList)
+		return nil, fmt.Errorf("s.ReadDataFile: %w %v", errorList[0], errorList[1:])
 	}
 
 	var called, committed bool
@@ -252,7 +252,7 @@ func (s *Storage) OpenManyForUpdate(files []string, objects interface{}) (func(c
 					backup.restore()
 				}
 				if *errp == nil {
-					*errp = fmt.Errorf("s.SaveDataFile: %v", errorList)
+					*errp = fmt.Errorf("s.SaveDataFile: %w %v", errorList[0], errorList[1:])
 				}
 			} else {
 				if backup != nil {
@@ -330,19 +330,32 @@ func (s *Storage) ReadDataFile(filename string, obj interface{}) (*crypto.Encryp
 
 // SaveDataFile atomically replace a json object in a file.
 func (s *Storage) SaveDataFile(k *crypto.EncryptionKey, filename string, obj interface{}) error {
-	filename = filepath.Join(s.dir, filename)
+	t := fmt.Sprintf("%s.tmp-%d", filename, time.Now().UnixNano())
+	if err := s.writeFile(k, t, obj); err != nil {
+		return err
+	}
+	// Atomcically replace the file.
+	return os.Rename(filepath.Join(s.dir, t), filepath.Join(s.dir, filename))
+}
+
+// CreateEmptyFile creates an empty file.
+func (s *Storage) CreateEmptyFile(filename string) error {
+	return s.writeFile(nil, filename, nil)
+}
+
+// writeFile writes obj to a file.
+func (s *Storage) writeFile(k *crypto.EncryptionKey, filename string, obj interface{}) error {
+	fn := filepath.Join(s.dir, filename)
 	if k == nil {
-		// No file key provided, created a new one.
 		var err error
 		if k, err = s.masterKey.NewEncryptionKey(); err != nil {
 			return err
 		}
-		if err = createParentIfNotExist(filename); err != nil {
+		if err := createParentIfNotExist(fn); err != nil {
 			return err
 		}
 	}
-	t := fmt.Sprintf("%s.tmp-%d", filename, time.Now().UnixNano())
-	f, err := os.OpenFile(t, os.O_WRONLY|os.O_CREATE|os.O_EXCL|os.O_SYNC, 0600)
+	f, err := os.OpenFile(fn, os.O_WRONLY|os.O_CREATE|os.O_EXCL|os.O_SYNC, 0600)
 	if err != nil {
 		return err
 	}
@@ -364,7 +377,6 @@ func (s *Storage) SaveDataFile(k *crypto.EncryptionKey, filename string, obj int
 	}
 	// Encode the JSON object.
 	enc := json.NewEncoder(gz)
-	enc.SetIndent("", "  ")
 	if err := enc.Encode(obj); err != nil {
 		gz.Close()
 		w.Close()
@@ -377,6 +389,5 @@ func (s *Storage) SaveDataFile(k *crypto.EncryptionKey, filename string, obj int
 	if err := w.Close(); err != nil {
 		return err
 	}
-	// Atomcically replace the file.
-	return os.Rename(t, filename)
+	return nil
 }

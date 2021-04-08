@@ -1,8 +1,6 @@
 package database
 
 import (
-	"errors"
-	"os"
 	"sort"
 	"sync"
 
@@ -108,7 +106,7 @@ func (d *Database) DeleteUpdates(user User, ts int64) ([]stingle.DeleteEvent, er
 	out := []stingle.DeleteEvent{}
 
 	var manifest AlbumManifest
-	if _, err := d.storage.ReadDataFile(d.filePath(user.home(albumManifest)), &manifest); err != nil && !errors.Is(err, os.ErrNotExist) {
+	if _, err := d.storage.ReadDataFile(d.filePath(user.home(albumManifest)), &manifest); err != nil {
 		return nil, err
 	}
 	for _, d := range manifest.Deletes {
@@ -172,7 +170,7 @@ func (d *Database) getFileSizes(user User, set, albumID string, ch chan<- fileSi
 // counting each file only once, even if it is in multiple sets.
 func (d *Database) SpaceUsed(user User) (int64, error) {
 	var manifest AlbumManifest
-	if _, err := d.storage.ReadDataFile(d.filePath(user.home(albumManifest)), &manifest); err != nil && !errors.Is(err, os.ErrNotExist) {
+	if _, err := d.storage.ReadDataFile(d.filePath(user.home(albumManifest)), &manifest); err != nil {
 		return 0, err
 	}
 

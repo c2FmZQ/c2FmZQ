@@ -61,7 +61,7 @@ type BlobSpec struct {
 func (d *Database) incRefCount(blob string, delta int) int {
 	var blobSpec BlobSpec
 	commit, err := d.storage.OpenForUpdate(blob+".ref", &blobSpec)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
+	if err != nil {
 		log.Fatalf("incRefCount(%q, %d) failed: %v", blob, delta, err)
 	}
 	blobSpec.RefCount += delta
@@ -112,6 +112,8 @@ func (d *Database) addFileToFileSet(user User, file FileSpec, name, set, albumID
 		fileSet.Deletes = []DeleteEvent{}
 	}
 	fileSet.Files[name] = &file
+	d.storage.CreateEmptyFile(file.StoreFile + ".ref")
+	d.storage.CreateEmptyFile(file.StoreThumb + ".ref")
 	d.incRefCount(file.StoreFile, 1)
 	d.incRefCount(file.StoreThumb, 1)
 	return nil
@@ -183,7 +185,7 @@ func (d *Database) FileSet(user User, set, albumID string) (*FileSet, error) {
 		fileName = d.fileSetPath(user, set)
 	}
 	var fileSet FileSet
-	if _, err := d.storage.ReadDataFile(fileName, &fileSet); err != nil && !errors.Is(err, os.ErrNotExist) {
+	if _, err := d.storage.ReadDataFile(fileName, &fileSet); err != nil {
 		return nil, err
 	}
 	if fileSet.Files == nil {

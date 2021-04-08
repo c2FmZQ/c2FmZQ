@@ -123,6 +123,9 @@ func TestOpenForUpdateDeferredDone(t *testing.T) {
 		type Foo struct {
 			Foo string `json:"foo"`
 		}
+		if err := s.CreateEmptyFile(fn); err != nil {
+			t.Fatalf("s.CreateEmptyFile failed: %v", err)
+		}
 		var foo Foo
 		commit, err := s.OpenForUpdate(fn, &foo)
 		if err != nil {

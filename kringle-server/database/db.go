@@ -39,6 +39,8 @@ func New(dir, passphrase string) *Database {
 		log.Fatalf("Failed to decrypt master key: %v", err)
 	}
 	db.storage = secure.NewStorage(dir, db.masterKey.EncryptionKey)
+	// Fail silently if it already exists.
+	db.storage.CreateEmptyFile(db.filePath(userListFile))
 	return db
 }
 

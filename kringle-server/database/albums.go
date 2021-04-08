@@ -3,7 +3,6 @@ package database
 import (
 	"crypto/rand"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -87,6 +86,9 @@ func (d *Database) AddAlbum(owner User, album AlbumSpec) (retErr error) {
 		return err
 	}
 	if err := d.addAlbumRef(owner.UserID, album.AlbumID, ap); err != nil {
+		return err
+	}
+	if err := d.storage.CreateEmptyFile(ap); err != nil {
 		return err
 	}
 	commit, fs, err := d.fileSetForUpdate(owner, AlbumSet, album.AlbumID)
@@ -175,7 +177,7 @@ func (d *Database) AlbumPermissions(user User, albumID string) (stingle.Permissi
 // AlbumRefs returns a list of all the user's albums.
 func (d *Database) AlbumRefs(user User) (map[string]*AlbumRef, error) {
 	var manifest AlbumManifest
-	if _, err := d.storage.ReadDataFile(d.filePath(user.home(albumManifest)), &manifest); err != nil && !errors.Is(err, os.ErrNotExist) {
+	if _, err := d.storage.ReadDataFile(d.filePath(user.home(albumManifest)), &manifest); err != nil {
 		return nil, err
 	}
 	if manifest.Albums == nil {
