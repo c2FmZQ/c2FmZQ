@@ -133,6 +133,8 @@ func (d *Database) makeFilePath() (string, error) {
 // already on disk in temporary files (file.StoreFile and file.StoreThumb). They
 // will be moved to random file names.
 func (d *Database) AddFile(user User, file FileSpec, name, set, albumID string) error {
+	defer recordLatency("AddFile")()
+
 	fn, err := d.makeFilePath()
 	if err != nil {
 		log.Errorf("makeFilePath() failed: %v", err)
@@ -174,6 +176,8 @@ func (d *Database) AddFile(user User, file FileSpec, name, set, albumID string) 
 
 // FileSet retrives a given file set, for reading only.
 func (d *Database) FileSet(user User, set, albumID string) (*FileSet, error) {
+	defer recordLatency("FileSet")()
+
 	var fileName string
 	if set == AlbumSet {
 		albumRef, err := d.albumRef(user, albumID)
@@ -261,6 +265,8 @@ type MoveFileParams struct {
 
 // MoveFile moves or copies files between file sets.
 func (d *Database) MoveFile(user User, p MoveFileParams) (retErr error) {
+	defer recordLatency("MoveFile")()
+
 	if p.SetTo == p.SetFrom && p.AlbumIDTo == p.AlbumIDFrom {
 		return errors.New("src and dest are the same")
 	}
@@ -321,6 +327,8 @@ func (d *Database) MoveFile(user User, p MoveFileParams) (retErr error) {
 
 // EmptyTrash deletes the files in the Trash set that were added up to time t.
 func (d *Database) EmptyTrash(user User, t int64) (retErr error) {
+	defer recordLatency("EmptyTrash")()
+
 	commit, fs, err := d.fileSetForUpdate(user, TrashSet, "")
 	if err != nil {
 		log.Errorf("fileSetForUpdate(%q, %q, %q) failed: %v", user.Email, TrashSet, "", err)
@@ -347,6 +355,8 @@ func (d *Database) EmptyTrash(user User, t int64) (retErr error) {
 
 // DeleteFiles deletes specific files from the Trash set.
 func (d *Database) DeleteFiles(user User, files []string) (retErr error) {
+	defer recordLatency("DeleteFiles")()
+
 	commit, fs, err := d.fileSetForUpdate(user, TrashSet, "")
 	if err != nil {
 		log.Errorf("fileSetForUpdate(%q, %q, %q) failed: %v", user.Email, TrashSet, "", err)
@@ -391,6 +401,8 @@ func (d *Database) downloadFileSpec(fileSpec *FileSpec, thumb bool) (*os.File, e
 
 // DownloadFile locates a file and opens it for reading.
 func (d *Database) DownloadFile(user User, set, filename string, thumb bool) (*os.File, error) {
+	defer recordLatency("DownloadFile")()
+
 	if set != AlbumSet {
 		fileSpec, err := d.findFileInSet(user, set, "", filename)
 		if err != nil {

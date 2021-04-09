@@ -61,6 +61,8 @@ type AlbumSpec struct {
 
 // Album returns a user's album information.
 func (d *Database) Album(user User, albumID string) (*AlbumSpec, error) {
+	defer recordLatency("Album")()
+
 	fs, err := d.FileSet(user, AlbumSet, albumID)
 	if err != nil {
 		return nil, err
@@ -80,6 +82,8 @@ func (d *Database) makeAlbumPath() (string, error) {
 
 // AddAlbum creates a new empty album with the given information.
 func (d *Database) AddAlbum(owner User, album AlbumSpec) (retErr error) {
+	defer recordLatency("AddAlbum")()
+
 	ap, err := d.makeAlbumPath()
 	if err != nil {
 		log.Errorf("makeAlbumPath() failed: %v", err)
@@ -108,6 +112,8 @@ func (d *Database) AddAlbum(owner User, album AlbumSpec) (retErr error) {
 
 // DeleteAlbum deletes an album.
 func (d *Database) DeleteAlbum(owner User, albumID string) error {
+	defer recordLatency("DeleteAlbum")()
+
 	albumRef, err := d.albumRef(owner, albumID)
 	if err != nil {
 		return err
@@ -141,6 +147,8 @@ func (d *Database) DeleteAlbum(owner User, albumID string) error {
 
 // ChangeAlbumCover changes the file uses as cover for the album.
 func (d *Database) ChangeAlbumCover(user User, albumID, cover string) (retErr error) {
+	defer recordLatency("ChangeAlbumCover")()
+
 	commit, fs, err := d.fileSetForUpdate(user, AlbumSet, albumID)
 	if err != nil {
 		return err
@@ -154,6 +162,8 @@ func (d *Database) ChangeAlbumCover(user User, albumID, cover string) (retErr er
 
 // ChangeMetadata updates the album's metadata.
 func (d *Database) ChangeMetadata(user User, albumID, metadata string) (retErr error) {
+	defer recordLatency("ChangeMetadata")()
+
 	commit, fs, err := d.fileSetForUpdate(user, AlbumSet, albumID)
 	if err != nil {
 		return err
@@ -167,6 +177,8 @@ func (d *Database) ChangeMetadata(user User, albumID, metadata string) (retErr e
 
 // AlbumPermissions returns the album's permissions.
 func (d *Database) AlbumPermissions(user User, albumID string) (stingle.Permissions, error) {
+	defer recordLatency("AlbumPermissions")()
+
 	fs, err := d.FileSet(user, AlbumSet, albumID)
 	if err != nil {
 		return stingle.Permissions(""), err
@@ -176,6 +188,8 @@ func (d *Database) AlbumPermissions(user User, albumID string) (stingle.Permissi
 
 // AlbumRefs returns a list of all the user's albums.
 func (d *Database) AlbumRefs(user User) (map[string]*AlbumRef, error) {
+	defer recordLatency("AlbumRefs")()
+
 	var manifest AlbumManifest
 	if _, err := d.storage.ReadDataFile(d.filePath(user.home(albumManifest)), &manifest); err != nil {
 		return nil, err
@@ -212,6 +226,8 @@ func convertAlbumSpecToStingleAlbum(album *AlbumSpec) stingle.Album {
 
 // AlbumUpdates returns all the changes to the user's album list since ts.
 func (d *Database) AlbumUpdates(user User, ts int64) ([]stingle.Album, error) {
+	defer recordLatency("AlbumUpdates")()
+
 	albumRefs, err := d.AlbumRefs(user)
 	if err != nil {
 		return nil, err
@@ -244,6 +260,8 @@ func (d *Database) AlbumUpdates(user User, ts int64) ([]stingle.Album, error) {
 
 // ShareAlbum turns on sharing on an album and adds members.
 func (d *Database) ShareAlbum(user User, sharing *stingle.Album, sharingKeys map[string]string) (retErr error) {
+	defer recordLatency("ShareAlbums")()
+
 	albumRef, err := d.albumRef(user, sharing.AlbumID)
 	if err != nil {
 		return err
@@ -300,6 +318,8 @@ func (d *Database) ShareAlbum(user User, sharing *stingle.Album, sharingKeys map
 
 // UnshareAlbum turns off sharing and removes all the members of an album.
 func (d *Database) UnshareAlbum(owner User, albumID string) (retErr error) {
+	defer recordLatency("UnshareAlbums")()
+
 	commit, fs, err := d.fileSetForUpdate(owner, AlbumSet, albumID)
 	if err != nil {
 		return err
@@ -389,6 +409,8 @@ func (d *Database) removeAlbumRef(memberID int64, albumID string) (retErr error)
 
 // UpdatePerms updates the permissions on an album.
 func (d *Database) UpdatePerms(owner User, albumID string, permissions stingle.Permissions) (retErr error) {
+	defer recordLatency("UpdatePerms")()
+
 	commit, fs, err := d.fileSetForUpdate(owner, AlbumSet, albumID)
 	if err != nil {
 		return err
@@ -401,6 +423,8 @@ func (d *Database) UpdatePerms(owner User, albumID string, permissions stingle.P
 
 // RemoveAlbumMember removes a member from the album.
 func (d *Database) RemoveAlbumMember(user User, albumID string, memberID int64) (retErr error) {
+	defer recordLatency("RemoveAlbumMember")()
+
 	commit, fs, err := d.fileSetForUpdate(user, AlbumSet, albumID)
 	if err != nil {
 		return err

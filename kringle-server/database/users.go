@@ -83,6 +83,8 @@ type Contact struct {
 // ServerPublicKeyForExport returns the server's public key associated with this
 // user.
 func (u User) ServerPublicKeyForExport() string {
+	defer recordLatency("ServerPublicKeyForExport")()
+
 	return base64.StdEncoding.EncodeToString(u.ServerKey.PublicKey().ToBytes())
 }
 
@@ -94,6 +96,8 @@ func (u User) home(elems ...string) string {
 
 // AddUser creates a new user account for u.
 func (d *Database) AddUser(u User) (retErr error) {
+	defer recordLatency("AddUser")()
+
 	var ul []userList
 	commit, err := d.storage.OpenForUpdate(d.filePath(userListFile), &ul)
 	if err != nil {
@@ -146,6 +150,8 @@ func (d *Database) AddUser(u User) (retErr error) {
 
 // UpdateUser adds or updates a user object.
 func (d *Database) UpdateUser(u User) error {
+	defer recordLatency("UpdateUser")()
+
 	var f User
 	commit, err := d.storage.OpenForUpdate(d.filePath(u.home(userFile)), &f)
 	if err != nil {
@@ -157,6 +163,8 @@ func (d *Database) UpdateUser(u User) error {
 
 // UserByID returns the User object with the given ID.
 func (d *Database) UserByID(id int64) (User, error) {
+	defer recordLatency("UserByID")()
+
 	var u User
 	_, err := d.storage.ReadDataFile(d.filePath("home", fmt.Sprintf("%d", id), userFile), &u)
 	return u, err
@@ -164,6 +172,8 @@ func (d *Database) UserByID(id int64) (User, error) {
 
 // User returns the User object with the given email address.
 func (d *Database) User(email string) (User, error) {
+	defer recordLatency("User")()
+
 	var ul []userList
 	if _, err := d.storage.ReadDataFile(d.filePath(userListFile), &ul); err != nil {
 		return User{}, err
@@ -178,6 +188,8 @@ func (d *Database) User(email string) (User, error) {
 
 // SignKeyForUser returns the server's SignSecretKey associated with this user.
 func (d *Database) SignKeyForUser(email string) stingle.SignSecretKey {
+	defer recordLatency("SignKeyForUser")()
+
 	if u, err := d.User(email); err == nil {
 		return u.ServerSignKey
 	}
@@ -235,6 +247,8 @@ func (d *Database) addContactToUser(user, contact User) (c *Contact, retErr erro
 
 // AddContact adds the user with the given email address to user's contact list.
 func (d *Database) AddContact(user User, contactEmail string) (*Contact, error) {
+	defer recordLatency("AddContact")()
+
 	c, err := d.User(contactEmail)
 	if err != nil {
 		return nil, err
@@ -311,6 +325,8 @@ func (d *Database) addCrossContacts(list []Contact) {
 // ContactUpdates returns changes to a user's contact list that are more recent
 // than ts.
 func (d *Database) ContactUpdates(user User, ts int64) ([]stingle.Contact, error) {
+	defer recordLatency("ContactUpdates")()
+
 	var contactList ContactList
 	if _, err := d.storage.ReadDataFile(d.filePath(user.home(contactListFile)), &contactList); err != nil {
 		return nil, err

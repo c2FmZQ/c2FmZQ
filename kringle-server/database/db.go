@@ -14,6 +14,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+
 	"kringle-server/crypto"
 	"kringle-server/log"
 	"kringle-server/secure"
@@ -22,7 +24,26 @@ import (
 var (
 	// Set this only for tests.
 	CurrentTimeForTesting int64 = 0
+
+	funcLatency = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "database_response_time",
+			Help:    "The database's response time",
+			Buckets: []float64{0.01, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 20, 30, 45, 60, 90, 120},
+		},
+		[]string{"func"},
+	)
 )
+
+func init() {
+	prometheus.MustRegister(funcLatency)
+
+}
+
+func recordLatency(name string) func() time.Duration {
+	timer := prometheus.NewTimer(funcLatency.WithLabelValues(name))
+	return timer.ObserveDuration
+}
 
 // New returns an initialized database that uses dir for storage.
 func New(dir, passphrase string) *Database {

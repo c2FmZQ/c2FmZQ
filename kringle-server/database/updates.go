@@ -43,6 +43,8 @@ func (d *Database) fileUpdatesForSet(user User, set, albumID string, ts int64, c
 // FileUpdates returns all the files that were added to a file set since time
 // ts.
 func (d *Database) FileUpdates(user User, set string, ts int64) ([]stingle.File, error) {
+	defer recordLatency("FileUpdates")()
+
 	ch := make(chan stingle.File)
 	var wg sync.WaitGroup
 
@@ -103,6 +105,8 @@ func (d *Database) deleteUpdatesForSet(user User, set, albumID string, ts int64,
 // DeleteUpdates returns all the files that were deleted from a file set since
 // time ts.
 func (d *Database) DeleteUpdates(user User, ts int64) ([]stingle.DeleteEvent, error) {
+	defer recordLatency("DeleteUpdates")()
+
 	out := []stingle.DeleteEvent{}
 
 	var manifest AlbumManifest
@@ -169,6 +173,8 @@ func (d *Database) getFileSizes(user User, set, albumID string, ch chan<- fileSi
 // SpaceUsed calculates the sum of all the file sizes in a user's file sets,
 // counting each file only once, even if it is in multiple sets.
 func (d *Database) SpaceUsed(user User) (int64, error) {
+	defer recordLatency("SpaceUsed")()
+
 	var manifest AlbumManifest
 	if _, err := d.storage.ReadDataFile(d.filePath(user.home(albumManifest)), &manifest); err != nil {
 		return 0, err
