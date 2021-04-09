@@ -163,11 +163,10 @@ func (d *Database) AddFile(user User, file FileSpec, name, set, albumID string) 
 	file.DateModified = nowInMS()
 
 	if err := d.addFileToFileSet(user, file, name, set, albumID); err != nil {
-		if err := os.Remove(filepath.Join(d.Dir(), fn)); err != nil {
-			log.Errorf("os.Remove(%q) failed: %v", fn, err)
-		}
-		if err := os.Remove(filepath.Join(d.Dir(), tn)); err != nil {
-			log.Errorf("os.Remove(%q) failed: %v", tn, err)
+		for _, f := range []string{fn, tn, fn + ".ref", tn + ".ref"} {
+			if err := os.Remove(filepath.Join(d.Dir(), f)); err != nil {
+				log.Errorf("os.Remove(%q) failed: %v", f, err)
+			}
 		}
 		return err
 	}
