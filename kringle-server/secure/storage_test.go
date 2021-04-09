@@ -1,7 +1,9 @@
 package secure
 
 import (
+	"crypto/rand"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -11,17 +13,18 @@ import (
 	"kringle-server/crypto"
 )
 
-func encrypterDecrypter() crypto.EncryptionKey {
+func encryptionKey() *crypto.EncryptionKey {
+	return nil
 	mk, err := crypto.CreateMasterKey()
 	if err != nil {
 		panic(err)
 	}
-	return mk.EncryptionKey
+	return &mk.EncryptionKey
 }
 
 func TestLock(t *testing.T) {
 	dir := t.TempDir()
-	s := NewStorage(dir, encrypterDecrypter())
+	s := NewStorage(dir, encryptionKey())
 	fn := "foo"
 
 	if err := s.Lock(fn); err != nil {
@@ -42,7 +45,7 @@ func TestLock(t *testing.T) {
 func TestOpenForUpdate(t *testing.T) {
 	dir := t.TempDir()
 	fn := "test.json"
-	s := NewStorage(dir, encrypterDecrypter())
+	s := NewStorage(dir, encryptionKey())
 
 	type Foo struct {
 		Foo string `json:"foo"`
@@ -78,7 +81,7 @@ func TestOpenForUpdate(t *testing.T) {
 func TestRollback(t *testing.T) {
 	dir := t.TempDir()
 	fn := "test.json"
-	s := NewStorage(dir, encrypterDecrypter())
+	s := NewStorage(dir, encryptionKey())
 
 	type Foo struct {
 		Foo string `json:"foo"`
@@ -114,7 +117,7 @@ func TestRollback(t *testing.T) {
 
 func TestOpenForUpdateDeferredDone(t *testing.T) {
 	dir := t.TempDir()
-	s := NewStorage(dir, encrypterDecrypter())
+	s := NewStorage(dir, encryptionKey())
 
 	// This function should return os.ErrNotExist because the file open for
 	// update can't be saved.
@@ -123,7 +126,7 @@ func TestOpenForUpdateDeferredDone(t *testing.T) {
 		type Foo struct {
 			Foo string `json:"foo"`
 		}
-		if err := s.CreateEmptyFile(fn); err != nil {
+		if err := s.CreateEmptyFile(fn, Foo{}); err != nil {
 			t.Fatalf("s.CreateEmptyFile failed: %v", err)
 		}
 		var foo Foo
@@ -141,4 +144,126 @@ func TestOpenForUpdateDeferredDone(t *testing.T) {
 	if err := f(); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("f returned unexpected error: %v", err)
 	}
+}
+
+func RunBenchmarkOpenForUpdate(b *testing.B, kb int, k *crypto.EncryptionKey, compress, useGOB bool) {
+	dir := b.TempDir()
+	file := filepath.Join(dir, "testfile")
+	s := NewStorage(dir, k)
+	s.compress = compress
+	s.useGOB = useGOB
+
+	obj := struct {
+		M map[string]string `json:"m"`
+	}{}
+	obj.M = make(map[string]string)
+	for i := 0; i < kb; i++ {
+		key := make([]byte, 32)
+		value := make([]byte, 1024)
+		if _, err := io.ReadFull(rand.Reader, key); err != nil {
+			b.Fatalf("io.ReadFull: %v", err)
+		}
+		if _, err := io.ReadFull(rand.Reader, value); err != nil {
+			b.Fatalf("io.ReadFull: %v", err)
+		}
+		obj.M[string(key)] = string(value)
+	}
+	if err := s.writeFile(nil, "testfile", &obj); err != nil {
+		b.Fatalf("s.writeFile: %v", err)
+	}
+	fi, err := os.Stat(file)
+	if err != nil {
+		b.Fatalf("os.Stat: %v", err)
+	}
+	b.ResetTimer()
+	b.SetBytes(fi.Size())
+	for i := 0; i < b.N; i++ {
+		commit, err := s.OpenForUpdate("testfile", &obj)
+		if err != nil {
+			b.Fatalf("s.OpenForUpdate: %v", err)
+		}
+		if err := commit(true, nil); err != nil {
+			b.Fatalf("commit: %v", err)
+		}
+	}
+}
+
+func BenchmarkOpenForUpdate_JSON_1KB_AES(b *testing.B) {
+	RunBenchmarkOpenForUpdate(b, 1, encryptionKey(), false, false)
+}
+
+func BenchmarkOpenForUpdate_JSON_1MB_AES(b *testing.B) {
+	RunBenchmarkOpenForUpdate(b, 1024, encryptionKey(), false, false)
+}
+
+func BenchmarkOpenForUpdate_JSON_10MB_AES(b *testing.B) {
+	RunBenchmarkOpenForUpdate(b, 10240, encryptionKey(), false, false)
+}
+
+func BenchmarkOpenForUpdate_JSON_20MB_AES(b *testing.B) {
+	RunBenchmarkOpenForUpdate(b, 20480, encryptionKey(), false, false)
+}
+
+func BenchmarkOpenForUpdate_JSON_1KB_PlainText(b *testing.B) {
+	RunBenchmarkOpenForUpdate(b, 1, nil, false, false)
+}
+
+func BenchmarkOpenForUpdate_JSON_1MB_PlainText(b *testing.B) {
+	RunBenchmarkOpenForUpdate(b, 1024, nil, false, false)
+}
+
+func BenchmarkOpenForUpdate_JSON_10MB_PlainText(b *testing.B) {
+	RunBenchmarkOpenForUpdate(b, 10240, nil, false, false)
+}
+
+func BenchmarkOpenForUpdate_JSON_20MB_PlainText(b *testing.B) {
+	RunBenchmarkOpenForUpdate(b, 20480, nil, false, false)
+}
+
+func BenchmarkOpenForUpdate_GOB_1KB_AES(b *testing.B) {
+	RunBenchmarkOpenForUpdate(b, 1, encryptionKey(), false, true)
+}
+
+func BenchmarkOpenForUpdate_GOB_1MB_AES(b *testing.B) {
+	RunBenchmarkOpenForUpdate(b, 1024, encryptionKey(), false, true)
+}
+
+func BenchmarkOpenForUpdate_GOB_10MB_AES(b *testing.B) {
+	RunBenchmarkOpenForUpdate(b, 10240, encryptionKey(), false, true)
+}
+
+func BenchmarkOpenForUpdate_GOB_20MB_AES(b *testing.B) {
+	RunBenchmarkOpenForUpdate(b, 20480, encryptionKey(), false, true)
+}
+
+func BenchmarkOpenForUpdate_GOB_1KB_PlainText(b *testing.B) {
+	RunBenchmarkOpenForUpdate(b, 1, nil, false, true)
+}
+
+func BenchmarkOpenForUpdate_GOB_1MB_PlainText(b *testing.B) {
+	RunBenchmarkOpenForUpdate(b, 1024, nil, false, true)
+}
+
+func BenchmarkOpenForUpdate_GOB_10MB_PlainText(b *testing.B) {
+	RunBenchmarkOpenForUpdate(b, 10240, nil, false, true)
+}
+
+func BenchmarkOpenForUpdate_GOB_20MB_PlainText(b *testing.B) {
+	RunBenchmarkOpenForUpdate(b, 20480, nil, false, true)
+}
+
+func BenchmarkOpenForUpdate_GOB_1KB_PlainText_GZIP(b *testing.B) {
+	RunBenchmarkOpenForUpdate(b, 1, nil, true, true)
+}
+
+func BenchmarkOpenForUpdate_GOB_1MB_PlainText_GZIP(b *testing.B) {
+	RunBenchmarkOpenForUpdate(b, 1024, nil, true, true)
+}
+
+func BenchmarkOpenForUpdate_GOB_10MB_PlainText_GZIP(b *testing.B) {
+	RunBenchmarkOpenForUpdate(b, 10240, nil, true, true)
+}
+
+func BenchmarkOpenForUpdate_GOB_20MB_PlainText_GZIP(b *testing.B) {
+	RunBenchmarkOpenForUpdate(b, 20480, nil, true, true)
 }

@@ -127,7 +127,7 @@ func (d *Database) AddUser(u User) (retErr error) {
 	ul = append(ul, userList{UserID: uid, Email: u.Email})
 
 	u.UserID = uid
-	u.HomeFolder = hex.EncodeToString(d.masterKey.Hash([]byte(u.Email)))
+	u.HomeFolder = hex.EncodeToString(d.Hash([]byte(u.Email)))
 	u.ServerKey = stingle.MakeSecretKey()
 	u.ServerSignKey = stingle.MakeSignSecretKey()
 	u.TokenSeq = 1
@@ -135,15 +135,17 @@ func (d *Database) AddUser(u User) (retErr error) {
 		return err
 	}
 
-	for _, f := range []string{
-		d.fileSetPath(u, TrashSet),
-		d.fileSetPath(u, GallerySet),
-		d.filePath(u.home(albumManifest)),
-		d.filePath(u.home(contactListFile)),
-	} {
-		if err := d.storage.CreateEmptyFile(f); err != nil {
-			return err
-		}
+	if err := d.storage.CreateEmptyFile(d.fileSetPath(u, TrashSet), FileSet{}); err != nil {
+		return err
+	}
+	if err := d.storage.CreateEmptyFile(d.fileSetPath(u, GallerySet), FileSet{}); err != nil {
+		return err
+	}
+	if err := d.storage.CreateEmptyFile(d.filePath(u.home(albumManifest)), AlbumManifest{}); err != nil {
+		return err
+	}
+	if err := d.storage.CreateEmptyFile(d.filePath(u.home(contactListFile)), ContactList{}); err != nil {
+		return err
 	}
 	return nil
 }

@@ -112,8 +112,8 @@ func (d *Database) addFileToFileSet(user User, file FileSpec, name, set, albumID
 		fileSet.Deletes = []DeleteEvent{}
 	}
 	fileSet.Files[name] = &file
-	d.storage.CreateEmptyFile(file.StoreFile + ".ref")
-	d.storage.CreateEmptyFile(file.StoreThumb + ".ref")
+	d.storage.CreateEmptyFile(file.StoreFile+".ref", BlobSpec{})
+	d.storage.CreateEmptyFile(file.StoreThumb+".ref", BlobSpec{})
 	d.incRefCount(file.StoreFile, 1)
 	d.incRefCount(file.StoreThumb, 1)
 	return nil

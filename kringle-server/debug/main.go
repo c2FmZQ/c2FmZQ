@@ -15,8 +15,9 @@ var (
 	dbFlag   = flag.String("db", "", "The directory name of the database.")
 	logLevel = flag.Int("v", 3, "The level of logging verbosity: 1:Error 2:Info 3:Debug")
 
-	passphraseFile = flag.String("passphrase_file", "", "The name of the file containing the passphrase that protects the server's metadata. If left empty, the server will prompt for a passphrase when it starts.")
-	users          = flag.Bool("users", false, "Show all users")
+	encryptMetatada = flag.Bool("encrypt-metadata", true, "Whether to encrypt metadata.")
+	passphraseFile  = flag.String("passphrase-file", "", "The name of the file containing the passphrase that protects the server's metadata. If left empty, the server will prompt for a passphrase when it starts.")
+	users           = flag.Bool("users", false, "Show all users")
 )
 
 func usage() {
@@ -34,7 +35,11 @@ func main() {
 		log.Error("--db must be set")
 		usage()
 	}
-	db := database.New(*dbFlag, passphrase())
+	var pp string
+	if *encryptMetatada {
+		pp = passphrase()
+	}
+	db := database.New(*dbFlag, pp)
 	if *users {
 		db.DumpUsers()
 	}

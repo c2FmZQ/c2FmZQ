@@ -3,6 +3,7 @@
 package database
 
 import (
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -48,20 +49,25 @@ func recordLatency(name string) func() time.Duration {
 // New returns an initialized database that uses dir for storage.
 func New(dir, passphrase string) *Database {
 	db := &Database{dir: dir}
-	mkFile := filepath.Join(dir, "master.key")
-	var err error
-	if db.masterKey, err = crypto.ReadMasterKey(passphrase, mkFile); errors.Is(err, os.ErrNotExist) {
-		if db.masterKey, err = crypto.CreateMasterKey(); err != nil {
-			log.Fatal("Failed to create master key")
+	if passphrase != "" {
+		mkFile := filepath.Join(dir, "master.key")
+		var err error
+		if db.masterKey, err = crypto.ReadMasterKey(passphrase, mkFile); errors.Is(err, os.ErrNotExist) {
+			if db.masterKey, err = crypto.CreateMasterKey(); err != nil {
+				log.Fatal("Failed to create master key")
+			}
+			err = db.masterKey.Save(passphrase, mkFile)
 		}
-		err = db.masterKey.Save(passphrase, mkFile)
+		if err != nil {
+			log.Fatalf("Failed to decrypt master key: %v", err)
+		}
+		db.storage = secure.NewStorage(dir, &db.masterKey.EncryptionKey)
+	} else {
+		db.storage = secure.NewStorage(dir, nil)
 	}
-	if err != nil {
-		log.Fatalf("Failed to decrypt master key: %v", err)
-	}
-	db.storage = secure.NewStorage(dir, db.masterKey.EncryptionKey)
+
 	// Fail silently if it already exists.
-	db.storage.CreateEmptyFile(db.filePath(userListFile))
+	db.storage.CreateEmptyFile(db.filePath(userListFile), []userList{})
 	return db
 }
 
@@ -78,11 +84,22 @@ func (d Database) Dir() string {
 	return d.dir
 }
 
+func (d *Database) Hash(in []byte) []byte {
+	if d.masterKey != nil {
+		return d.masterKey.Hash(in)
+	}
+	h := sha256.Sum256(in)
+	return h[:]
+}
+
 // filePath returns a cryptographically secure hash of a logical file name.
 func (d *Database) filePath(elems ...string) string {
-	name := d.masterKey.Hash([]byte(path.Join(elems...)))
-	dir := filepath.Join("metadata", fmt.Sprintf("%02X", name[0]), fmt.Sprintf("%02X", name[1]))
-	return filepath.Join(dir, base64.RawURLEncoding.EncodeToString(name))
+	if d.masterKey != nil {
+		name := d.masterKey.Hash([]byte(path.Join(elems...)))
+		dir := filepath.Join("metadata", fmt.Sprintf("%02X", name[0]), fmt.Sprintf("%02X", name[1]))
+		return filepath.Join(dir, base64.RawURLEncoding.EncodeToString(name))
+	}
+	return filepath.Join("metadata", filepath.Join(elems...))
 }
 
 // nowInMS returns the current time in ms.
@@ -143,7 +160,41 @@ func showCallStack() {
 
 // DumpFile shows the content of a file to stdout.
 func (d Database) DumpFile(filename string) error {
-	return d.storage.DumpFile(filename)
+	var (
+		user          User
+		blob          BlobSpec
+		userList      []userList
+		albumManifest AlbumManifest
+		contactList   ContactList
+		fileSet       FileSet
+	)
+
+	out := func(obj interface{}) error {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(obj)
+	}
+
+	if _, err := d.storage.ReadDataFile(filename, &user); err == nil && user.UserID != 0 {
+		return out(user)
+	}
+	if _, err := d.storage.ReadDataFile(filename, &blob); err == nil && blob.RefCount > 0 {
+		return out(blob)
+	}
+	if _, err := d.storage.ReadDataFile(filename, &userList); err == nil && userList != nil {
+		return out(userList)
+	}
+	if _, err := d.storage.ReadDataFile(filename, &albumManifest); err == nil && albumManifest.Albums != nil {
+		return out(albumManifest)
+	}
+	if _, err := d.storage.ReadDataFile(filename, &contactList); err == nil && contactList.Contacts != nil {
+		return out(contactList)
+	}
+	if _, err := d.storage.ReadDataFile(filename, &fileSet); err == nil && fileSet.Files != nil {
+		return out(fileSet)
+	} else {
+		return err
+	}
 }
 
 // DumpUsers shows information about all the users to stdout.

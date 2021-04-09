@@ -3,6 +3,7 @@ package secure
 
 import (
 	"compress/gzip"
+	"encoding/gob"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,6 +19,13 @@ import (
 	"kringle-server/log"
 )
 
+const (
+	optEncrypted   = 1
+	optCompressed  = 2
+	optJSONEncoded = 4
+	optGOBEncoded  = 8
+)
+
 var (
 	// Indicates that the update was successfully rolled back.
 	ErrRolledBack = errors.New("rolled back")
@@ -30,11 +38,12 @@ var (
 // NewStorage returns a new Storage rooted at dir. The caller must provide an
 // EncryptionKey that will be used to encrypt and decrypt per-file encryption
 // keys.
-func NewStorage(dir string, masterKey crypto.EncryptionKey) *Storage {
+func NewStorage(dir string, masterKey *crypto.EncryptionKey) *Storage {
 	s := &Storage{
 		dir:       dir,
 		masterKey: masterKey,
 	}
+	s.useGOB = true
 	if err := s.rollbackPendingOps(); err != nil {
 		log.Fatalf("s.rollbackPendingOps: %v", err)
 	}
@@ -44,7 +53,9 @@ func NewStorage(dir string, masterKey crypto.EncryptionKey) *Storage {
 // Offers the API to atomically read, write, and update encrypted files.
 type Storage struct {
 	dir       string
-	masterKey crypto.EncryptionKey
+	masterKey *crypto.EncryptionKey
+	compress  bool
+	useGOB    bool
 }
 
 func createParentIfNotExist(filename string) error {
@@ -271,33 +282,6 @@ func (s *Storage) OpenManyForUpdate(files []string, objects interface{}) (func(c
 	}, nil
 }
 
-// DumpFile writes the decrypted content of a file to stdout.
-func (s *Storage) DumpFile(filename string) error {
-	f, err := os.Open(filepath.Join(s.dir, filename))
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	// Read the encrypted file key.
-	k, err := s.masterKey.ReadEncryptedKey(f)
-	if err != nil {
-		return err
-	}
-	// Use the file key to decrypt the rest of the file.
-	r, err := k.StartReader(f)
-	if err != nil {
-		return err
-	}
-	// Decompress the content of the file.
-	gz, err := gzip.NewReader(r)
-	if err != nil {
-		return err
-	}
-	defer gz.Close()
-	_, err = io.Copy(os.Stdout, gz)
-	return err
-}
-
 // ReadDataFile reads a json object from a file.
 func (s *Storage) ReadDataFile(filename string, obj interface{}) (*crypto.EncryptionKey, error) {
 	f, err := os.Open(filepath.Join(s.dir, filename))
@@ -305,25 +289,53 @@ func (s *Storage) ReadDataFile(filename string, obj interface{}) (*crypto.Encryp
 		return nil, err
 	}
 	defer f.Close()
-	// Read the encrypted file key.
-	k, err := s.masterKey.ReadEncryptedKey(f)
-	if err != nil {
+
+	hdr := make([]byte, 5)
+	if _, err := io.ReadFull(f, hdr); err != nil {
 		return nil, err
 	}
-	// Use the file key to decrypt the rest of the file.
-	r, err := k.StartReader(f)
-	if err != nil {
-		return nil, err
+	if string(hdr[:4]) != "KRIN" {
+		return nil, errors.New("wrong file type")
 	}
-	// Decompress the content of the file.
-	gz, err := gzip.NewReader(r)
-	if err != nil {
-		return nil, err
+	flags := hdr[4]
+	if flags&optEncrypted != 0 && s.masterKey == nil {
+		return nil, errors.New("file is encrypted, but we don't have a decryption key")
 	}
-	defer gz.Close()
-	// Decode JSON object.
-	if err := json.NewDecoder(gz).Decode(obj); err != nil {
-		return nil, err
+
+	var r io.Reader = f
+	var k *crypto.EncryptionKey
+	if flags&optEncrypted != 0 {
+		// Read the encrypted file key.
+		k, err := s.masterKey.ReadEncryptedKey(f)
+		if err != nil {
+			return nil, err
+		}
+		// Use the file key to decrypt the rest of the file.
+		if r, err = k.StartReader(f); err != nil {
+			return nil, err
+		}
+	}
+	var rc io.Reader = r
+	if flags&optCompressed != 0 {
+		// Decompress the content of the file.
+		gz, err := gzip.NewReader(r)
+		if err != nil {
+			return nil, err
+		}
+		defer gz.Close()
+		rc = gz
+	}
+
+	if flags&optGOBEncoded != 0 {
+		// Decode with GOB.
+		if err := gob.NewDecoder(rc).Decode(obj); err != nil {
+			return nil, err
+		}
+	} else if flags&optJSONEncoded != 0 {
+		// Decode JSON object.
+		if err := json.NewDecoder(rc).Decode(obj); err != nil {
+			return nil, err
+		}
 	}
 	return k, nil
 }
@@ -339,19 +351,32 @@ func (s *Storage) SaveDataFile(k *crypto.EncryptionKey, filename string, obj int
 }
 
 // CreateEmptyFile creates an empty file.
-func (s *Storage) CreateEmptyFile(filename string) error {
-	return s.writeFile(nil, filename, nil)
+func (s *Storage) CreateEmptyFile(filename string, obj interface{}) error {
+	return s.writeFile(nil, filename, obj)
 }
 
 // writeFile writes obj to a file.
 func (s *Storage) writeFile(k *crypto.EncryptionKey, filename string, obj interface{}) error {
 	fn := filepath.Join(s.dir, filename)
-	if k == nil {
+	if err := createParentIfNotExist(fn); err != nil {
+		return err
+	}
+	var flags byte
+	if s.masterKey != nil {
+		flags |= optEncrypted
+	}
+	if s.compress {
+		flags |= optCompressed
+	}
+	if s.useGOB {
+		flags |= optGOBEncoded
+	} else {
+		flags |= optJSONEncoded
+	}
+
+	if k == nil && s.masterKey != nil {
 		var err error
 		if k, err = s.masterKey.NewEncryptionKey(); err != nil {
-			return err
-		}
-		if err := createParentIfNotExist(fn); err != nil {
 			return err
 		}
 	}
@@ -359,32 +384,60 @@ func (s *Storage) writeFile(k *crypto.EncryptionKey, filename string, obj interf
 	if err != nil {
 		return err
 	}
-	// Write the encrypted file key first.
-	if err := k.WriteEncryptedKey(f); err != nil {
+	if _, err := f.Write([]byte{'K', 'R', 'I', 'N', flags}); err != nil {
 		f.Close()
 		return err
 	}
-	// Use the file key to encrypt the rest of the file.
-	w, err := k.StartWriter(f)
-	if err != nil {
-		f.Close()
-		return err
+	var w io.WriteCloser = f
+	if s.masterKey != nil {
+		// Write the encrypted file key first.
+		if err := k.WriteEncryptedKey(f); err != nil {
+			f.Close()
+			return err
+		}
+		// Use the file key to encrypt the rest of the file.
+		var err error
+		if w, err = k.StartWriter(f); err != nil {
+			f.Close()
+			return err
+		}
 	}
-	// Compress the content.
-	gz, err := gzip.NewWriterLevel(w, gzip.BestCompression)
-	if err != nil {
-		return err
+	var rc io.WriteCloser = w
+	if s.compress {
+		// Compress the content.
+		gz, err := gzip.NewWriterLevel(w, gzip.BestSpeed)
+		if err != nil {
+			return err
+		}
+		rc = gz
 	}
-	// Encode the JSON object.
-	enc := json.NewEncoder(gz)
-	if err := enc.Encode(obj); err != nil {
-		gz.Close()
-		w.Close()
-		return err
+
+	if s.useGOB {
+		// Encode with GOB.
+		if err := gob.NewEncoder(rc).Encode(obj); err != nil {
+			if rc != w {
+				rc.Close()
+			}
+			w.Close()
+			return err
+		}
+	} else {
+		// Encode as JSON object.
+		enc := json.NewEncoder(rc)
+		enc.SetIndent("", "  ")
+		if err := enc.Encode(obj); err != nil {
+			if rc != w {
+				rc.Close()
+			}
+			w.Close()
+			return err
+		}
 	}
-	if err := gz.Close(); err != nil {
-		w.Close()
-		return err
+	if rc != w {
+		if err := rc.Close(); err != nil {
+			w.Close()
+			return err
+		}
 	}
 	if err := w.Close(); err != nil {
 		return err

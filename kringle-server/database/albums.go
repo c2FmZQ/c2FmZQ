@@ -92,7 +92,7 @@ func (d *Database) AddAlbum(owner User, album AlbumSpec) (retErr error) {
 	if err := d.addAlbumRef(owner.UserID, album.AlbumID, ap); err != nil {
 		return err
 	}
-	if err := d.storage.CreateEmptyFile(ap); err != nil {
+	if err := d.storage.CreateEmptyFile(ap, FileSet{}); err != nil {
 		return err
 	}
 	commit, fs, err := d.fileSetForUpdate(owner, AlbumSet, album.AlbumID)

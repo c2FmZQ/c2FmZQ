@@ -23,6 +23,6 @@ VOLUME ["/data", "/secrets"]
 
 ENTRYPOINT ["/app/bin/kringle-server", "-db=/data"]
 # For HTTPS
-CMD ["-address=:443", "-passphrase_file=/secrets/kringle-passphrase", "-tlskey=/secrets/privkey.pem", "-tlscert=/secrets/fullchain.pem"]
+CMD ["-address=:443", "-passphrase-file=/secrets/kringle-passphrase", "-tlskey=/secrets/privkey.pem", "-tlscert=/secrets/fullchain.pem"]
 # For HTTP
-#CMD ["-address=:80", "-passphrase_file=/secrets/kringle-passphrase"]
+#CMD ["-address=:80", "-passphrase-file=/secrets/kringle-passphrase"]

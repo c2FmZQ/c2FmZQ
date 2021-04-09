@@ -32,12 +32,9 @@ var (
 	keyFile          = flag.String("tlskey", "", "The name of the file containing the TLS private key to use.")
 	logLevel         = flag.Int("v", 2, "The level of logging verbosity: 1:Error 2:Info 3:Debug")
 
-	passphraseFile = flag.String("passphrase_file", "", "The name of the file containing the passphrase that protects the server's metadata. If left empty, the server will prompt for a passphrase when it starts.")
-	htdigestFile   = flag.String("htdigest_file", "", "The name of the htdigest file to use for basic auth for some endpoints, e.g. /metrics")
-
-	mlockall = flag.Bool("mlockall", false, "Whether to prevent memory from being swapped to disk.")
-	setuid   = flag.Int("uid", -1, "The uid to use.")
-	setgid   = flag.Int("gid", -1, "The gid to use.")
+	encryptMetatada = flag.Bool("encrypt-metadata", true, "Whether to encrypt metadata.")
+	passphraseFile  = flag.String("passphrase-file", "", "The name of the file containing the passphrase that protects the server's metadata. If left empty, the server will prompt for a passphrase when it starts.")
+	htdigestFile    = flag.String("htdigest-file", "", "The name of the htdigest file to use for basic auth for some endpoints, e.g. /metrics")
 )
 
 func usage() {
@@ -52,8 +49,6 @@ func main() {
 	flag.Parse()
 	log.Level = *logLevel
 
-	lockMemory()
-
 	if *dbFlag == "" {
 		log.Error("--db must be set")
 		usage()
@@ -66,7 +61,14 @@ func main() {
 		log.Error("--cert and --key must either both be set or unset.")
 		usage()
 	}
-	db := database.New(*dbFlag, passphrase())
+	var pp string
+	if *encryptMetatada {
+		pp = passphrase()
+	}
+	if pp == "" {
+		log.Info("WARNING: Metadata encryption is DISABLED")
+	}
+	db := database.New(*dbFlag, pp)
 
 	s := server.New(db, *address, *htdigestFile)
 	s.AllowCreateAccount = *allowNewAccounts
@@ -98,24 +100,6 @@ func main() {
 	}
 	<-done
 	log.Info("Server exited cleanly.")
-}
-
-func lockMemory() {
-	if *mlockall {
-		if err := unix.Mlockall(unix.MCL_FUTURE | unix.MCL_CURRENT); err != nil {
-			log.Fatalf("unix.Mlockall: %v", err)
-		}
-	}
-	if *setgid >= 0 {
-		if err := unix.Setresgid(*setgid, *setgid, *setgid); err != nil {
-			log.Fatalf("unix.Setresgid(%d): %v", *setgid, err)
-		}
-	}
-	if *setuid >= 0 {
-		if err := unix.Setresuid(*setuid, *setuid, *setuid); err != nil {
-			log.Fatalf("unix.Setresuid(%d): %v", *setuid, err)
-		}
-	}
 }
 
 func passphrase() string {

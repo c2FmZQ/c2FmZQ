@@ -11,7 +11,7 @@ import (
 
 func TestBackupRestore(t *testing.T) {
 	dir := t.TempDir()
-	s := NewStorage(dir, encrypterDecrypter())
+	s := NewStorage(dir, encryptionKey())
 
 	if err := os.Mkdir(filepath.Join(dir, "data"), 0700); err != nil {
 		t.Fatalf("os.Mkdir: %v", err)
@@ -64,7 +64,7 @@ func TestBackupRestore(t *testing.T) {
 
 func TestBackupDelete(t *testing.T) {
 	dir := t.TempDir()
-	s := NewStorage(dir, encrypterDecrypter())
+	s := NewStorage(dir, encryptionKey())
 
 	if err := os.Mkdir(filepath.Join(dir, "data"), 0700); err != nil {
 		t.Fatalf("os.Mkdir: %v", err)
@@ -117,7 +117,7 @@ func TestBackupDelete(t *testing.T) {
 
 func TestRestorePendingOps(t *testing.T) {
 	dir := t.TempDir()
-	ed := encrypterDecrypter()
+	ed := encryptionKey()
 	s := NewStorage(dir, ed)
 
 	if err := os.Mkdir(filepath.Join(dir, "data"), 0700); err != nil {
