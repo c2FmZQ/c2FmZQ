@@ -75,7 +75,7 @@ func (b *backup) backup() error {
 		}
 	}
 	if errList != nil {
-		return fmt.Errorf("%v", errList)
+		return fmt.Errorf("%w %v", errList[0], errList[1:])
 	}
 	return nil
 }
@@ -92,7 +92,7 @@ func (b *backup) restore() error {
 		}
 	}
 	if errList != nil {
-		return fmt.Errorf("%v", errList)
+		return fmt.Errorf("%w %v", errList[0], errList[1:])
 	}
 	if err := os.Remove(filepath.Join(b.dir, b.pending)); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
@@ -112,7 +112,7 @@ func (b *backup) delete() error {
 		}
 	}
 	if errList != nil {
-		return fmt.Errorf("%v", errList)
+		return fmt.Errorf("%w %v", errList[0], errList[1:])
 	}
 	if err := os.Remove(filepath.Join(b.dir, b.pending)); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err

@@ -2,6 +2,7 @@
 package secure
 
 import (
+	"bytes"
 	"compress/gzip"
 	"encoding"
 	"encoding/gob"
@@ -55,7 +56,7 @@ func NewStorage(dir string, masterKey *crypto.EncryptionKey) *Storage {
 	return s
 }
 
-// Offers the API to atomically read, write, and update encrypted files.
+// Storage offers the API to atomically read, write, and update encrypted files.
 type Storage struct {
 	dir       string
 	masterKey *crypto.EncryptionKey
@@ -149,7 +150,7 @@ func tryToRemoveStaleLock(lockf string, deadline time.Duration) {
 	}
 }
 
-// OpenForUpdate opens a json file with the expectation that the object will be
+// OpenForUpdate opens a file with the expectation that the object will be
 // modified and then saved again.
 //
 // Example:
@@ -287,7 +288,7 @@ func (s *Storage) OpenManyForUpdate(files []string, objects interface{}) (func(c
 	}, nil
 }
 
-// ReadDataFile reads a json object from a file.
+// ReadDataFile reads an object from a file.
 func (s *Storage) ReadDataFile(filename string, obj interface{}) (*crypto.EncryptionKey, error) {
 	f, err := os.Open(filepath.Join(s.dir, filename))
 	if err != nil {
@@ -304,7 +305,7 @@ func (s *Storage) ReadDataFile(filename string, obj interface{}) (*crypto.Encryp
 	}
 	flags := hdr[4]
 	if flags&optEncrypted != 0 && s.masterKey == nil {
-		return nil, errors.New("file is encrypted, but we don't have a decryption key")
+		return nil, errors.New("file is encrypted, but a master key was not provided")
 	}
 
 	var r io.Reader = f
@@ -318,6 +319,14 @@ func (s *Storage) ReadDataFile(filename string, obj interface{}) (*crypto.Encryp
 		// Use the file key to decrypt the rest of the file.
 		if r, err = k.StartReader(f); err != nil {
 			return nil, err
+		}
+		// Read the header again.
+		h := make([]byte, 5)
+		if _, err := io.ReadFull(r, h); err != nil {
+			return nil, err
+		}
+		if bytes.Compare(hdr, h) != 0 {
+			return nil, errors.New("wrong encrypted header")
 		}
 	}
 	var rc io.Reader = r
@@ -343,6 +352,7 @@ func (s *Storage) ReadDataFile(filename string, obj interface{}) (*crypto.Encryp
 			return nil, err
 		}
 	case optBinaryEncoded:
+		// Decode with UnmarshalBinary.
 		u, ok := obj.(encoding.BinaryUnmarshaler)
 		if !ok {
 			return nil, fmt.Errorf("obj doesn't implement encoding.BinaryUnmarshaler: %T", obj)
@@ -355,6 +365,7 @@ func (s *Storage) ReadDataFile(filename string, obj interface{}) (*crypto.Encryp
 			return nil, err
 		}
 	case optRawBytes:
+		// Read raw bytes.
 		b, ok := obj.(*[]byte)
 		if !ok {
 			return nil, fmt.Errorf("obj isn't *[]byte: %T", obj)
@@ -378,19 +389,19 @@ func (s *Storage) ReadDataFile(filename string, obj interface{}) (*crypto.Encryp
 	return k, nil
 }
 
-// SaveDataFile atomically replace a json object in a file.
+// SaveDataFile atomically replace an object in a file.
 func (s *Storage) SaveDataFile(k *crypto.EncryptionKey, filename string, obj interface{}) error {
 	t := fmt.Sprintf("%s.tmp-%d", filename, time.Now().UnixNano())
 	if err := s.writeFile(k, t, obj); err != nil {
 		return err
 	}
-	// Atomcically replace the file.
+	// Atomically replace the file.
 	return os.Rename(filepath.Join(s.dir, t), filepath.Join(s.dir, filename))
 }
 
 // CreateEmptyFile creates an empty file.
-func (s *Storage) CreateEmptyFile(filename string, obj interface{}) error {
-	return s.writeFile(nil, filename, obj)
+func (s *Storage) CreateEmptyFile(filename string, empty interface{}) error {
+	return s.writeFile(nil, filename, empty)
 }
 
 // writeFile writes obj to a file.
@@ -442,6 +453,11 @@ func (s *Storage) writeFile(k *crypto.EncryptionKey, filename string, obj interf
 		var err error
 		if w, err = k.StartWriter(f); err != nil {
 			f.Close()
+			return err
+		}
+		// Write the header again.
+		if _, err := w.Write([]byte{'K', 'R', 'I', 'N', flags}); err != nil {
+			w.Close()
 			return err
 		}
 	}
