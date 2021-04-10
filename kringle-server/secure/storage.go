@@ -3,6 +3,7 @@ package secure
 
 import (
 	"compress/gzip"
+	"encoding"
 	"encoding/gob"
 	"encoding/json"
 	"errors"
@@ -20,10 +21,14 @@ import (
 )
 
 const (
-	optEncrypted   = 1
-	optCompressed  = 2
-	optJSONEncoded = 4
-	optGOBEncoded  = 8
+	optJSONEncoded   = 0x01 // encoding/json
+	optGOBEncoded    = 0x02 // encoding/gob
+	optBinaryEncoded = 0x03 // with encoding.BinaryMarshaler
+	optRawBytes      = 0x04 // []byte
+	optEncodingMask  = 0x0F
+
+	optEncrypted  = 0x10
+	optCompressed = 0x20
 )
 
 var (
@@ -326,16 +331,49 @@ func (s *Storage) ReadDataFile(filename string, obj interface{}) (*crypto.Encryp
 		rc = gz
 	}
 
-	if flags&optGOBEncoded != 0 {
+	switch enc := flags & optEncodingMask; enc {
+	case optGOBEncoded:
 		// Decode with GOB.
 		if err := gob.NewDecoder(rc).Decode(obj); err != nil {
 			return nil, err
 		}
-	} else if flags&optJSONEncoded != 0 {
+	case optJSONEncoded:
 		// Decode JSON object.
 		if err := json.NewDecoder(rc).Decode(obj); err != nil {
 			return nil, err
 		}
+	case optBinaryEncoded:
+		u, ok := obj.(encoding.BinaryUnmarshaler)
+		if !ok {
+			return nil, fmt.Errorf("obj doesn't implement encoding.BinaryUnmarshaler: %T", obj)
+		}
+		b, err := io.ReadAll(rc)
+		if err != nil {
+			return nil, err
+		}
+		if err := u.UnmarshalBinary(b); err != nil {
+			return nil, err
+		}
+	case optRawBytes:
+		b, ok := obj.(*[]byte)
+		if !ok {
+			return nil, fmt.Errorf("obj isn't *[]byte: %T", obj)
+		}
+		buf := make([]byte, 1024)
+		for {
+			n, err := rc.Read(buf)
+			if n > 0 {
+				*b = append(*b, buf[:n]...)
+			}
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	default:
+		return nil, fmt.Errorf("unexpected encoding %x", enc)
 	}
 	return k, nil
 }
@@ -356,22 +394,27 @@ func (s *Storage) CreateEmptyFile(filename string, obj interface{}) error {
 }
 
 // writeFile writes obj to a file.
-func (s *Storage) writeFile(k *crypto.EncryptionKey, filename string, obj interface{}) error {
+func (s *Storage) writeFile(k *crypto.EncryptionKey, filename string, obj interface{}) (retErr error) {
 	fn := filepath.Join(s.dir, filename)
 	if err := createParentIfNotExist(fn); err != nil {
 		return err
 	}
+
 	var flags byte
+	if _, ok := obj.(encoding.BinaryMarshaler); ok {
+		flags = optBinaryEncoded
+	} else if _, ok := obj.(*[]byte); ok {
+		flags = optRawBytes
+	} else if s.useGOB {
+		flags = optGOBEncoded
+	} else {
+		flags = optJSONEncoded
+	}
 	if s.masterKey != nil {
 		flags |= optEncrypted
 	}
 	if s.compress {
 		flags |= optCompressed
-	}
-	if s.useGOB {
-		flags |= optGOBEncoded
-	} else {
-		flags |= optJSONEncoded
 	}
 
 	if k == nil && s.masterKey != nil {
@@ -402,45 +445,67 @@ func (s *Storage) writeFile(k *crypto.EncryptionKey, filename string, obj interf
 			return err
 		}
 	}
-	var rc io.WriteCloser = w
+	var wc io.WriteCloser = w
 	if s.compress {
 		// Compress the content.
 		gz, err := gzip.NewWriterLevel(w, gzip.BestSpeed)
 		if err != nil {
 			return err
 		}
-		rc = gz
+		wc = gz
 	}
 
-	if s.useGOB {
-		// Encode with GOB.
-		if err := gob.NewEncoder(rc).Encode(obj); err != nil {
-			if rc != w {
-				rc.Close()
+	defer func() {
+		if wc != w {
+			if err := wc.Close(); err != nil && retErr == nil {
+				retErr = err
 			}
-			w.Close()
+		}
+		if err := w.Close(); err != nil && retErr == nil {
+			retErr = err
+		}
+	}()
+
+	switch enc := flags & optEncodingMask; enc {
+	case optGOBEncoded:
+		// Encode with GOB.
+		if err := gob.NewEncoder(wc).Encode(obj); err != nil {
 			return err
 		}
-	} else {
+	case optJSONEncoded:
 		// Encode as JSON object.
-		enc := json.NewEncoder(rc)
+		enc := json.NewEncoder(wc)
 		enc.SetIndent("", "  ")
 		if err := enc.Encode(obj); err != nil {
-			if rc != w {
-				rc.Close()
+			return err
+		}
+	case optBinaryEncoded:
+		// Encode with BinaryMarshaler.
+		m, ok := obj.(encoding.BinaryMarshaler)
+		if !ok {
+			return fmt.Errorf("obj doesn't implement encoding.BinaryMarshaler: %T", obj)
+		}
+		b, err := m.MarshalBinary()
+		if err != nil {
+			return err
+		}
+		if _, err := wc.Write(b); err != nil {
+			return err
+		}
+	case optRawBytes:
+		// Write raw bytes.
+		b, ok := obj.(*[]byte)
+		if !ok {
+			return fmt.Errorf("obj isn't *[]byte: %T", obj)
+		}
+		if b != nil {
+			if _, err := wc.Write(*b); err != nil {
+				return err
 			}
-			w.Close()
-			return err
 		}
+	default:
+		return fmt.Errorf("unexpected encoding %x", enc)
 	}
-	if rc != w {
-		if err := rc.Close(); err != nil {
-			w.Close()
-			return err
-		}
-	}
-	if err := w.Close(); err != nil {
-		return err
-	}
+
 	return nil
 }

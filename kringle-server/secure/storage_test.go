@@ -14,7 +14,6 @@ import (
 )
 
 func encryptionKey() *crypto.EncryptionKey {
-	return nil
 	mk, err := crypto.CreateMasterKey()
 	if err != nil {
 		panic(err)
@@ -143,6 +142,44 @@ func TestOpenForUpdateDeferredDone(t *testing.T) {
 
 	if err := f(); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("f returned unexpected error: %v", err)
+	}
+}
+
+func TestEncodeByteSlice(t *testing.T) {
+	want := []byte("Hello world")
+	dir := t.TempDir()
+	s := NewStorage(dir, encryptionKey())
+	if err := s.CreateEmptyFile("file", (*[]byte)(nil)); err != nil {
+		t.Fatalf("s.CreateEmptyFile failed: %v", err)
+	}
+	if err := s.SaveDataFile(nil, "file", &want); err != nil {
+		t.Fatalf("s.WriteDataFile() failed: %v", err)
+	}
+	var got []byte
+	if _, err := s.ReadDataFile("file", &got); err != nil {
+		t.Fatalf("s.ReadDataFile() failed: %v", err)
+	}
+	if !reflect.DeepEqual(want, got) {
+		t.Errorf("Unexpected msg. Want %q, got %q", want, got)
+	}
+}
+
+func TestEncodeBinary(t *testing.T) {
+	want := time.Now()
+	dir := t.TempDir()
+	s := NewStorage(dir, encryptionKey())
+	if err := s.CreateEmptyFile("file", &time.Time{}); err != nil {
+		t.Fatalf("s.CreateEmptyFile failed: %v", err)
+	}
+	if err := s.SaveDataFile(nil, "file", &want); err != nil {
+		t.Fatalf("s.WriteDataFile() failed: %v", err)
+	}
+	var got time.Time
+	if _, err := s.ReadDataFile("file", &got); err != nil {
+		t.Fatalf("s.ReadDataFile() failed: %v", err)
+	}
+	if got.UnixNano() != want.UnixNano() {
+		t.Errorf("Unexpected time. Want %q, got %q", want, got)
 	}
 }
 
