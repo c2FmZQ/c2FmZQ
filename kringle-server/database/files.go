@@ -125,7 +125,7 @@ func (d *Database) makeFilePath() (string, error) {
 	if _, err := rand.Read(name); err != nil {
 		return "", err
 	}
-	dir := filepath.Join("blobs", fmt.Sprintf("%02X", name[0]), fmt.Sprintf("%02X", name[1]))
+	dir := filepath.Join("blobs", fmt.Sprintf("%02X", name[0]))
 	return filepath.Join(dir, base64.RawURLEncoding.EncodeToString(name)), nil
 }
 
