@@ -33,3 +33,18 @@ func TestSealBox(t *testing.T) {
 		t.Errorf("SealBoxOpen returned unexpected result: Want %q, got %q", want, got)
 	}
 }
+
+func TestSymmetric(t *testing.T) {
+	nonce := []byte("abcdefghijklmnopqrstuvwx")
+	key := []byte("ABCDEFGHIJKLMNOPQRSTUVWXYZ123456")
+	msg := []byte("Hello world!")
+
+	enc := EncryptSymmetric(msg, nonce, key)
+	dec, err := DecryptSymmetric(enc, nonce, key)
+	if err != nil {
+		t.Fatalf("DecryptSymmetric: %v", err)
+	}
+	if want, got := msg, dec; !bytes.Equal(want, got) {
+		t.Errorf("DecryptSymmetric: want %q, got %q", want, got)
+	}
+}

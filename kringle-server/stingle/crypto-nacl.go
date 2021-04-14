@@ -12,6 +12,7 @@ import (
 	"golang.org/x/crypto/curve25519"
 	"golang.org/x/crypto/ed25519"
 	"golang.org/x/crypto/nacl/box"
+	"golang.org/x/crypto/nacl/secretbox"
 	"golang.org/x/crypto/nacl/sign"
 )
 
@@ -176,6 +177,34 @@ func SealBoxOpen(msg string, sk SecretKey) ([]byte, error) {
 	ret, ok := box.OpenAnonymous(nil, b, sk.PublicKey().B, sk.B)
 	if !ok {
 		return nil, errors.New("box.OpenAnonymous failed")
+	}
+	return ret, nil
+}
+
+func EncryptSymmetric(msg, nonce, key []byte) []byte {
+	if len(nonce) != 24 || len(key) != 32 {
+		panic("invalid arguments")
+	}
+	n := new([24]byte)
+	copy((*n)[:], nonce)
+	k := new([32]byte)
+	copy((*k)[:], key)
+	out := []byte{}
+	return secretbox.Seal(out, msg, n, k)
+}
+
+func DecryptSymmetric(box, nonce, key []byte) ([]byte, error) {
+	if len(nonce) != 24 || len(key) != 32 {
+		panic("invalid arguments")
+	}
+	n := new([24]byte)
+	copy((*n)[:], nonce)
+	k := new([32]byte)
+	copy((*k)[:], key)
+	out := []byte{}
+	ret, ok := secretbox.Open(out, box, n, k)
+	if !ok {
+		return nil, errors.New("secretbox.Open failed")
 	}
 	return ret, nil
 }

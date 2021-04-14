@@ -159,3 +159,19 @@ func SealBoxOpen(msg string, sk SecretKey) ([]byte, error) {
 	}
 	return []byte(d), nil
 }
+
+func EncryptSymmetric(msg, nonce, key []byte) []byte {
+	n := sodium.SecretBoxNonce{Bytes: sodium.Bytes(nonce)}
+	k := sodium.SecretBoxKey{Bytes: sodium.Bytes(key)}
+	return []byte(sodium.Bytes(msg).SecretBox(n, k))
+}
+
+func DecryptSymmetric(msg, nonce, key []byte) ([]byte, error) {
+	n := sodium.SecretBoxNonce{Bytes: sodium.Bytes(nonce)}
+	k := sodium.SecretBoxKey{Bytes: sodium.Bytes(key)}
+	ret, err := sodium.Bytes(msg).SecretBoxOpen(n, k)
+	if err != nil {
+		return nil, err
+	}
+	return []byte(ret), nil
+}
