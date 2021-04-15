@@ -32,8 +32,18 @@ type PublicKey struct {
 	B *[32]byte
 }
 
+func (k SecretKey) ToBytes() []byte {
+	return k.B[:]
+}
+
 func (k PublicKey) ToBytes() []byte {
 	return k.B[:]
+}
+
+func SecretKeyFromBytes(b []byte) SecretKey {
+	sk := SecretKey{B: new([32]byte)}
+	copy(sk.B[:], b)
+	return SecretKey(sk)
 }
 
 func PublicKeyFromBytes(b []byte) PublicKey {

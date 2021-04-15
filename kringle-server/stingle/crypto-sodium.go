@@ -19,8 +19,16 @@ func MakeSecretKey() SecretKey {
 type SecretKey sodium.BoxSecretKey
 type PublicKey sodium.BoxPublicKey
 
+func SecretKeyFromBytes(b []byte) SecretKey {
+	return SecretKey(sodium.BoxSecretKey{sodium.Bytes(b)})
+}
+
 func PublicKeyFromBytes(b []byte) PublicKey {
 	return PublicKey(sodium.BoxPublicKey{sodium.Bytes(b)})
+}
+
+func (k SecretKey) ToBytes() []byte {
+	return []byte(sodium.BoxSecretKey(k).Bytes)
 }
 
 func (k PublicKey) ToBytes() []byte {
