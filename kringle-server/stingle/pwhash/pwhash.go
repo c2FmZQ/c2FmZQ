@@ -18,9 +18,9 @@ const (
 	Difficult          // for key bundle
 )
 
-func KeyFromPassword(password, salt []byte, mode, length int) []byte {
+func KeyFromPassword(password, salt []byte, level, length uint32) []byte {
 	var memLimit, opsLimit uint32
-	switch mode {
+	switch level {
 	case Interactive:
 		memLimit, opsLimit = memLimitInteractive, opsLimitInteractive
 	case Moderate:
@@ -28,7 +28,7 @@ func KeyFromPassword(password, salt []byte, mode, length int) []byte {
 	case Difficult:
 		memLimit, opsLimit = memLimitSensitive, opsLimitSensitive
 	default:
-		panic("unknown mode")
+		panic("unknown level")
 	}
-	return argon2.IDKey(password, salt, opsLimit, memLimit, 1, uint32(length))
+	return argon2.IDKey(password, salt, opsLimit, memLimit, 1, length)
 }

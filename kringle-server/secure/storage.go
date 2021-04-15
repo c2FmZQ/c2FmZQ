@@ -308,7 +308,7 @@ func (s *Storage) ReadDataFile(filename string, obj interface{}) (*crypto.Encryp
 		return nil, errors.New("file is encrypted, but a master key was not provided")
 	}
 
-	var r io.Reader = f
+	var r io.ReadCloser = f
 	var k *crypto.EncryptionKey
 	if flags&optEncrypted != 0 {
 		// Read the encrypted file key.
@@ -385,6 +385,11 @@ func (s *Storage) ReadDataFile(filename string, obj interface{}) (*crypto.Encryp
 		}
 	default:
 		return nil, fmt.Errorf("unexpected encoding %x", enc)
+	}
+	if r != f {
+		if err := r.Close(); err != nil {
+			return nil, err
+		}
 	}
 	return k, nil
 }
