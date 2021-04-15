@@ -36,6 +36,17 @@ When viewing a shared album, the app / user has to trust that the shared content
 either. A malicious user _could_ share content that aims to exploit some unpatched
 vulnerability in the app's code.
 
+## Scale and performance
+
+This server was designed for personal use, not for large scale or speed. On a
+modern CPU and SSD, it scales to 10+ concurrent users with tens of thousands of
+files each, while maintaining a response time well under a second (excluding
+network I/O).
+
+On a small device, e.g. a raspberry pi, it scales to a handful of concurrent
+users with a few thousand files each if metadata encryption is turned off, and
+still maintain a response time ~ 5 seconds depending on storage type.
+
 ## How to run the server
 
 The server is self-contained. It doesn't depend on any external resources. It
