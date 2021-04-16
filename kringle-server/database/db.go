@@ -49,8 +49,11 @@ func recordLatency(name string) func() time.Duration {
 // New returns an initialized database that uses dir for storage.
 func New(dir, passphrase string) *Database {
 	db := &Database{dir: dir}
+	mkFile := filepath.Join(dir, "master.key")
 	if passphrase != "" {
-		mkFile := filepath.Join(dir, "master.key")
+		if _, err := os.Stat(filepath.Join(dir, "metadata", "users.dat")); err == nil {
+			log.Fatal("Passphrase is set, but metadata/users.dat exists.")
+		}
 		var err error
 		if db.masterKey, err = crypto.ReadMasterKey(passphrase, mkFile); errors.Is(err, os.ErrNotExist) {
 			if db.masterKey, err = crypto.CreateMasterKey(); err != nil {
@@ -63,6 +66,9 @@ func New(dir, passphrase string) *Database {
 		}
 		db.storage = secure.NewStorage(dir, &db.masterKey.EncryptionKey)
 	} else {
+		if _, err := os.Stat(mkFile); err == nil {
+			log.Fatal("Passphrase is empty, but master.key exists.")
+		}
 		db.storage = secure.NewStorage(dir, nil)
 	}
 

@@ -105,7 +105,7 @@ func EncryptSecretKeyForExport(password []byte, sk SecretKey) []byte {
 	if _, err := io.ReadFull(rand.Reader, salt); err != nil {
 		panic(err)
 	}
-	key := pwhash.KeyFromPassword(password, salt, pwhash.Difficult, 32)
+	key := pwhash.KeyFromPassword(password, salt, pwhash.Moderate, 32)
 	nonce := make([]byte, 24)
 	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
 		panic(err)
@@ -123,7 +123,7 @@ func DecryptSecretKeyFromBundle(password, encryptedKey []byte) (sk SecretKey, er
 	}
 	nonce := encryptedKey[len(encryptedKey)-24:]
 	salt := encryptedKey[len(encryptedKey)-40 : len(encryptedKey)-24]
-	key := pwhash.KeyFromPassword(password, salt, pwhash.Difficult, 32)
+	key := pwhash.KeyFromPassword(password, salt, pwhash.Moderate, 32)
 	b, err := DecryptSymmetric(encryptedKey[:len(encryptedKey)-40], nonce, key)
 	if err != nil {
 		return sk, err

@@ -14,8 +14,8 @@ const (
 	opsLimitSensitive   = 4
 
 	Interactive = iota // not used
-	Moderate           // for login
-	Difficult          // for key bundle
+	Moderate           // for login, key bundle
+	Sensitive          // not used
 )
 
 func KeyFromPassword(password, salt []byte, level, length uint32) []byte {
@@ -25,7 +25,7 @@ func KeyFromPassword(password, salt []byte, level, length uint32) []byte {
 		memLimit, opsLimit = memLimitInteractive, opsLimitInteractive
 	case Moderate:
 		memLimit, opsLimit = memLimitModerate, opsLimitModerate
-	case Difficult:
+	case Sensitive:
 		memLimit, opsLimit = memLimitSensitive, opsLimitSensitive
 	default:
 		panic("unknown level")

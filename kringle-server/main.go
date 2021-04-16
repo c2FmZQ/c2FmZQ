@@ -7,7 +7,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"math/rand"
 	"net/http"
@@ -16,63 +15,134 @@ import (
 	"strings"
 	"time"
 
+	"github.com/urfave/cli/v2" // cli
 	"golang.org/x/sys/unix"
 	"golang.org/x/term"
+
 	"kringle-server/database"
 	"kringle-server/log"
 	"kringle-server/server"
 )
 
 var (
-	allowNewAccounts = flag.Bool("allow-new-accounts", true, "Whether new account registration is allowed.")
-	dbFlag           = flag.String("db", "", "The directory name of the database.")
-	address          = flag.String("address", "127.0.0.1:8080", "The local address to use.")
-	baseURL          = flag.String("base-url", "", "The base URL of the generated download links. If empty, the links will generated using the Host headers of the incoming requests, i.e. https://HOST/.")
-	certFile         = flag.String("tlscert", "", "The name of the file containing the TLS cert to use. If neither -cert or -key is set, the server will not use TLS.")
-	keyFile          = flag.String("tlskey", "", "The name of the file containing the TLS private key to use.")
-	logLevel         = flag.Int("v", 2, "The level of logging verbosity: 1:Error 2:Info 3:Debug")
-
-	encryptMetatada = flag.Bool("encrypt-metadata", true, "Whether to encrypt metadata.")
-	passphraseFile  = flag.String("passphrase-file", "", "The name of the file containing the passphrase that protects the server's metadata. If left empty, the server will prompt for a passphrase when it starts.")
-	htdigestFile    = flag.String("htdigest-file", "", "The name of the htdigest file to use for basic auth for some endpoints, e.g. /metrics")
+	flagDatabase         string
+	flagAddress          string
+	flagBaseURL          string
+	flagTLSCert          string
+	flagTLSKey           string
+	flagAllowNewAccounts bool
+	flagLogLevel         int
+	flagEncryptMetadata  bool
+	flagPassphraseFile   string
+	flagHTDigestFile     string
 )
-
-func usage() {
-	fmt.Fprintf(os.Stderr, "Usage: %s [flags]\n\nFlags:\n", os.Args[0])
-	flag.PrintDefaults()
-	os.Exit(64)
-}
 
 func main() {
 	rand.Seed(int64(time.Now().Nanosecond()))
-	flag.Usage = usage
-	flag.Parse()
-	log.Level = *logLevel
 
-	if *dbFlag == "" {
-		log.Error("--db must be set")
-		usage()
+	app := &cli.App{
+		Name:      "kringle-server",
+		Usage:     "Runs the kringle server",
+		HideHelp:  true,
+		ArgsUsage: " ",
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:        "database",
+				Aliases:     []string{"db"},
+				Value:       "",
+				Usage:       "Use the database in `DIR`",
+				Required:    true,
+				EnvVars:     []string{"KRINGLE_DATABASE"},
+				Destination: &flagDatabase,
+			},
+			&cli.StringFlag{
+				Name:        "address",
+				Aliases:     []string{"addr"},
+				Value:       "127.0.0.1:8080",
+				Usage:       "The local address to use.",
+				Destination: &flagAddress,
+			},
+			&cli.StringFlag{
+				Name:        "base-url",
+				Value:       "",
+				Usage:       "The base URL of the generated download links. If empty, the links will generated using the Host headers of the incoming requests, i.e. https://HOST/.",
+				Destination: &flagBaseURL,
+			},
+			&cli.StringFlag{
+				Name:        "tlscert",
+				Value:       "",
+				Usage:       "The name of the `FILE` containing the TLS cert to use. If neither -cert nor -key is set, the server will not use TLS.",
+				TakesFile:   true,
+				Destination: &flagTLSCert,
+			},
+			&cli.StringFlag{
+				Name:        "tlskey",
+				Value:       "",
+				Usage:       "The name of the `FILE` containing the TLS private key to use.",
+				Destination: &flagTLSKey,
+			},
+			&cli.BoolFlag{
+				Name:        "allow-new-accounts",
+				Value:       true,
+				Usage:       "Whether new account registration is allowed.",
+				Destination: &flagAllowNewAccounts,
+			},
+			&cli.IntFlag{
+				Name:        "verbose",
+				Aliases:     []string{"v"},
+				Value:       3,
+				DefaultText: "3 (debug)",
+				Usage:       "The level of logging verbosity: 1:Error 2:Info 3:Debug",
+				Destination: &flagLogLevel,
+			},
+			&cli.BoolFlag{
+				Name:        "encrypt-metadata",
+				Value:       true,
+				Usage:       "Whether the metadata is encrypted.",
+				Destination: &flagEncryptMetadata,
+			},
+			&cli.StringFlag{
+				Name:        "passphrase-file",
+				Value:       "",
+				Usage:       "Read the database passphrase from `FILE`.",
+				EnvVars:     []string{"KRINGLE_PASSPHRASE_FILE"},
+				Destination: &flagPassphraseFile,
+			},
+			&cli.StringFlag{
+				Name:        "htdigest-file",
+				Value:       "",
+				Usage:       "The name of the htdigest `FILE` to use for basic auth for some endpoints, e.g. /metrics",
+				EnvVars:     []string{"KRINGLE_HTDIGEST_FILE"},
+				Destination: &flagHTDigestFile,
+			},
+		},
+		Action: startServer,
 	}
-	if *address == "" {
-		log.Error("--address must be set")
-		usage()
+	if err := app.Run(os.Args); err != nil {
+		log.Fatal(err)
 	}
-	if (*certFile == "") != (*keyFile == "") {
-		log.Error("--cert and --key must either both be set or unset.")
-		usage()
+}
+
+func startServer(c *cli.Context) error {
+	log.Level = flagLogLevel
+	if (flagTLSCert == "") != (flagTLSKey == "") {
+		log.Fatal("--tlscert and --tlskey must either both be set or unset.")
 	}
 	var pp string
-	if *encryptMetatada {
-		pp = passphrase()
+	if flagEncryptMetadata {
+		var err error
+		if pp, err = passphrase(c); err != nil {
+			return err
+		}
 	}
 	if pp == "" {
 		log.Info("WARNING: Metadata encryption is DISABLED")
 	}
-	db := database.New(*dbFlag, pp)
+	db := database.New(flagDatabase, pp)
 
-	s := server.New(db, *address, *htdigestFile)
-	s.AllowCreateAccount = *allowNewAccounts
-	s.BaseURL = *baseURL
+	s := server.New(db, flagAddress, flagHTDigestFile)
+	s.AllowCreateAccount = flagAllowNewAccounts
+	s.BaseURL = flagBaseURL
 
 	done := make(chan struct{})
 	go func() {
@@ -87,33 +157,34 @@ func main() {
 		close(done)
 	}()
 
-	if *certFile == "" {
+	if flagTLSCert == "" {
 		log.Info("Starting server WITHOUT TLS")
 		if err := s.Run(); err != http.ErrServerClosed {
 			log.Fatalf("s.Run: %v", err)
 		}
 	} else {
 		log.Info("Starting server with TLS")
-		if err := s.RunWithTLS(*certFile, *keyFile); err != http.ErrServerClosed {
+		if err := s.RunWithTLS(flagTLSCert, flagTLSKey); err != http.ErrServerClosed {
 			log.Fatalf("s.RunWithTLS: %v", err)
 		}
 	}
 	<-done
 	log.Info("Server exited cleanly.")
+	return nil
 }
 
-func passphrase() string {
-	if *passphraseFile != "" {
-		p, err := os.ReadFile(*passphraseFile)
+func passphrase(c *cli.Context) (string, error) {
+	if f := flagPassphraseFile; f != "" {
+		p, err := os.ReadFile(f)
 		if err != nil {
-			log.Fatalf("passphrase: %v", err)
+			return "", cli.Exit(err, 1)
 		}
-		return string(p)
+		return string(p), nil
 	}
-	fmt.Print("Enter passphrase: ")
+	fmt.Print("Enter database passphrase: ")
 	passphrase, err := term.ReadPassword(int(os.Stdin.Fd()))
 	if err != nil {
-		log.Fatalf("passphrase: %v", err)
+		return "", cli.Exit(err, 1)
 	}
-	return strings.TrimSpace(string(passphrase))
+	return strings.TrimSpace(string(passphrase)), nil
 }
