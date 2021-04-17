@@ -156,7 +156,7 @@ func TestStreamInvalidMAC(t *testing.T) {
 	if n, err := r.Read(b); n != 10000 || err != nil {
 		t.Errorf("StartReader.Read: %d, %v", n, err)
 	}
-	if err := r.Close(); err != ErrInvalidHMAC {
+	if err := r.Close(); err != ErrDecryptFailed {
 		t.Fatalf("Expected StartReader.Close to fail, got: %v", err)
 	}
 }
