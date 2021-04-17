@@ -24,7 +24,7 @@ import (
 
 const (
 	// The size of an encrypted key.
-	encryptedKeySize = 97
+	encryptedKeySize = 129
 )
 
 var (
@@ -48,7 +48,7 @@ type EncryptionKey struct {
 // CreateMasterKey creates a new master key.
 func CreateMasterKey() (*MasterKey, error) {
 	ek := EncryptionKey{
-		key: make([]byte, 32),
+		key: make([]byte, 64),
 	}
 	if _, err := io.ReadFull(rand.Reader, ek.key); err != nil {
 		return nil, err
@@ -128,7 +128,7 @@ func (mk MasterKey) Save(passphrase, file string) error {
 
 // Hash returns the HMAC-SHA256 hash of b.
 func (k EncryptionKey) Hash(b []byte) []byte {
-	mac := hmac.New(sha256.New, k.key)
+	mac := hmac.New(sha256.New, k.key[32:])
 	mac.Write(b)
 	return mac.Sum(nil)
 }
@@ -146,9 +146,9 @@ func (k EncryptionKey) Decrypt(data []byte) ([]byte, error) {
 	encData, data := data[:len(data)-32], data[len(data)-32:]
 	hm := data[:32]
 	if !hmac.Equal(hm, k.Hash(encData)) {
-		return nil, errors.New("invalid hmac")
+		return nil, ErrInvalidHMAC
 	}
-	block, err := aes.NewCipher(k.key)
+	block, err := aes.NewCipher(k.key[:32])
 	if err != nil {
 		return nil, fmt.Errorf("aes.NewCipher failed: %w", err)
 	}
@@ -164,7 +164,7 @@ func (k EncryptionKey) Encrypt(data []byte) ([]byte, error) {
 	if len(k.key) == 0 {
 		log.Fatal("key is not set")
 	}
-	block, err := aes.NewCipher(k.key)
+	block, err := aes.NewCipher(k.key[:32])
 	if err != nil {
 		return nil, fmt.Errorf("aes.NewCipher failed: %w", err)
 	}
@@ -195,7 +195,7 @@ func (k EncryptionKey) Encrypt(data []byte) ([]byte, error) {
 
 // NewEncryptionKey creates a new AES-256 encryption key.
 func (k EncryptionKey) NewEncryptionKey() (*EncryptionKey, error) {
-	key := make([]byte, 32)
+	key := make([]byte, 64)
 	if _, err := io.ReadFull(rand.Reader, key); err != nil {
 		return nil, fmt.Errorf("creating key: %w", err)
 	}
@@ -215,7 +215,7 @@ func (k EncryptionKey) DecryptKey(encryptedKey []byte) (*EncryptionKey, error) {
 	if err != nil {
 		return nil, err
 	}
-	if len(key) != 32 {
+	if len(key) != 64 {
 		return nil, errors.New("invalid key")
 	}
 	ek := &EncryptionKey{key: key}
@@ -224,39 +224,41 @@ func (k EncryptionKey) DecryptKey(encryptedKey []byte) (*EncryptionKey, error) {
 	return ek, nil
 }
 
-// StreamReader is like cipher.StreamReader, except that it expects the last 64
-// bytes to be the HMAC-SHA512 of the data. Close() returns an error if the HMAC
-// is invalid.
+// StreamReader is like cipher.StreamReader but validates the HMAC at the end
+// of the stream when Close() is called.
 //
-// The caller has to read the whole file and then call Close() to verify the
-// file integrity.
+// The caller has to read the whole file before calling Close() to properly
+// validate the HMAC.
 type StreamReader struct {
-	sr  *cipher.StreamReader
+	s cipher.Stream
+	r io.Reader
+
 	mac hash.Hash
 	buf [4096]byte
 	sz  int
 }
 
-func (r *StreamReader) Read(b []byte) (n int, err error) {
+func (r *StreamReader) Read(dst []byte) (n int, err error) {
 	for err == nil {
 		if r.sz > r.mac.Size() {
 			var nn int
-			nn = copy(b[n:], r.buf[:r.sz-r.mac.Size()])
+			nn = copy(dst[n:], r.buf[:r.sz-r.mac.Size()])
 			copy(r.buf[:], r.buf[nn:])
 			r.sz -= nn
 			n += nn
 		}
-		if n == len(b) {
+		if n == len(dst) {
 			break
 		}
 		var nn int
-		nn, err = r.sr.Read(r.buf[r.sz:])
+		nn, err = r.r.Read(r.buf[r.sz:])
 		r.sz += nn
 	}
+	r.mac.Write(dst[:n])
+	r.s.XORKeyStream(dst[:n], dst[:n])
 	if n == 0 && err != nil {
 		return 0, err
 	}
-	r.mac.Write(b[:n])
 	return n, nil
 }
 
@@ -268,9 +270,11 @@ func (r *StreamReader) Close() error {
 	return nil
 }
 
-// StartReader opens a reader to decrypt a stream of data.
+// StartReader opens a reader to decrypt a stream of data and verify the HMAC
+// at the same time. The caller has to read the whole stream and then call
+// Close() to validate the HMAC.
 func (k EncryptionKey) StartReader(r io.Reader) (*StreamReader, error) {
-	block, err := aes.NewCipher(k.key)
+	block, err := aes.NewCipher(k.key[:32])
 	if err != nil {
 		return nil, fmt.Errorf("aes.NewCipher: %w", err)
 	}
@@ -285,37 +289,46 @@ func (k EncryptionKey) StartReader(r io.Reader) (*StreamReader, error) {
 	if _, err := io.ReadFull(r, iv); err != nil {
 		return nil, fmt.Errorf("reading file iv: %w", err)
 	}
-	sr := &cipher.StreamReader{
-		S: cipher.NewCTR(block, iv),
-		R: r,
-	}
-	return &StreamReader{sr: sr, mac: hmac.New(sha512.New, k.key)}, nil
+	return &StreamReader{
+		s:   cipher.NewCTR(block, iv),
+		r:   r,
+		mac: hmac.New(sha512.New, k.key[32:]),
+	}, nil
 }
 
-// StreamWriter is like cipher.StreamWriter, plus adding the HMAC-SHA512 at the
-// end of the file when Close() is called.
+// StreamWriter is like cipher.StreamWriter but adds a HMAC of the ciphertext at
+// the end of the stream when Close() is called.
 type StreamWriter struct {
-	sw  *cipher.StreamWriter
+	s   cipher.Stream
+	w   io.Writer
 	mac hash.Hash
 }
 
-func (w *StreamWriter) Write(b []byte) (int, error) {
-	w.mac.Write(b)
-	return w.sw.Write(b)
+func (w *StreamWriter) Write(src []byte) (n int, err error) {
+	c := make([]byte, len(src))
+	w.s.XORKeyStream(c, src)
+	n, err = w.w.Write(c)
+	if n != len(src) && err == nil { // should never happen
+		err = io.ErrShortWrite
+	}
+	w.mac.Write(c)
+	return
 }
 
-func (w *StreamWriter) Close() error {
+func (w *StreamWriter) Close() (err error) {
 	h := w.mac.Sum(nil)
-	if _, err := w.sw.Write(h[:]); err != nil {
-		w.sw.Close()
-		return err
+	_, err = w.w.Write(h[:])
+	if c, ok := w.w.(io.Closer); ok {
+		if e := c.Close(); err == nil {
+			err = e
+		}
 	}
-	return w.sw.Close()
+	return
 }
 
 // StartWriter opens a writer to encrypt a stream of data.
 func (k EncryptionKey) StartWriter(w io.Writer) (*StreamWriter, error) {
-	block, err := aes.NewCipher(k.key)
+	block, err := aes.NewCipher(k.key[:32])
 	if err != nil {
 		return nil, fmt.Errorf("aes.NewCipher: %w", err)
 	}
@@ -330,11 +343,11 @@ func (k EncryptionKey) StartWriter(w io.Writer) (*StreamWriter, error) {
 	if _, err := w.Write(iv); err != nil {
 		return nil, fmt.Errorf("writing file iv: %w", err)
 	}
-	sw := &cipher.StreamWriter{
-		S: cipher.NewCTR(block, iv),
-		W: w,
-	}
-	return &StreamWriter{sw, hmac.New(sha512.New, k.key)}, nil
+	return &StreamWriter{
+		s:   cipher.NewCTR(block, iv),
+		w:   w,
+		mac: hmac.New(sha512.New, k.key[32:]),
+	}, nil
 }
 
 // ReadEncryptedKey reads an encrypted key and decrypts it.
