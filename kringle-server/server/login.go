@@ -11,6 +11,7 @@ import (
 	"kringle-server/database"
 	"kringle-server/log"
 	"kringle-server/stingle"
+	"kringle-server/stingle/token"
 )
 
 // handleCreateAccount handles the /v2/register/createAccount endpoint.
@@ -117,9 +118,8 @@ func (s *Server) handleLogin(req *http.Request) *stingle.Response {
 	return stingle.ResponseOK().
 		AddPart("keyBundle", u.KeyBundle).
 		AddPart("serverPublicKey", u.ServerPublicKeyForExport()).
-		AddPart("token", stingle.MintToken(u.ServerSignKey,
-			stingle.Token{Scope: "session", Subject: u.UserID, Seq: u.TokenSeq},
-			180*24*time.Hour)).
+		AddPart("token", token.Mint(u.TokenKey,
+			token.Token{Scope: "session", Subject: u.UserID}, 180*24*time.Hour)).
 		AddPart("userId", fmt.Sprintf("%d", u.UserID)).
 		AddPart("isKeyBackedUp", u.IsBackup).
 		AddPart("homeFolder", u.HomeFolder)
@@ -134,7 +134,7 @@ func (s *Server) handleLogin(req *http.Request) *stingle.Response {
 // Returns:
 //  - StringleResponse(ok)
 func (s *Server) handleLogout(user database.User, req *http.Request) *stingle.Response {
-	user.TokenSeq++
+	user.TokenKey = token.MakeKey()
 	if err := s.db.UpdateUser(user); err != nil {
 		log.Errorf("UpdateUser: %v", err)
 		return stingle.ResponseNOK()
@@ -171,7 +171,7 @@ func (s *Server) handleChangePass(user database.User, req *http.Request) *stingl
 	user.HashedPassword = base64.StdEncoding.EncodeToString(hashed)
 	user.Salt = params["newSalt"]
 	user.KeyBundle = params["keyBundle"]
-	user.TokenSeq++
+	user.TokenKey = token.MakeKey()
 	pk, err := stingle.DecodeKeyBundle(user.KeyBundle)
 	if err != nil {
 		log.Errorf("DecodeKeyBundle: %v", err)
@@ -184,9 +184,8 @@ func (s *Server) handleChangePass(user database.User, req *http.Request) *stingl
 		return stingle.ResponseNOK()
 	}
 	return stingle.ResponseOK().
-		AddPart("token", stingle.MintToken(s.db.SignKeyForUser(user.Email),
-			stingle.Token{Scope: "session", Subject: user.UserID, Seq: user.TokenSeq},
-			180*24*time.Hour))
+		AddPart("token", token.Mint(s.db.TokenKeyForUser(user.Email),
+			token.Token{Scope: "session", Subject: user.UserID}, 180*24*time.Hour))
 }
 
 // handleGetServerPK handles the /v2/keys/getServerPK endpoint. The server's
@@ -271,7 +270,7 @@ func (s *Server) handleRecoverAccount(req *http.Request) *stingle.Response {
 	user.HashedPassword = base64.StdEncoding.EncodeToString(hashed)
 	user.Salt = params["newSalt"]
 	user.KeyBundle = params["keyBundle"]
-	user.TokenSeq++
+	user.TokenKey = token.MakeKey()
 	pk, err := stingle.DecodeKeyBundle(user.KeyBundle)
 	if err != nil {
 		log.Errorf("DecodeKeyBundle: %v", err)

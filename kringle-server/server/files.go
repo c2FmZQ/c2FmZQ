@@ -15,6 +15,7 @@ import (
 	"kringle-server/database"
 	"kringle-server/log"
 	"kringle-server/stingle"
+	"kringle-server/stingle/token"
 )
 
 // handleUpload handles the /v2/sync/upload endpoint. It is used to upload
@@ -273,9 +274,9 @@ func (s *Server) tryToHandleRange(w http.ResponseWriter, rangeHdr string, f *os.
 	w.WriteHeader(http.StatusPartialContent)
 }
 
-// handleSignedDownload handles the /v2/signedDownload endpoint. It is used to
+// handleTokenDownload handles the /v2/download endpoint. It is used to
 // download a file with a client that can't use the authenticated API calls,
-// e.g. a video player. The URL contains a token that's signed by this server
+// e.g. a video player. The URL contains a token that's encrypted by this server
 // and contains all the information to authenticate the request and find the
 // requested file.
 //
@@ -285,7 +286,7 @@ func (s *Server) tryToHandleRange(w http.ResponseWriter, rangeHdr string, f *os.
 //
 // Returns:
 //   - The content of the file is streamed.
-func (s *Server) handleSignedDownload(w http.ResponseWriter, req *http.Request) {
+func (s *Server) handleTokenDownload(w http.ResponseWriter, req *http.Request) {
 	baseURI, tok := path.Split(req.URL.RequestURI())
 	timer := prometheus.NewTimer(reqLatency.WithLabelValues(req.Method, baseURI))
 	defer timer.ObserveDuration()
@@ -320,12 +321,11 @@ func (s *Server) handleSignedDownload(w http.ResponseWriter, req *http.Request) 
 
 // makeDownloadURL creates a signed URL to download a file.
 func (s *Server) makeDownloadURL(user database.User, host, file, set string, isThumb bool) string {
-	tok := stingle.MintToken(
-		user.ServerSignKey,
-		stingle.Token{
+	tok := token.Mint(
+		user.TokenKey,
+		token.Token{
 			Scope:   "download",
 			Subject: user.UserID,
-			Seq:     user.TokenSeq,
 			Set:     set,
 			File:    file,
 			Thumb:   isThumb,
@@ -336,7 +336,7 @@ func (s *Server) makeDownloadURL(user database.User, host, file, set string, isT
 	if b == "" {
 		b = fmt.Sprintf("https://%s/", host)
 	}
-	return fmt.Sprintf("%sv2/signedDownload/%s", b, tok)
+	return fmt.Sprintf("%sv2/download/%s", b, tok)
 }
 
 // handleGetDownloadUrls handles the /v2/sync/getDownloadUrls endpoint. It is

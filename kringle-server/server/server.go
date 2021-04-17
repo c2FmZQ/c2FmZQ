@@ -4,7 +4,6 @@ package server
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net"
 	"net/http"
 	"strconv"
@@ -16,6 +15,7 @@ import (
 	"kringle-server/database"
 	"kringle-server/log"
 	"kringle-server/stingle"
+	"kringle-server/stingle/token"
 )
 
 var (
@@ -105,7 +105,7 @@ func New(db *database.Database, addr, htdigest string) *Server {
 	s.mux.HandleFunc("/v2/sync/emptyTrash", s.auth(s.handleEmptyTrash))
 	s.mux.HandleFunc("/v2/sync/delete", s.auth(s.handleDelete))
 	s.mux.HandleFunc("/v2/sync/download", s.handleDownload)
-	s.mux.HandleFunc("/v2/signedDownload/", s.handleSignedDownload)
+	s.mux.HandleFunc("/v2/download/", s.handleTokenDownload)
 	s.mux.HandleFunc("/v2/sync/getDownloadUrls", s.auth(s.handleGetDownloadUrls))
 	s.mux.HandleFunc("/v2/sync/getUrl", s.auth(s.handleGetURL))
 
@@ -207,25 +207,23 @@ func (s *Server) noauth(f func(*http.Request) *stingle.Response) http.HandlerFun
 // checkToken validates the signed token that was given to the client when it
 // logged in. The client presents this token with most API requests.
 // Returns the decoded token, and the authenticated user.
-func (s *Server) checkToken(tok, scope string) (stingle.Token, database.User, error) {
-	token, err := stingle.DecodeToken(tok)
+func (s *Server) checkToken(tok, scope string) (token.Token, database.User, error) {
+	id, err := token.Subject(tok)
 	if err != nil {
-		return stingle.Token{}, database.User{}, err
+		return token.Token{}, database.User{}, err
 	}
-	user, err := s.db.UserByID(token.Subject)
+	user, err := s.db.UserByID(id)
 	if err != nil {
-		return token, database.User{}, err
+		return token.Token{}, database.User{}, err
 	}
-	if err := stingle.ValidateToken(user.ServerSignKey, token); err != nil {
-		return token, database.User{}, err
+	t, err := token.Decrypt(user.TokenKey, tok)
+	if err != nil {
+		return token.Token{}, database.User{}, err
 	}
-	if token.Seq != user.TokenSeq {
-		return token, user, fmt.Errorf("unexpected token Seq (%d != %d)", token.Seq, user.TokenSeq)
+	if t.Scope != scope {
+		return token.Token{}, database.User{}, token.ErrValidationFailed
 	}
-	if token.Scope != scope {
-		return token, user, fmt.Errorf("unexpected token Scope (%q != %q)", token.Scope, scope)
-	}
-	return token, user, nil
+	return t, user, nil
 }
 
 // auth wraps handlers that require authentication, checking the token, and

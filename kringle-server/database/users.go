@@ -13,6 +13,7 @@ import (
 
 	"kringle-server/log"
 	"kringle-server/stingle"
+	"kringle-server/stingle/token"
 )
 
 const (
@@ -46,14 +47,10 @@ type User struct {
 	IsBackup string `json:"isBackup"`
 	// The server's secret key used with this user.
 	ServerKey stingle.SecretKey `json:"serverKey"`
-	// The server's secret key used for signing tokens for this user.
-	ServerSignKey stingle.SignSecretKey `json:"serverSignKey"`
 	// The user's public key, extracted from the key bundle.
 	PublicKey stingle.PublicKey `json:"publicKey"`
-	// A sequence number of valid tokens. Only tokens with this sequence
-	// number are valid. The number of incremented when the user logs out
-	// or changes their password.
-	TokenSeq int `json:"tokenSeq"`
+	// The server's secret key used for encrypting tokens for this user.
+	TokenKey *token.Key `json:"serverTokenKey"`
 }
 
 // A user's contact list information.
@@ -129,8 +126,7 @@ func (d *Database) AddUser(u User) (retErr error) {
 	u.UserID = uid
 	u.HomeFolder = hex.EncodeToString(d.Hash([]byte(u.Email)))
 	u.ServerKey = stingle.MakeSecretKey()
-	u.ServerSignKey = stingle.MakeSignSecretKey()
-	u.TokenSeq = 1
+	u.TokenKey = token.MakeKey()
 	if err := d.storage.SaveDataFile(nil, d.filePath(u.home(userFile)), u); err != nil {
 		return err
 	}
@@ -188,14 +184,14 @@ func (d *Database) User(email string) (User, error) {
 	return User{}, os.ErrNotExist
 }
 
-// SignKeyForUser returns the server's SignSecretKey associated with this user.
-func (d *Database) SignKeyForUser(email string) stingle.SignSecretKey {
-	defer recordLatency("SignKeyForUser")()
+// TokenKeyForUser returns the server's TokenKey associated with this user.
+func (d *Database) TokenKeyForUser(email string) *token.Key {
+	defer recordLatency("TokenKeyForUser")()
 
 	if u, err := d.User(email); err == nil {
-		return u.ServerSignKey
+		return u.TokenKey
 	}
-	return stingle.SignSecretKey{}
+	return nil
 }
 
 // Export converts a Contact to stingle.Contact.
