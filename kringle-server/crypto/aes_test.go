@@ -24,8 +24,8 @@ func TestMasterKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadMasterKey('foo'): %v", err)
 	}
-	if want := mk; !reflect.DeepEqual(want, got) {
-		t.Errorf("Mismatch keys: %v != %v", want, got)
+	if want := mk; !reflect.DeepEqual(want.key(), got.key()) {
+		t.Errorf("Mismatch keys: %v != %v", want.key(), got.key())
 	}
 	if _, err := ReadMasterKey("bar", keyFile); err == nil {
 		t.Errorf("ReadMasterKey('bar') should have failed, but didn't")
@@ -74,8 +74,8 @@ func TestEncryptedKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("mk.ReadEncryptedKey: %v", err)
 	}
-	if !reflect.DeepEqual(ek, ek2) {
-		t.Errorf("Unexpected key. Want %+v, got %+v", ek, ek2)
+	if want, got := ek.key(), ek2.key(); !reflect.DeepEqual(want, got) {
+		t.Errorf("Unexpected key. Want %+v, got %+v", want, got)
 	}
 }
 

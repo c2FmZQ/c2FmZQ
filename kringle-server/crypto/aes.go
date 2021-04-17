@@ -41,19 +41,18 @@ type MasterKey struct {
 // EncryptionKey is an encryption key that can be used to encrypt and decrypt
 // data and streams.
 type EncryptionKey struct {
-	key          []byte
+	maskedKey    []byte
 	encryptedKey []byte
+	xor          func([]byte) []byte
 }
 
 // CreateMasterKey creates a new master key.
 func CreateMasterKey() (*MasterKey, error) {
-	ek := EncryptionKey{
-		key: make([]byte, 64),
-	}
-	if _, err := io.ReadFull(rand.Reader, ek.key); err != nil {
+	b := make([]byte, 64)
+	if _, err := io.ReadFull(rand.Reader, b); err != nil {
 		return nil, err
 	}
-	return &MasterKey{ek}, nil
+	return &MasterKey{encryptionKeyFromBytes(b)}, nil
 }
 
 // ReadMasterKey reads an encrypted master key from file and decrypts it.
@@ -67,7 +66,7 @@ func ReadMasterKey(passphrase, file string) (*MasterKey, error) {
 		return nil, ErrDecryptFailed
 	}
 	salt, b := b[:16], b[16:]
-	numIter, b := int(binary.LittleEndian.Uint32(b[:4])), b[4:]
+	numIter, b := int(binary.BigEndian.Uint32(b[:4])), b[4:]
 	dk := pbkdf2.Key([]byte(passphrase), salt, numIter, 32, sha256.New)
 	block, err := aes.NewCipher(dk)
 	if err != nil {
@@ -79,11 +78,11 @@ func ReadMasterKey(passphrase, file string) (*MasterKey, error) {
 	}
 	nonce := b[:gcm.NonceSize()]
 	encMasterKey := b[gcm.NonceSize():]
-	masterKey, err := gcm.Open(nil, nonce, encMasterKey, nil)
+	mkBytes, err := gcm.Open(nil, nonce, encMasterKey, nil)
 	if err != nil {
 		return nil, ErrDecryptFailed
 	}
-	return &MasterKey{EncryptionKey: EncryptionKey{key: masterKey}}, nil
+	return &MasterKey{EncryptionKey: encryptionKeyFromBytes(mkBytes)}, nil
 }
 
 // Save encrypts the key with passphrase and saves it to file.
@@ -97,7 +96,7 @@ func (mk MasterKey) Save(passphrase, file string) error {
 		numIter = 10
 	}
 	numIterBin := make([]byte, 4)
-	binary.LittleEndian.PutUint32(numIterBin, uint32(numIter))
+	binary.BigEndian.PutUint32(numIterBin, uint32(numIter))
 	dk := pbkdf2.Key([]byte(passphrase), salt, numIter, 32, sha256.New)
 	block, err := aes.NewCipher(dk)
 	if err != nil {
@@ -111,7 +110,7 @@ func (mk MasterKey) Save(passphrase, file string) error {
 	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
 		return ErrEncryptFailed
 	}
-	encMasterKey := gcm.Seal(nonce, nonce, mk.key, nil)
+	encMasterKey := gcm.Seal(nonce, nonce, mk.key(), nil)
 	data := []byte{1} // version
 	data = append(data, salt...)
 	data = append(data, numIterBin...)
@@ -126,16 +125,20 @@ func (mk MasterKey) Save(passphrase, file string) error {
 	return nil
 }
 
+func (k EncryptionKey) key() []byte {
+	return k.xor(k.maskedKey)
+}
+
 // Hash returns the HMAC-SHA256 hash of b.
 func (k EncryptionKey) Hash(b []byte) []byte {
-	mac := hmac.New(sha256.New, k.key[32:])
+	mac := hmac.New(sha256.New, k.key()[32:])
 	mac.Write(b)
 	return mac.Sum(nil)
 }
 
 // Decrypt decrypts data that was encrypted with Encrypt and the same key.
 func (k EncryptionKey) Decrypt(data []byte) ([]byte, error) {
-	if len(k.key) == 0 {
+	if len(k.maskedKey) == 0 {
 		log.Fatal("key is not set")
 	}
 	if (len(data)-1)%aes.BlockSize != 0 || len(data)-1 < aes.BlockSize+32 {
@@ -151,7 +154,7 @@ func (k EncryptionKey) Decrypt(data []byte) ([]byte, error) {
 	if !hmac.Equal(hm, k.Hash(encData)) {
 		return nil, ErrDecryptFailed
 	}
-	block, err := aes.NewCipher(k.key[:32])
+	block, err := aes.NewCipher(k.key()[:32])
 	if err != nil {
 		return nil, ErrDecryptFailed
 	}
@@ -172,10 +175,10 @@ func (k EncryptionKey) Decrypt(data []byte) ([]byte, error) {
 
 // Encrypt encrypts data using the key.
 func (k EncryptionKey) Encrypt(data []byte) ([]byte, error) {
-	if len(k.key) == 0 {
+	if len(k.maskedKey) == 0 {
 		log.Fatal("key is not set")
 	}
-	block, err := aes.NewCipher(k.key[:32])
+	block, err := aes.NewCipher(k.key()[:32])
 	if err != nil {
 		return nil, ErrEncryptFailed
 	}
@@ -203,17 +206,40 @@ func (k EncryptionKey) Encrypt(data []byte) ([]byte, error) {
 	return out, nil
 }
 
-// NewEncryptionKey creates a new AES-256 encryption key.
+// encryptionKeyFromBytes returns an EncryptionKey with the raw bytes provided.
+// Internally, the key is masked with a ephemeral key in memory.
+func encryptionKeyFromBytes(b []byte) EncryptionKey {
+	mask := make([]byte, len(b))
+	if _, err := io.ReadFull(rand.Reader, mask); err != nil {
+		panic(err)
+	}
+	xor := func(in []byte) []byte {
+		out := make([]byte, len(mask))
+		for i := range mask {
+			out[i] = in[i] ^ mask[i]
+		}
+		return out
+	}
+	ek := EncryptionKey{maskedKey: xor(b), xor: xor}
+	for i := range b {
+		b[i] = 0
+	}
+	return ek
+}
+
+// NewEncryptionKey creates a new encryption key.
 func (k EncryptionKey) NewEncryptionKey() (*EncryptionKey, error) {
-	key := make([]byte, 64)
-	if _, err := io.ReadFull(rand.Reader, key); err != nil {
+	b := make([]byte, 64)
+	if _, err := io.ReadFull(rand.Reader, b); err != nil {
 		return nil, ErrEncryptFailed
 	}
-	enc, err := k.Encrypt(key)
+	enc, err := k.Encrypt(b)
 	if err != nil {
 		return nil, err
 	}
-	return &EncryptionKey{key: key, encryptedKey: enc}, nil
+	ek := encryptionKeyFromBytes(b)
+	ek.encryptedKey = enc
+	return &ek, nil
 }
 
 // DecryptKey decrypts an encrypted key.
@@ -221,17 +247,17 @@ func (k EncryptionKey) DecryptKey(encryptedKey []byte) (*EncryptionKey, error) {
 	if len(encryptedKey) != encryptedKeySize {
 		return nil, ErrDecryptFailed
 	}
-	key, err := k.Decrypt(encryptedKey)
+	b, err := k.Decrypt(encryptedKey)
 	if err != nil {
 		return nil, err
 	}
-	if len(key) != 64 {
+	if len(b) != 64 {
 		return nil, ErrDecryptFailed
 	}
-	ek := &EncryptionKey{key: key}
+	ek := encryptionKeyFromBytes(b)
 	ek.encryptedKey = make([]byte, len(encryptedKey))
 	copy(ek.encryptedKey, encryptedKey)
-	return ek, nil
+	return &ek, nil
 }
 
 // StreamReader is like cipher.StreamReader but validates the HMAC at the end
@@ -284,7 +310,7 @@ func (r *StreamReader) Close() error {
 // at the same time. The caller has to read the whole stream and then call
 // Close() to validate the HMAC.
 func (k EncryptionKey) StartReader(r io.Reader) (*StreamReader, error) {
-	block, err := aes.NewCipher(k.key[:32])
+	block, err := aes.NewCipher(k.key()[:32])
 	if err != nil {
 		return nil, ErrDecryptFailed
 	}
@@ -302,7 +328,7 @@ func (k EncryptionKey) StartReader(r io.Reader) (*StreamReader, error) {
 	return &StreamReader{
 		s:   cipher.NewCTR(block, iv),
 		r:   r,
-		mac: hmac.New(sha512.New, k.key[32:]),
+		mac: hmac.New(sha512.New, k.key()[32:]),
 	}, nil
 }
 
@@ -338,7 +364,7 @@ func (w *StreamWriter) Close() (err error) {
 
 // StartWriter opens a writer to encrypt a stream of data.
 func (k EncryptionKey) StartWriter(w io.Writer) (*StreamWriter, error) {
-	block, err := aes.NewCipher(k.key[:32])
+	block, err := aes.NewCipher(k.key()[:32])
 	if err != nil {
 		return nil, ErrEncryptFailed
 	}
@@ -356,7 +382,7 @@ func (k EncryptionKey) StartWriter(w io.Writer) (*StreamWriter, error) {
 	return &StreamWriter{
 		s:   cipher.NewCTR(block, iv),
 		w:   w,
-		mac: hmac.New(sha512.New, k.key[32:]),
+		mac: hmac.New(sha512.New, k.key()[32:]),
 	}, nil
 }
 
