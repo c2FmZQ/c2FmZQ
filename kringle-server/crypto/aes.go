@@ -138,6 +138,9 @@ func (k EncryptionKey) Decrypt(data []byte) ([]byte, error) {
 	if len(k.key) == 0 {
 		log.Fatal("key is not set")
 	}
+	if (len(data)-1)%aes.BlockSize != 0 || len(data)-1 < aes.BlockSize+32 {
+		return nil, fmt.Errorf("invalid message length: %d", len(data))
+	}
 	version, data := data[0], data[1:]
 	if version != 1 {
 		return nil, fmt.Errorf("unexpected version %d", version)
@@ -155,8 +158,16 @@ func (k EncryptionKey) Decrypt(data []byte) ([]byte, error) {
 	mode := cipher.NewCBCDecrypter(block, iv)
 	dec := make([]byte, len(encData))
 	mode.CryptBlocks(dec, encData)
-	padSize := int(dec[0])
-	return dec[1 : len(dec)-padSize], nil
+	padSize := int(dec[len(dec)-1])
+	if padSize > len(encData) || padSize > aes.BlockSize {
+		return nil, fmt.Errorf("padding size: %d", padSize)
+	}
+	for i := 0; i < padSize; i++ {
+		if dec[len(dec)-i-1] != byte(padSize) {
+			return nil, fmt.Errorf("padding: %d != %d", dec[len(dec)-i-1], padSize)
+		}
+	}
+	return dec[:len(dec)-padSize], nil
 }
 
 // Encrypt encrypts data using the key.
@@ -172,12 +183,11 @@ func (k EncryptionKey) Encrypt(data []byte) ([]byte, error) {
 	if _, err := io.ReadFull(rand.Reader, iv); err != nil {
 		return nil, err
 	}
-	padSize := 16 - (len(data)+1)%16
-	pData := make([]byte, len(data)+padSize+1)
-	pData[0] = byte(padSize)
-	copy(pData[1:], data)
-	if _, err := io.ReadFull(rand.Reader, pData[len(data)+1:]); err != nil {
-		return nil, fmt.Errorf("padding data: %w", err)
+	padSize := aes.BlockSize - len(data)%aes.BlockSize
+	pData := make([]byte, len(data)+padSize)
+	copy(pData, data)
+	for i := 0; i < padSize; i++ {
+		pData[len(data)+i] = byte(padSize)
 	}
 
 	mode := cipher.NewCBCEncrypter(block, iv)
