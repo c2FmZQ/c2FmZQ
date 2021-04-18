@@ -169,22 +169,32 @@ func DecryptMessage(msg string, pk PublicKey, sk SecretKey) ([]byte, error) {
 	return ret, nil
 }
 
-// SealBox encrypts a message using Anonymous Public Key Encryption.
-func SealBox(msg []byte, pk PublicKey) string {
-	ret, err := box.SealAnonymous(nil, msg, pk.B, rand.Reader)
-	if err != nil {
-		panic(err)
-	}
-	return base64.StdEncoding.EncodeToString(ret)
+// SealBoxBase64 encrypts a message using Anonymous Public Key Encryption.
+func SealBoxBase64(msg []byte, pk PublicKey) string {
+	return base64.StdEncoding.EncodeToString(SealBox(msg, pk))
 }
 
-// SealBoxOpen decrypts a message encrypted by SealBox.
-func SealBoxOpen(msg string, sk SecretKey) ([]byte, error) {
+// SealBoxOpenBase64 decrypts a message encrypted by SealBoxBase64.
+func SealBoxOpenBase64(msg string, sk SecretKey) ([]byte, error) {
 	b, err := base64.StdEncoding.DecodeString(msg)
 	if err != nil {
 		return nil, err
 	}
-	ret, ok := box.OpenAnonymous(nil, b, sk.PublicKey().B, sk.B)
+	return SealBoxOpen(b, sk)
+}
+
+// SealBox encrypts a message using Anonymous Public Key Encryption.
+func SealBox(msg []byte, pk PublicKey) []byte {
+	ret, err := box.SealAnonymous(nil, msg, pk.B, rand.Reader)
+	if err != nil {
+		panic(err)
+	}
+	return ret
+}
+
+// SealBoxOpen decrypts a message encrypted by SealBox.
+func SealBoxOpen(msg []byte, sk SecretKey) ([]byte, error) {
+	ret, ok := box.OpenAnonymous(nil, msg, sk.PublicKey().B, sk.B)
 	if !ok {
 		return nil, errors.New("box.OpenAnonymous failed")
 	}

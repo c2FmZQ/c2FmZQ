@@ -75,6 +75,18 @@ func main() {
 				Usage:  "Decrypt a user's secret key.",
 				Action: decrypt,
 			},
+			&cli.Command{
+				Name:   "header",
+				Usage:  "Decrypt a file header.",
+				Action: decryptHeader,
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:     "user",
+						Usage:    "user's email address",
+						Required: true,
+					},
+				},
+			},
 		},
 	}
 
@@ -112,6 +124,24 @@ func passphrase(c *cli.Context) (string, error) {
 	return strings.TrimSpace(string(passphrase)), nil
 }
 
+func userSK(db *database.Database, email string) (*stingle.SecretKey, error) {
+	user, err := db.User(email)
+	if err != nil {
+		return nil, err
+	}
+	fmt.Print("Enter user's password: ")
+	password, err := term.ReadPassword(int(os.Stdin.Fd()))
+	fmt.Println()
+	if err != nil {
+		return nil, err
+	}
+	sk, err := stingle.DecodeSecretKeyBundle(password, user.KeyBundle)
+	if err != nil {
+		return nil, err
+	}
+	return &sk, nil
+}
+
 func showUsers(c *cli.Context) error {
 	db, err := initDB(c)
 	if err != nil {
@@ -140,21 +170,31 @@ func decrypt(c *cli.Context) error {
 		return err
 	}
 	for _, u := range c.Args().Slice() {
-		user, err := db.User(u)
-		if err != nil {
-			log.Errorf("%s: %v", u, err)
+		if _, err := userSK(db, u); err != nil {
+			return err
 		}
-		fmt.Print("Enter user's password: ")
-		password, err := term.ReadPassword(int(os.Stdin.Fd()))
-		fmt.Println()
-		if err != nil {
-			return cli.Exit(err, 1)
-		}
-		if _, err := stingle.DecodeSecretKeyBundle(password, user.KeyBundle); err != nil {
-			return cli.Exit(err, 1)
-		}
-
 		log.Info("user's secret key successfully decrypted")
+	}
+	return nil
+}
+
+func decryptHeader(c *cli.Context) error {
+	db, err := initDB(c)
+	if err != nil {
+		return err
+	}
+	sk, err := userSK(db, c.String("user"))
+	if err != nil {
+		log.Errorf("%s: %v", c.String("user"), err)
+	}
+	for _, h := range c.Args().Slice() {
+		log.Infof("Decoding %s", h)
+		hdrs, err := stingle.DecodeBase64Headers(h, *sk)
+		if err != nil {
+			return cli.Exit(err, 1)
+		}
+		log.Infof("File: %#v", hdrs[0])
+		log.Infof("Thumb: %#v", hdrs[1])
 	}
 	return nil
 }

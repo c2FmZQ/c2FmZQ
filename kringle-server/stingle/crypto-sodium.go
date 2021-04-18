@@ -147,21 +147,32 @@ func DecryptMessage(msg string, pk PublicKey, sk SecretKey) ([]byte, error) {
 	return []byte(m), nil
 }
 
-// SealBox encrypts a message using Anonymous Public Key Encryption.
+// SealBoxBase64 encrypts a message using Anonymous Public Key Encryption.
 // https://pkg.go.dev/github.com/jamesruan/sodium#hdr-Anonymous_Public_Key_Encryption
-func SealBox(msg []byte, pk PublicKey) string {
-	b := sodium.Bytes(msg)
-	return base64.StdEncoding.EncodeToString([]byte(b.SealedBox(sodium.BoxPublicKey(pk))))
+func SealBoxBase64(msg []byte, pk PublicKey) string {
+	return base64.StdEncoding.EncodeToString(SealBox(msg, pk))
 }
 
-// SealBoxOpen decrypts a message encrypted by SealBox.
-func SealBoxOpen(msg string, sk SecretKey) ([]byte, error) {
+// SealBoxOpenBase64 decrypts a message encrypted by SealBoxBase64.
+func SealBoxOpenBase64(msg string, sk SecretKey) ([]byte, error) {
 	b, err := base64.StdEncoding.DecodeString(msg)
 	if err != nil {
 		return nil, err
 	}
+	return SealBoxOpen(b, sk)
+}
+
+// SealBox encrypts a message using Anonymous Public Key Encryption.
+// https://pkg.go.dev/github.com/jamesruan/sodium#hdr-Anonymous_Public_Key_Encryption
+func SealBox(msg []byte, pk PublicKey) []byte {
+	b := sodium.Bytes(msg)
+	return []byte(b.SealedBox(sodium.BoxPublicKey(pk)))
+}
+
+// SealBoxOpen decrypts a message encrypted by SealBox.
+func SealBoxOpen(msg []byte, sk SecretKey) ([]byte, error) {
 	kp := sodium.BoxKP{sodium.BoxPublicKey(sk.PublicKey()), sodium.BoxSecretKey(sk)}
-	d, err := sodium.Bytes(b).SealedBoxOpen(kp)
+	d, err := sodium.Bytes(msg).SealedBoxOpen(kp)
 	if err != nil {
 		return nil, err
 	}

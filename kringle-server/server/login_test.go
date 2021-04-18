@@ -193,7 +193,7 @@ func (c *client) checkKey() error {
 	if want, got := []byte(c.serverPublicKey.ToBytes()), pk; !reflect.DeepEqual(want, got) {
 		return fmt.Errorf("checkKey: unexpected serverPK: want %#v, got %#v", want, got)
 	}
-	dec, err := stingle.SealBoxOpen(sr.Parts["challenge"].(string), c.secretKey)
+	dec, err := stingle.SealBoxOpenBase64(sr.Parts["challenge"].(string), c.secretKey)
 	if err != nil {
 		return fmt.Errorf("checkKey challenge error: %v", err)
 	}
