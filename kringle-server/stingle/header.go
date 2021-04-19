@@ -22,15 +22,15 @@ type Header struct {
 	VideoDuration int32
 }
 
-// DecodeBase64Headers decodes base64-encoded headers.
-func DecodeBase64Headers(hdrs string, sk SecretKey) ([]Header, error) {
+// DecryptBase64Headers decrypts base64-encoded headers.
+func DecryptBase64Headers(hdrs string, sk SecretKey) ([]Header, error) {
 	var out []Header
 	for _, hdr := range strings.Split(hdrs, "*") {
 		b, err := base64.RawURLEncoding.DecodeString(hdr)
 		if err != nil {
 			return nil, err
 		}
-		h, err := DecodeHeader(bytes.NewBuffer(b), sk)
+		h, err := DecryptHeader(bytes.NewBuffer(b), sk)
 		if err != nil {
 			return nil, err
 		}
@@ -39,8 +39,8 @@ func DecodeBase64Headers(hdrs string, sk SecretKey) ([]Header, error) {
 	return out, nil
 }
 
-// DecodeHeader decodes a file header from the reader.
-func DecodeHeader(in io.Reader, sk SecretKey) (hdr Header, err error) {
+// DecryptHeader decrypts a file header from the reader.
+func DecryptHeader(in io.Reader, sk SecretKey) (hdr Header, err error) {
 	b := make([]byte, 3)
 	if _, err = io.ReadFull(in, b); err != nil {
 		return
@@ -141,8 +141,8 @@ func DecodeHeader(in io.Reader, sk SecretKey) (hdr Header, err error) {
 	return
 }
 
-// EncodeHeader encrypts and write the file header to the writer.
-func EncodeHeader(out io.Writer, hdr Header, pk PublicKey) (err error) {
+// EncryptHeader encrypts and write the file header to the writer.
+func EncryptHeader(out io.Writer, hdr Header, pk PublicKey) (err error) {
 	if len(hdr.FileID) != 32 {
 		return errors.New("invalid file id")
 	}

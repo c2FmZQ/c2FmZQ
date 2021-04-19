@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestDecodeHeader(t *testing.T) {
+func TestDecryptHeader(t *testing.T) {
 	sk := MakeSecretKey()
 
 	header := Header{
@@ -20,17 +20,17 @@ func TestDecodeHeader(t *testing.T) {
 		VideoDuration: 1234,
 	}
 	var enc bytes.Buffer
-	if err := EncodeHeader(&enc, header, sk.PublicKey()); err != nil {
-		t.Fatalf("EncodeHeader: %v", err)
+	if err := EncryptHeader(&enc, header, sk.PublicKey()); err != nil {
+		t.Fatalf("EncryptHeader: %v", err)
 	}
 
-	dec, err := DecodeHeader(&enc, sk)
+	dec, err := DecryptHeader(&enc, sk)
 	if err != nil {
-		t.Fatalf("DecodeHeader: %v", err)
+		t.Fatalf("DecryptHeader: %v", err)
 	}
 
 	if want, got := header, dec; !reflect.DeepEqual(want, got) {
-		t.Errorf("DecodeHeader returned unexpected result. Want %#v, got %#v", want, got)
+		t.Errorf("DecryptHeader returned unexpected result. Want %#v, got %#v", want, got)
 	}
 
 }

@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/urfave/cli/v2" // cli
@@ -79,6 +80,18 @@ func main() {
 				Name:   "header",
 				Usage:  "Decrypt a file header.",
 				Action: decryptHeader,
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:     "user",
+						Usage:    "user's email address",
+						Required: true,
+					},
+				},
+			},
+			&cli.Command{
+				Name:   "file",
+				Usage:  "Decrypt a file.",
+				Action: decryptFile,
 				Flags: []cli.Flag{
 					&cli.StringFlag{
 						Name:     "user",
@@ -189,12 +202,53 @@ func decryptHeader(c *cli.Context) error {
 	}
 	for _, h := range c.Args().Slice() {
 		log.Infof("Decoding %s", h)
-		hdrs, err := stingle.DecodeBase64Headers(h, *sk)
+		hdrs, err := stingle.DecryptBase64Headers(h, *sk)
 		if err != nil {
 			return cli.Exit(err, 1)
 		}
 		log.Infof("File: %#v", hdrs[0])
 		log.Infof("Thumb: %#v", hdrs[1])
+	}
+	return nil
+}
+
+func decryptFile(c *cli.Context) error {
+	db, err := initDB(c)
+	if err != nil {
+		return err
+	}
+	sk, err := userSK(db, c.String("user"))
+	if err != nil {
+		log.Errorf("%s: %v", c.String("user"), err)
+	}
+	for _, f := range c.Args().Slice() {
+		fn := filepath.Join(db.Dir(), f)
+
+		in, err := os.Open(fn)
+		if err != nil {
+			return err
+		}
+		hdr, err := stingle.DecryptHeader(in, *sk)
+		if err != nil {
+			return err
+		}
+		out, err := os.CreateTemp("", "decryptedfile-*")
+		if err != nil {
+			in.Close()
+			return err
+		}
+		if err := stingle.DecryptFile(in, out, hdr); err != nil {
+			in.Close()
+			out.Close()
+			return err
+		}
+		if err := in.Close(); err != nil {
+			return err
+		}
+		if err := out.Close(); err != nil {
+			return err
+		}
+		log.Infof("Decrypted %s to %s", fn, out.Name())
 	}
 	return nil
 }
