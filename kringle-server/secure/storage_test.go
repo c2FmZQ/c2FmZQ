@@ -11,7 +11,12 @@ import (
 	"time"
 
 	"kringle-server/crypto"
+	"kringle-server/log"
 )
+
+func init() {
+	log.Level = 3
+}
 
 func encryptionKey() *crypto.EncryptionKey {
 	mk, err := crypto.CreateMasterKey()

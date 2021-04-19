@@ -344,11 +344,13 @@ func (s *Storage) ReadDataFile(filename string, obj interface{}) (*crypto.Encryp
 	case optGOBEncoded:
 		// Decode with GOB.
 		if err := gob.NewDecoder(rc).Decode(obj); err != nil {
+			log.Debugf("gob Decode: %v", err)
 			return nil, err
 		}
 	case optJSONEncoded:
 		// Decode JSON object.
 		if err := json.NewDecoder(rc).Decode(obj); err != nil {
+			log.Debugf("json Decode: %v", err)
 			return nil, err
 		}
 	case optBinaryEncoded:

@@ -8,10 +8,8 @@ import (
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
-	"crypto/sha512"
 	"encoding/binary"
 	"errors"
-	"hash"
 	"io"
 	"io/ioutil"
 	"os"
@@ -23,7 +21,10 @@ import (
 
 const (
 	// The size of an encrypted key.
-	encryptedKeySize = 129
+	encryptedKeySize = 93 // 1 (version) + 12 (nonce) + 64 (key) + 16 (mac)
+
+	// The size of encrypted chunks in streams.
+	streamChunkSize = 16 * 1024
 )
 
 var (
@@ -63,6 +64,7 @@ func ReadMasterKey(passphrase, file string) (*MasterKey, error) {
 	}
 	version, b := b[0], b[1:]
 	if version != 1 {
+		log.Debugf("ReadMasterKey: unexpected version: %d", version)
 		return nil, ErrDecryptFailed
 	}
 	salt, b := b[:16], b[16:]
@@ -70,16 +72,19 @@ func ReadMasterKey(passphrase, file string) (*MasterKey, error) {
 	dk := pbkdf2.Key([]byte(passphrase), salt, numIter, 32, sha256.New)
 	block, err := aes.NewCipher(dk)
 	if err != nil {
+		log.Debugf("aes.NewCipher: %v", err)
 		return nil, ErrDecryptFailed
 	}
 	gcm, err := cipher.NewGCM(block)
 	if err != nil {
+		log.Debugf("cipher.NewGCM: %v", err)
 		return nil, ErrDecryptFailed
 	}
 	nonce := b[:gcm.NonceSize()]
 	encMasterKey := b[gcm.NonceSize():]
 	mkBytes, err := gcm.Open(nil, nonce, encMasterKey, nil)
 	if err != nil {
+		log.Debugf("gcm.Open: %v", err)
 		return nil, ErrDecryptFailed
 	}
 	return &MasterKey{EncryptionKey: encryptionKeyFromBytes(mkBytes)}, nil
@@ -100,14 +105,17 @@ func (mk MasterKey) Save(passphrase, file string) error {
 	dk := pbkdf2.Key([]byte(passphrase), salt, numIter, 32, sha256.New)
 	block, err := aes.NewCipher(dk)
 	if err != nil {
+		log.Debugf("aes.NewCipher: %v", err)
 		return ErrEncryptFailed
 	}
 	gcm, err := cipher.NewGCM(block)
 	if err != nil {
+		log.Debugf("cipher.NewGCM: %v", err)
 		return ErrEncryptFailed
 	}
 	nonce := make([]byte, gcm.NonceSize())
 	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+		log.Debugf("io.ReadFull: %v", err)
 		return ErrEncryptFailed
 	}
 	encMasterKey := gcm.Seal(nonce, nonce, mk.key(), nil)
@@ -141,36 +149,29 @@ func (k EncryptionKey) Decrypt(data []byte) ([]byte, error) {
 	if len(k.maskedKey) == 0 {
 		log.Fatal("key is not set")
 	}
-	if (len(data)-1)%aes.BlockSize != 0 || len(data)-1 < aes.BlockSize+32 {
-		return nil, ErrDecryptFailed
-	}
 	version, data := data[0], data[1:]
 	if version != 1 {
-		return nil, ErrDecryptFailed
-	}
-	iv, data := data[:aes.BlockSize], data[aes.BlockSize:]
-	encData, data := data[:len(data)-32], data[len(data)-32:]
-	hm := data[:32]
-	if !hmac.Equal(hm, k.Hash(encData)) {
+		log.Debugf("Decrypt: unexpected version %d", version)
 		return nil, ErrDecryptFailed
 	}
 	block, err := aes.NewCipher(k.key()[:32])
 	if err != nil {
+		log.Debugf("aes.NewCipher: %v", err)
 		return nil, ErrDecryptFailed
 	}
-	mode := cipher.NewCBCDecrypter(block, iv)
-	dec := make([]byte, len(encData))
-	mode.CryptBlocks(dec, encData)
-	padSize := int(dec[len(dec)-1])
-	if padSize > len(encData) || padSize > aes.BlockSize {
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		log.Debugf("cipher.NewGCM: %v", err)
 		return nil, ErrDecryptFailed
 	}
-	for i := 0; i < padSize; i++ {
-		if dec[len(dec)-i-1] != byte(padSize) {
-			return nil, ErrDecryptFailed
-		}
+	nonce := data[:gcm.NonceSize()]
+	encData := data[gcm.NonceSize():]
+	dec, err := gcm.Open(nil, nonce, encData, nil)
+	if err != nil {
+		log.Debugf("gcm.Open: %v", err)
+		return nil, ErrDecryptFailed
 	}
-	return dec[:len(dec)-padSize], nil
+	return dec, nil
 }
 
 // Encrypt encrypts data using the key.
@@ -180,30 +181,21 @@ func (k EncryptionKey) Encrypt(data []byte) ([]byte, error) {
 	}
 	block, err := aes.NewCipher(k.key()[:32])
 	if err != nil {
+		log.Debugf("aes.NewCipher: %v", err)
 		return nil, ErrEncryptFailed
 	}
-	iv := make([]byte, aes.BlockSize)
-	if _, err := io.ReadFull(rand.Reader, iv); err != nil {
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		log.Debugf("cipher.NewGCM: %v", err)
 		return nil, ErrEncryptFailed
 	}
-	padSize := aes.BlockSize - len(data)%aes.BlockSize
-	pData := make([]byte, len(data)+padSize)
-	copy(pData, data)
-	for i := 0; i < padSize; i++ {
-		pData[len(data)+i] = byte(padSize)
-	}
-
-	mode := cipher.NewCBCEncrypter(block, iv)
-	encData := make([]byte, len(pData))
-	mode.CryptBlocks(encData, pData)
-	hmac := k.Hash(encData)
-
-	out := make([]byte, 1+len(iv)+len(encData)+len(hmac))
+	out := make([]byte, 1+gcm.NonceSize())
 	out[0] = 1 // version
-	copy(out[1:], iv)
-	copy(out[1+len(iv):], encData)
-	copy(out[1+len(iv)+len(encData):], hmac)
-	return out, nil
+	if _, err := io.ReadFull(rand.Reader, out[1:]); err != nil {
+		log.Debugf("io.ReadFull: %v", err)
+		return nil, ErrEncryptFailed
+	}
+	return gcm.Seal(out, out[1:1+gcm.NonceSize()], data, nil), nil
 }
 
 // encryptionKeyFromBytes returns an EncryptionKey with the raw bytes provided.
@@ -231,6 +223,7 @@ func encryptionKeyFromBytes(b []byte) EncryptionKey {
 func (k EncryptionKey) NewEncryptionKey() (*EncryptionKey, error) {
 	b := make([]byte, 64)
 	if _, err := io.ReadFull(rand.Reader, b); err != nil {
+		log.Debugf("io.ReadFull: %v", err)
 		return nil, ErrEncryptFailed
 	}
 	enc, err := k.Encrypt(b)
@@ -245,6 +238,7 @@ func (k EncryptionKey) NewEncryptionKey() (*EncryptionKey, error) {
 // DecryptKey decrypts an encrypted key.
 func (k EncryptionKey) DecryptKey(encryptedKey []byte) (*EncryptionKey, error) {
 	if len(encryptedKey) != encryptedKeySize {
+		log.Debugf("DecryptKey: unexpected encrypted key size %d != %d", len(encryptedKey), encryptedKeySize)
 		return nil, ErrDecryptFailed
 	}
 	b, err := k.Decrypt(encryptedKey)
@@ -252,6 +246,7 @@ func (k EncryptionKey) DecryptKey(encryptedKey []byte) (*EncryptionKey, error) {
 		return nil, err
 	}
 	if len(b) != 64 {
+		log.Debugf("DecryptKey: unexpected decrypted key size %d != %d", len(b), 64)
 		return nil, ErrDecryptFailed
 	}
 	ek := encryptionKeyFromBytes(b)
@@ -260,100 +255,115 @@ func (k EncryptionKey) DecryptKey(encryptedKey []byte) (*EncryptionKey, error) {
 	return &ek, nil
 }
 
-// StreamReader is like cipher.StreamReader but validates the HMAC at the end
-// of the stream when Close() is called.
-//
-// The caller has to read the whole file before calling Close() to properly
-// validate the HMAC.
+// StreamReader decrypts an input stream.
 type StreamReader struct {
-	s cipher.Stream
-	r io.Reader
-
-	mac hash.Hash
-	buf [4096]byte
-	sz  int
+	gcm cipher.AEAD
+	r   io.Reader
+	c   uint64
+	buf []byte
 }
 
-func (r *StreamReader) Read(dst []byte) (n int, err error) {
+func (r *StreamReader) Read(b []byte) (n int, err error) {
 	for err == nil {
-		if r.sz > r.mac.Size() {
-			var nn int
-			nn = copy(dst[n:], r.buf[:r.sz-r.mac.Size()])
-			copy(r.buf[:], r.buf[nn:])
-			r.sz -= nn
-			n += nn
-		}
-		if n == len(dst) {
+		nn := copy(b[n:], r.buf)
+		r.buf = r.buf[nn:]
+		n += nn
+		if n == len(b) {
 			break
 		}
-		var nn int
-		nn, err = r.r.Read(r.buf[r.sz:])
-		r.sz += nn
+		in := make([]byte, 8+r.gcm.NonceSize()+streamChunkSize+r.gcm.Overhead())
+		if nn, err = io.ReadFull(r.r, in); nn > 0 {
+			r.c++
+			if nn <= 36 {
+				log.Debugf("StreamReader.Read: short chunk %d", nn)
+				return n, ErrDecryptFailed
+			}
+			cc := binary.BigEndian.Uint64(in[:8])
+			if r.c != cc {
+				log.Debugf("StreamReader.Read: wrong chunk number %d", cc)
+				return n, ErrDecryptFailed
+			}
+			dec, err := r.gcm.Open(nil, in[8:8+r.gcm.NonceSize()], in[8+r.gcm.NonceSize():nn], in[:8])
+			if err != nil {
+				log.Debugf("gcm.Open: %v", err)
+				return n, ErrDecryptFailed
+			}
+			r.buf = append(r.buf, dec...)
+		}
+		if len(r.buf) > 0 && (err == io.EOF || err == io.ErrUnexpectedEOF) {
+			err = nil
+		}
 	}
-	r.mac.Write(dst[:n])
-	r.s.XORKeyStream(dst[:n], dst[:n])
-	if n == 0 && err != nil {
-		return 0, err
+	if n > 0 {
+		return n, nil
 	}
-	return n, nil
+	if err == io.ErrUnexpectedEOF {
+		err = io.EOF
+	}
+	return n, err
 }
 
 func (r *StreamReader) Close() error {
-	h := r.mac.Sum(nil)
-	if !hmac.Equal(r.buf[:r.sz], h) {
-		return ErrDecryptFailed
+	if c, ok := r.r.(io.Closer); ok {
+		if err := c.Close(); err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
-// StartReader opens a reader to decrypt a stream of data and verify the HMAC
-// at the same time. The caller has to read the whole stream and then call
-// Close() to validate the HMAC.
+// StartReader opens a reader to decrypt a stream of data.
 func (k EncryptionKey) StartReader(r io.Reader) (*StreamReader, error) {
 	block, err := aes.NewCipher(k.key()[:32])
 	if err != nil {
+		log.Debugf("aes.NewCipher: %v", err)
 		return nil, ErrDecryptFailed
 	}
-	version := make([]byte, 1)
-	if _, err := io.ReadFull(r, version); err != nil {
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		log.Debugf("cipher.NewGCM: %v", err)
 		return nil, ErrDecryptFailed
 	}
-	if version[0] != 1 {
-		return nil, ErrDecryptFailed
-	}
-	iv := make([]byte, block.BlockSize())
-	if _, err := io.ReadFull(r, iv); err != nil {
-		return nil, ErrDecryptFailed
-	}
-	return &StreamReader{
-		s:   cipher.NewCTR(block, iv),
-		r:   r,
-		mac: hmac.New(sha512.New, k.key()[32:]),
-	}, nil
+	return &StreamReader{gcm: gcm, r: r}, nil
 }
 
-// StreamWriter is like cipher.StreamWriter but adds a HMAC of the ciphertext at
-// the end of the stream when Close() is called.
+// StreamWriter encrypts a stream of data.
 type StreamWriter struct {
-	s   cipher.Stream
+	gcm cipher.AEAD
 	w   io.Writer
-	mac hash.Hash
+	c   uint64
+	buf []byte
 }
 
-func (w *StreamWriter) Write(src []byte) (n int, err error) {
-	c := make([]byte, len(src))
-	w.s.XORKeyStream(c, src)
-	n, err = w.w.Write(c)
-	if n != len(src) && err == nil { // should never happen
-		err = io.ErrShortWrite
+func (w *StreamWriter) writeChunk(b []byte) (int, error) {
+	w.c++
+	out := make([]byte, 8+w.gcm.NonceSize())
+	binary.BigEndian.PutUint64(out[:8], w.c)
+	if _, err := io.ReadFull(rand.Reader, out[8:]); err != nil {
+		log.Debugf("io.ReadFull: %v", err)
+		return 0, ErrEncryptFailed
 	}
-	w.mac.Write(c)
+	out = w.gcm.Seal(out, out[8:8+w.gcm.NonceSize()], b, out[:8])
+	return w.w.Write(out)
+}
+
+func (w *StreamWriter) Write(b []byte) (n int, err error) {
+	w.buf = append(w.buf, b...)
+	n = len(b)
+	for len(w.buf) >= streamChunkSize {
+		_, err = w.writeChunk(w.buf[:streamChunkSize])
+		w.buf = w.buf[streamChunkSize:]
+		if err != nil {
+			break
+		}
+	}
 	return
 }
 
 func (w *StreamWriter) Close() (err error) {
-	h := w.mac.Sum(nil)
-	_, err = w.w.Write(h[:])
+	if len(w.buf) > 0 {
+		_, err = w.writeChunk(w.buf)
+	}
 	if c, ok := w.w.(io.Closer); ok {
 		if e := c.Close(); err == nil {
 			err = e
@@ -366,30 +376,22 @@ func (w *StreamWriter) Close() (err error) {
 func (k EncryptionKey) StartWriter(w io.Writer) (*StreamWriter, error) {
 	block, err := aes.NewCipher(k.key()[:32])
 	if err != nil {
+		log.Debugf("aes.NewCipher: %v", err)
 		return nil, ErrEncryptFailed
 	}
-	iv := make([]byte, block.BlockSize())
-	if _, err := io.ReadFull(rand.Reader, iv); err != nil {
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		log.Debugf("cipher.NewGCM: %v", err)
 		return nil, ErrEncryptFailed
 	}
-	version := []byte{1}
-	if _, err := w.Write(version); err != nil {
-		return nil, ErrEncryptFailed
-	}
-	if _, err := w.Write(iv); err != nil {
-		return nil, ErrEncryptFailed
-	}
-	return &StreamWriter{
-		s:   cipher.NewCTR(block, iv),
-		w:   w,
-		mac: hmac.New(sha512.New, k.key()[32:]),
-	}, nil
+	return &StreamWriter{gcm: gcm, w: w}, nil
 }
 
 // ReadEncryptedKey reads an encrypted key and decrypts it.
 func (k EncryptionKey) ReadEncryptedKey(r io.Reader) (*EncryptionKey, error) {
 	buf := make([]byte, encryptedKeySize)
 	if _, err := io.ReadFull(r, buf); err != nil {
+		log.Debugf("ReadEncryptedKey: %v", err)
 		return nil, ErrDecryptFailed
 	}
 	return k.DecryptKey(buf)
@@ -399,6 +401,7 @@ func (k EncryptionKey) ReadEncryptedKey(r io.Reader) (*EncryptionKey, error) {
 func (k EncryptionKey) WriteEncryptedKey(w io.Writer) error {
 	n, err := w.Write(k.encryptedKey)
 	if n != encryptedKeySize {
+		log.Debugf("WriteEncryptedKey: unexpected key size: %d != %d", n, encryptedKeySize)
 		return ErrEncryptFailed
 	}
 	return err

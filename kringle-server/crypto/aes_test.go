@@ -7,7 +7,13 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+
+	"kringle-server/log"
 )
+
+func init() {
+	log.Level = 3
+}
 
 func TestMasterKey(t *testing.T) {
 	dir := t.TempDir()
@@ -39,7 +45,7 @@ func TestEncryptDecrypt(t *testing.T) {
 	}
 
 	m := []byte("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
-	for i := 0; i < len(m); i++ {
+	for i := 1; i < len(m); i++ {
 		enc, err := mk.Encrypt(m[:i])
 		if err != nil {
 			t.Fatalf("mk.Encrypt: %v", err)
@@ -49,7 +55,7 @@ func TestEncryptDecrypt(t *testing.T) {
 			t.Fatalf("mk.Decrypt: %v", err)
 		}
 		if !reflect.DeepEqual(m[:i], dec) {
-			t.Errorf("Decrypted data doesn't match. Want %v, got %v", m[:i], dec)
+			t.Errorf("Decrypted data[%d] doesn't match. Want %#v, got %#v", i, m[:i], dec)
 		}
 	}
 }
@@ -153,10 +159,7 @@ func TestStreamInvalidMAC(t *testing.T) {
 		t.Fatalf("StartReader: %v", err)
 	}
 	b := make([]byte, 10000)
-	if n, err := r.Read(b); n != 10000 || err != nil {
+	if n, err := r.Read(b); err != ErrDecryptFailed {
 		t.Errorf("StartReader.Read: %d, %v", n, err)
-	}
-	if err := r.Close(); err != ErrDecryptFailed {
-		t.Fatalf("Expected StartReader.Close to fail, got: %v", err)
 	}
 }
