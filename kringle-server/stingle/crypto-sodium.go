@@ -148,29 +148,27 @@ func DecryptMessage(msg string, pk PublicKey, sk SecretKey) ([]byte, error) {
 }
 
 // SealBoxBase64 encrypts a message using Anonymous Public Key Encryption.
-// https://pkg.go.dev/github.com/jamesruan/sodium#hdr-Anonymous_Public_Key_Encryption
-func SealBoxBase64(msg []byte, pk PublicKey) string {
-	return base64.StdEncoding.EncodeToString(SealBox(msg, pk))
+func (pk PublicKey) SealBoxBase64(msg []byte) string {
+	return base64.StdEncoding.EncodeToString(pk.SealBox(msg))
 }
 
 // SealBoxOpenBase64 decrypts a message encrypted by SealBoxBase64.
-func SealBoxOpenBase64(msg string, sk SecretKey) ([]byte, error) {
+func (sk SecretKey) SealBoxOpenBase64(msg string) ([]byte, error) {
 	b, err := base64.StdEncoding.DecodeString(msg)
 	if err != nil {
 		return nil, err
 	}
-	return SealBoxOpen(b, sk)
+	return sk.SealBoxOpen(b)
 }
 
 // SealBox encrypts a message using Anonymous Public Key Encryption.
-// https://pkg.go.dev/github.com/jamesruan/sodium#hdr-Anonymous_Public_Key_Encryption
-func SealBox(msg []byte, pk PublicKey) []byte {
+func (pk PublicKey) SealBox(msg []byte) []byte {
 	b := sodium.Bytes(msg)
 	return []byte(b.SealedBox(sodium.BoxPublicKey(pk)))
 }
 
 // SealBoxOpen decrypts a message encrypted by SealBox.
-func SealBoxOpen(msg []byte, sk SecretKey) ([]byte, error) {
+func (sk SecretKey) SealBoxOpen(msg []byte) ([]byte, error) {
 	kp := sodium.BoxKP{sodium.BoxPublicKey(sk.PublicKey()), sodium.BoxSecretKey(sk)}
 	d, err := sodium.Bytes(msg).SealedBoxOpen(kp)
 	if err != nil {
@@ -179,12 +177,14 @@ func SealBoxOpen(msg []byte, sk SecretKey) ([]byte, error) {
 	return []byte(d), nil
 }
 
+// EncryptSymmetric encrypts msg with a symmetric key.
 func EncryptSymmetric(msg, nonce, key []byte) []byte {
 	n := sodium.SecretBoxNonce{Bytes: sodium.Bytes(nonce)}
 	k := sodium.SecretBoxKey{Bytes: sodium.Bytes(key)}
 	return []byte(sodium.Bytes(msg).SecretBox(n, k))
 }
 
+// DecryptSymmetric decrypts msg with a symmetric key.
 func DecryptSymmetric(msg, nonce, key []byte) ([]byte, error) {
 	n := sodium.SecretBoxNonce{Bytes: sodium.Bytes(nonce)}
 	k := sodium.SecretBoxKey{Bytes: sodium.Bytes(key)}

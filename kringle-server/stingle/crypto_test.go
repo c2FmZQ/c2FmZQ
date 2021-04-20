@@ -23,9 +23,9 @@ func TestEncryptDecrypt(t *testing.T) {
 func TestSealBox(t *testing.T) {
 	key := MakeSecretKey()
 	msg := []byte("foo bar")
-	enc := SealBox(msg, key.PublicKey())
+	enc := key.PublicKey().SealBox(msg)
 
-	dec, err := SealBoxOpen(enc, key)
+	dec, err := key.SealBoxOpen(enc)
 	if err != nil {
 		t.Fatalf("SealBoxOpen failed: %v", err)
 	}

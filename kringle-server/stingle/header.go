@@ -78,7 +78,7 @@ func DecryptHeader(in io.Reader, sk SecretKey) (hdr Header, err error) {
 		return
 	}
 
-	d, err := SealBoxOpen(encHeader, sk)
+	d, err := sk.SealBoxOpen(encHeader)
 	if err != nil {
 		return hdr, err
 	}
@@ -160,7 +160,7 @@ func EncryptHeader(out io.Writer, hdr Header, pk PublicKey) (err error) {
 	binary.Write(&h, binary.BigEndian, hdr.Filename)             // n bytes
 	binary.Write(&h, binary.BigEndian, hdr.VideoDuration)        // 4 bytes
 
-	encHdr := SealBox(h.Bytes(), pk)
+	encHdr := pk.SealBox(h.Bytes())
 	hdrSize := make([]byte, 4)
 	binary.BigEndian.PutUint32(hdrSize, uint32(len(encHdr)))
 	if _, err = out.Write([]byte{'S', 'P', 1}); err != nil {

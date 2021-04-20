@@ -229,7 +229,7 @@ func (s *Server) handleCheckKey(req *http.Request) *stingle.Response {
 		return stingle.ResponseNOK()
 	}
 	return stingle.ResponseOK().
-		AddPart("challenge", stingle.SealBox(append([]byte("validkey_"), rnd...), u.PublicKey)).
+		AddPart("challenge", u.PublicKey.SealBox(append([]byte("validkey_"), rnd...))).
 		AddPart("isKeyBackedUp", u.IsBackup).
 		AddPart("serverPK", u.ServerPublicKeyForExport())
 }
