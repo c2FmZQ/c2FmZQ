@@ -36,6 +36,9 @@ func (c *Client) CreateAccount(email, password string) error {
 	}
 	c.Email = email
 	c.SecretKey = sk
+	if err := c.storage.SaveDataFile(nil, c.storage.HashString(configFile), c); err != nil {
+		return err
+	}
 	fmt.Println("Account created successfully.")
 	return nil
 }
@@ -80,7 +83,7 @@ func (c *Client) Login(email, password string) error {
 	if sk, err := stingle.DecodeSecretKeyBundle([]byte(password), sr.Parts["keyBundle"].(string)); err == nil {
 		c.SecretKey = sk
 	}
-	if err := c.storage.SaveDataFile(nil, configFile, c); err != nil {
+	if err := c.storage.SaveDataFile(nil, c.storage.HashString(configFile), c); err != nil {
 		return err
 	}
 	fmt.Println("Logged in successfully.")

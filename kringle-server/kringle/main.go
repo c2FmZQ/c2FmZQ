@@ -42,8 +42,8 @@ func main() {
 			&cli.IntFlag{
 				Name:        "verbose",
 				Aliases:     []string{"v"},
-				Value:       3,
-				DefaultText: "3 (debug)",
+				Value:       2,
+				DefaultText: "2 (info)",
 				Usage:       "The level of logging verbosity: 1:Error 2:Info 3:Debug",
 				Destination: &flagLogLevel,
 			},
@@ -63,19 +63,30 @@ func main() {
 		},
 		Commands: []*cli.Command{
 			&cli.Command{
-				Name:   "create-account",
-				Usage:  "Create an account",
-				Action: createAccount,
+				Name:      "create-account",
+				Usage:     "Create an account.",
+				ArgsUsage: "<email>",
+				Action:    createAccount,
 			},
 			&cli.Command{
-				Name:   "login",
-				Usage:  "Login to an account",
-				Action: login,
+				Name:      "login",
+				Usage:     "Login to an account.",
+				ArgsUsage: "<email>",
+				Action:    login,
 			},
 			&cli.Command{
-				Name:   "updates",
-				Usage:  "Request a list of updates",
-				Action: updates,
+				Name:      "updates",
+				Aliases:   []string{"up", "update"},
+				Usage:     "Pull metadata updates.",
+				ArgsUsage: " ",
+				Action:    updates,
+			},
+			&cli.Command{
+				Name:      "sync",
+				Aliases:   []string{"pull", "download"},
+				Usage:     "Download all the files that aren't already downloaded.",
+				ArgsUsage: " ",
+				Action:    syncFiles,
 			},
 		},
 	}
@@ -179,4 +190,16 @@ func updates(ctx *cli.Context) error {
 	}
 
 	return c.GetUpdates()
+}
+
+func syncFiles(ctx *cli.Context) error {
+	c, err := initClient(ctx)
+	if err != nil {
+		return err
+	}
+
+	if err := c.GetUpdates(); err != nil {
+		return err
+	}
+	return c.Sync()
 }

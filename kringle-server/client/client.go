@@ -13,18 +13,19 @@ import (
 )
 
 const (
-	configFile   = ".config"
+	configFile   = "config"
 	galleryFile  = "gallery"
 	trashFile    = "trash"
 	albumList    = "albums"
 	albumPrefix  = "album/"
 	contactsFile = "contacts"
+	blobsDir     = "blobs"
 )
 
 // Create creates a new client configuration, if one doesn't exist already.
 func Create(s *secure.Storage) (*Client, error) {
 	var c Client
-	if err := s.CreateEmptyFile(configFile, &c); err != nil {
+	if err := s.CreateEmptyFile(s.HashString(configFile), &c); err != nil {
 		return nil, err
 	}
 	c.storage = s
@@ -38,7 +39,7 @@ func Create(s *secure.Storage) (*Client, error) {
 // Load loads the existing client configuration.
 func Load(s *secure.Storage) (*Client, error) {
 	var c Client
-	if _, err := s.ReadDataFile(configFile, &c); err != nil {
+	if _, err := s.ReadDataFile(s.HashString(configFile), &c); err != nil {
 		return nil, err
 	}
 	c.storage = s
