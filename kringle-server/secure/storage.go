@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"encoding"
 	"encoding/gob"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -62,6 +63,16 @@ type Storage struct {
 	masterKey *crypto.EncryptionKey
 	compress  bool
 	useGOB    bool
+}
+
+// Dir returns the root directory of the storage.
+func (s *Storage) Dir() string {
+	return s.dir
+}
+
+// HashString returns a cryptographically secure hash of a string.
+func (s *Storage) HashString(str string) string {
+	return hex.EncodeToString(s.masterKey.Hash([]byte(str)))
 }
 
 func createParentIfNotExist(filename string) error {

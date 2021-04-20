@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"time"
 
 	"kringle-server/log"
 	"kringle-server/secure"
@@ -14,7 +13,12 @@ import (
 )
 
 const (
-	configFile = ".config"
+	configFile   = ".config"
+	galleryFile  = "gallery"
+	trashFile    = "trash"
+	albumList    = "albums"
+	albumPrefix  = "album/"
+	contactsFile = "contacts"
 )
 
 // Create creates a new client configuration, if one doesn't exist already.
@@ -24,6 +28,10 @@ func Create(s *secure.Storage) (*Client, error) {
 		return nil, err
 	}
 	c.storage = s
+	s.CreateEmptyFile(s.HashString(galleryFile), &FileSet{})
+	s.CreateEmptyFile(s.HashString(trashFile), &FileSet{})
+	s.CreateEmptyFile(s.HashString(albumList), &AlbumList{})
+	s.CreateEmptyFile(s.HashString(contactsFile), &ContactList{})
 	return &c, nil
 }
 
@@ -79,6 +87,6 @@ func (c *Client) sendRequest(uri string, form url.Values) (*stingle.Response, er
 	if err := dec.Decode(&sr); err != nil {
 		return nil, err
 	}
-	log.Infof("Response: %v", sr)
+	log.Debugf("Response: %v", sr)
 	return &sr, nil
 }
