@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -237,7 +238,8 @@ func decryptFile(c *cli.Context) error {
 			in.Close()
 			return err
 		}
-		if err := stingle.DecryptFile(in, out, hdr); err != nil {
+		r := stingle.DecryptFile(in, hdr)
+		if _, err := io.Copy(out, r); err != nil {
 			in.Close()
 			out.Close()
 			return err

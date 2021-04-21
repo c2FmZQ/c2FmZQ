@@ -72,6 +72,38 @@ type DeleteEvent struct {
 	Date    json.Number `json:"date"`
 }
 
+const (
+	// Values of Header.FileType.
+	FileTypeGeneral = 1
+	FileTypePhoto   = 2
+	FileTypeVideo   = 3
+)
+
+func FileType(t uint8) string {
+	switch t {
+	case FileTypeGeneral:
+		return "general file type"
+	case FileTypePhoto:
+		return "photo"
+	case FileTypeVideo:
+		return "video"
+	default:
+		return "unknown file type"
+	}
+}
+
+// Header is a the header of an encrypted file.
+type Header struct {
+	FileID        []byte
+	Version       uint8
+	ChunkSize     int32
+	DataSize      int64
+	SymmetricKey  []byte
+	FileType      uint8
+	Filename      []byte
+	VideoDuration int32
+}
+
 // ResponseOK returns a new Response with status OK.
 func ResponseOK() *Response {
 	return &Response{

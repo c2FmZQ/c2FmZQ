@@ -88,6 +88,13 @@ func main() {
 				ArgsUsage: " ",
 				Action:    syncFiles,
 			},
+			&cli.Command{
+				Name:      "list",
+				Aliases:   []string{"ls"},
+				Usage:     "List the files in a file set.",
+				ArgsUsage: `["glob"]`,
+				Action:    listFiles,
+			},
 		},
 	}
 
@@ -202,4 +209,16 @@ func syncFiles(ctx *cli.Context) error {
 		return err
 	}
 	return c.Sync()
+}
+
+func listFiles(ctx *cli.Context) error {
+	c, err := initClient(ctx)
+	if err != nil {
+		return err
+	}
+	pattern := "*"
+	if ctx.Args().Len() > 0 {
+		pattern = ctx.Args().Get(0)
+	}
+	return c.ListFiles(pattern)
 }

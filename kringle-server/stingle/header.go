@@ -10,18 +10,6 @@ import (
 	"strings"
 )
 
-// Header is a the header of an encrypted file.
-type Header struct {
-	FileID        []byte
-	Version       uint8
-	ChunkSize     int32
-	DataSize      int64
-	SymmetricKey  []byte
-	FileType      uint8
-	Filename      []byte
-	VideoDuration int32
-}
-
 // DecryptBase64Headers decrypts base64-encoded headers.
 func DecryptBase64Headers(hdrs string, sk SecretKey) ([]Header, error) {
 	var out []Header
@@ -82,7 +70,6 @@ func DecryptHeader(in io.Reader, sk SecretKey) (hdr Header, err error) {
 	if err != nil {
 		return hdr, err
 	}
-
 	// 1-byte header.headerVersion
 	hdr.Version, d = d[0], d[1:]
 	// 4-byte header.chunkSize
@@ -120,8 +107,7 @@ func DecryptHeader(in io.Reader, sk SecretKey) (hdr Header, err error) {
 		err = errors.New("invalid filename size")
 		return
 	}
-	filenameSize := d[0]
-	d = d[1:]
+	filenameSize, d := int(binary.BigEndian.Uint32(d[:4])), d[4:]
 	if filenameSize < 0 || int(filenameSize) > len(d) {
 		err = fmt.Errorf("invalid filename size: %d", filenameSize)
 		return
@@ -151,14 +137,14 @@ func EncryptHeader(out io.Writer, hdr Header, pk PublicKey) (err error) {
 	}
 
 	var h bytes.Buffer
-	binary.Write(&h, binary.BigEndian, hdr.Version)              // 1 byte
-	binary.Write(&h, binary.BigEndian, hdr.ChunkSize)            // 4 bytes
-	binary.Write(&h, binary.BigEndian, hdr.DataSize)             // 8 bytes
-	binary.Write(&h, binary.BigEndian, hdr.SymmetricKey)         // 32 bytes
-	binary.Write(&h, binary.BigEndian, hdr.FileType)             // 1 byte
-	binary.Write(&h, binary.BigEndian, uint8(len(hdr.Filename))) // 1 byte
-	binary.Write(&h, binary.BigEndian, hdr.Filename)             // n bytes
-	binary.Write(&h, binary.BigEndian, hdr.VideoDuration)        // 4 bytes
+	binary.Write(&h, binary.BigEndian, hdr.Version)               // 1 byte
+	binary.Write(&h, binary.BigEndian, hdr.ChunkSize)             // 4 bytes
+	binary.Write(&h, binary.BigEndian, hdr.DataSize)              // 8 bytes
+	binary.Write(&h, binary.BigEndian, hdr.SymmetricKey)          // 32 bytes
+	binary.Write(&h, binary.BigEndian, hdr.FileType)              // 1 byte
+	binary.Write(&h, binary.BigEndian, uint32(len(hdr.Filename))) // 4 bytes
+	binary.Write(&h, binary.BigEndian, hdr.Filename)              // n bytes
+	binary.Write(&h, binary.BigEndian, hdr.VideoDuration)         // 4 bytes
 
 	encHdr := pk.SealBox(h.Bytes())
 	hdrSize := make([]byte, 4)
@@ -176,4 +162,25 @@ func EncryptHeader(out io.Writer, hdr Header, pk PublicKey) (err error) {
 		return err
 	}
 	return nil
+}
+
+// SkipHeader moves the reader past the header without decrypting it.
+func SkipHeader(in io.Reader) (err error) {
+	b := make([]byte, 35)
+	if _, err = io.ReadFull(in, b); err != nil {
+		return
+	}
+	// 4-byte header size
+	var headerSize int32
+	if err = binary.Read(in, binary.BigEndian, &headerSize); err != nil {
+		return
+	}
+	if headerSize < 0 || headerSize > 64*1024 {
+		err = errors.New("invalid header size")
+		return
+	}
+	// header-size bytes (encHeader)
+	encHeader := make([]byte, headerSize)
+	_, err = io.ReadFull(in, encHeader)
+	return
 }

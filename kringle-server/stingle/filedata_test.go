@@ -4,6 +4,7 @@ package stingle
 
 import (
 	"bytes"
+	"io"
 	"testing"
 
 	"github.com/jamesruan/sodium"
@@ -34,9 +35,11 @@ func TestFileEncryption(t *testing.T) {
 	if err := EncryptHeader(&encrypted, header, sk.PublicKey()); err != nil {
 		t.Fatalf("EncryptHeader: %v", err)
 	}
-	if err := EncryptFile(bytes.NewBuffer(orig), &encrypted, header); err != nil {
+	w := EncryptFile(&encrypted, header)
+	if _, err := io.Copy(w, bytes.NewBuffer(orig)); err != nil {
 		t.Fatalf("EncryptFile: %v", err)
 	}
+	w.Close()
 
 	header2, err := DecryptHeader(&encrypted, sk)
 	if err != nil {
@@ -44,7 +47,8 @@ func TestFileEncryption(t *testing.T) {
 	}
 
 	var decrypted bytes.Buffer
-	if err := DecryptFile(&encrypted, &decrypted, header2); err != nil {
+	reader := DecryptFile(&encrypted, header2)
+	if _, err := io.Copy(&decrypted, reader); err != nil {
 		t.Fatalf("DecryptFile: %v", err)
 	}
 	if want, got := orig, decrypted.Bytes(); bytes.Compare(want, got) != 0 {
