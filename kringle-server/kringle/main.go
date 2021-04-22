@@ -89,11 +89,18 @@ func main() {
 				Action:    updates,
 			},
 			&cli.Command{
-				Name:      "sync",
-				Aliases:   []string{"pull", "download"},
+				Name:      "pull",
+				Aliases:   []string{"download"},
 				Usage:     "Download all the files that aren't already downloaded.",
 				ArgsUsage: `["glob"] ... (default "*/*")`,
-				Action:    syncFiles,
+				Action:    pullFiles,
+			},
+			&cli.Command{
+				Name:      "push",
+				Aliases:   []string{"upload"},
+				Usage:     "Upload all the files that haven't been uploaded yet.",
+				ArgsUsage: `["glob"] ... (default "*/*")`,
+				Action:    pushFiles,
 			},
 			&cli.Command{
 				Name:      "free",
@@ -245,7 +252,7 @@ func updates(ctx *cli.Context) error {
 	return c.GetUpdates()
 }
 
-func syncFiles(ctx *cli.Context) error {
+func pullFiles(ctx *cli.Context) error {
 	c, err := initClient(ctx)
 	if err != nil {
 		return err
@@ -257,7 +264,22 @@ func syncFiles(ctx *cli.Context) error {
 	if err := c.GetUpdates(); err != nil {
 		return err
 	}
-	return c.Sync(patterns)
+	return c.Pull(patterns)
+}
+
+func pushFiles(ctx *cli.Context) error {
+	c, err := initClient(ctx)
+	if err != nil {
+		return err
+	}
+	patterns := []string{"*/*"}
+	if ctx.Args().Len() > 0 {
+		patterns = ctx.Args().Slice()
+	}
+	if err := c.GetUpdates(); err != nil {
+		return err
+	}
+	return c.Push(patterns)
 }
 
 func freeFiles(ctx *cli.Context) error {

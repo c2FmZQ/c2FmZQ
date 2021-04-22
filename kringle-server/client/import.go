@@ -20,6 +20,7 @@ import (
 	"kringle-server/stingle"
 )
 
+// ImportFiles encrypts and imports files.
 func (c *Client) ImportFiles(patterns []string, dir string) error {
 	li, err := c.glob(dir)
 	if err != nil {
@@ -70,6 +71,10 @@ func (c *Client) importFile(file string, dst ListItem, pk stingle.PublicKey) err
 		hdr1.FileType = stingle.FileTypeVideo
 	default:
 		hdr1.FileType = stingle.FileTypeGeneral
+	}
+	if hdr1.FileType == stingle.FileTypeVideo {
+		// TODO: Set VideoDuration
+		//hdr1.VideoDuration
 	}
 
 	thumbnail, err := c.makeThumbnail(file)
@@ -128,6 +133,7 @@ func makeSPFilename() string {
 func (c *Client) makeThumbnail(filename string) ([]byte, error) {
 	img, err := imaging.Open(filename, imaging.AutoOrientation(true))
 	if err != nil {
+		// TODO: Create thumbnails for videos.
 		img = image.NewGray(image.Rect(0, 0, 307, 409))
 	}
 	img = imaging.Fill(img, 307, 409, imaging.Center, imaging.Lanczos)
