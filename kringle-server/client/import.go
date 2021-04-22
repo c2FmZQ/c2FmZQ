@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"image"
 	"io"
+	"math"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -17,6 +19,7 @@ import (
 	"github.com/disintegration/imaging"
 	"github.com/rwcarlsen/goexif/exif"
 
+	"kringle-server/log"
 	"kringle-server/stingle"
 )
 
@@ -64,6 +67,8 @@ func (c *Client) importFile(file string, dst ListItem, pk stingle.PublicKey) err
 	_, fn := filepath.Split(file)
 	hdr1.Filename = []byte(fn)
 	hdr1.DataSize = fi.Size()
+
+	creationTime := time.Now()
 	switch ext := strings.ToLower(filepath.Ext(file)); ext {
 	case ".jpg", ".jpeg", ".png", ".gif":
 		hdr1.FileType = stingle.FileTypePhoto
@@ -73,11 +78,19 @@ func (c *Client) importFile(file string, dst ListItem, pk stingle.PublicKey) err
 		hdr1.FileType = stingle.FileTypeGeneral
 	}
 	if hdr1.FileType == stingle.FileTypeVideo {
-		// TODO: Set VideoDuration
-		//hdr1.VideoDuration
+		if dur, ct, err := videoMetadata(file); err == nil {
+			hdr1.VideoDuration = dur
+			if !ct.IsZero() {
+				creationTime = ct
+			}
+		}
 	}
-
-	thumbnail, err := c.makeThumbnail(file)
+	var thumbnail []byte
+	if hdr1.FileType == stingle.FileTypeVideo {
+		thumbnail, err = c.videoThumbnail(file, hdr1.VideoDuration)
+	} else {
+		thumbnail, err = c.photoThumbnail(file)
+	}
 	if err != nil {
 		return err
 	}
@@ -92,7 +105,7 @@ func (c *Client) importFile(file string, dst ListItem, pk stingle.PublicKey) err
 	sFile := stingle.File{
 		File:         makeSPFilename(),
 		Version:      "1",
-		DateCreated:  json.Number(strconv.FormatInt(time.Now().UnixNano()/1000000, 10)),
+		DateCreated:  json.Number(strconv.FormatInt(creationTime.UnixNano()/1000000, 10)),
 		DateModified: json.Number(strconv.FormatInt(time.Now().UnixNano()/1000000, 10)),
 		Headers:      encHdrs,
 		AlbumID:      dst.AlbumID,
@@ -130,22 +143,6 @@ func makeSPFilename() string {
 	return base64.RawURLEncoding.EncodeToString(b) + ".sp"
 }
 
-func (c *Client) makeThumbnail(filename string) ([]byte, error) {
-	img, err := imaging.Open(filename, imaging.AutoOrientation(true))
-	if err != nil {
-		// TODO: Create thumbnails for videos.
-		img = image.NewGray(image.Rect(0, 0, 307, 409))
-	}
-	img = imaging.Fill(img, 307, 409, imaging.Center, imaging.Lanczos)
-
-	var buf bytes.Buffer
-	if err := imaging.Encode(&buf, img, imaging.PNG); err != nil {
-		return nil, err
-	}
-
-	return buf.Bytes(), nil
-}
-
 func (c *Client) albumPK(albumID string) (pk stingle.PublicKey, err error) {
 	var al AlbumList
 	if _, err = c.storage.ReadDataFile(c.fileHash(albumList), &al); err != nil {
@@ -169,6 +166,74 @@ func (c *Client) importExif(file string) (x *exif.Exif, err error) {
 	}
 	defer f.Close()
 	return exif.Decode(f)
+}
+
+func (c *Client) photoThumbnail(filename string) ([]byte, error) {
+	img, err := imaging.Open(filename, imaging.AutoOrientation(true))
+	if err != nil {
+		img = image.NewGray(image.Rect(0, 0, 240, 320))
+	}
+	img = imaging.Fill(img, 240, 320, imaging.Center, imaging.Lanczos)
+
+	var buf bytes.Buffer
+	if err := imaging.Encode(&buf, img, imaging.PNG); err != nil {
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
+}
+
+func (c *Client) videoThumbnail(file string, dur int32) ([]byte, error) {
+	bin, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		return nil, err
+	}
+	font := "/usr/share/fonts/corefonts/verdanab.ttf"
+	vf := fmt.Sprintf(`scale=320:240,drawtext=fontfile=%s:text='|> %s':fontcolor=white:fontsize=24:box=1:boxcolor=black@0.3:boxborderw=10:x=(w-text_w)/2:y=(h-text_h)/2`,
+		font, time.Duration(dur)*time.Second)
+	cmd := exec.Command(bin, "-i", file, "-frames:v", "1", "-an", "-vf", vf, "-f", "apng", "pipe:1")
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	b, err := cmd.Output()
+	if err != nil {
+		log.Errorf("ffmpeg: %s", stderr)
+		return nil, err
+	}
+	return b, nil
+}
+
+func videoMetadata(file string) (duration int32, creationTime time.Time, err error) {
+	bin, err := exec.LookPath("ffprobe")
+	if err != nil {
+		return
+	}
+	var streamInfo struct {
+		Streams []struct {
+			Duration json.Number `json:"duration"`
+			Tags     struct {
+				CreationTime string `json:"creation_time"`
+			} `json:"tags"`
+		} `json:"streams"`
+	}
+	cmd := exec.Command(bin, "-show_streams", "-print_format", "json", file)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	b, err := cmd.Output()
+	if err != nil {
+		log.Errorf("ffprobe: %s", stderr)
+		return
+	}
+	if err = json.Unmarshal(b, &streamInfo); err != nil {
+		log.Errorf("ffprobe json: %v", err)
+		return
+	}
+	if len(streamInfo.Streams) > 0 {
+		d, _ := streamInfo.Streams[0].Duration.Float64()
+		duration = int32(math.Ceil(d))
+		// Format: 2021-03-28T17:02:12.000000Z
+		creationTime, _ = time.Parse("2006-01-02T15:04:05.000000Z", streamInfo.Streams[0].Tags.CreationTime)
+	}
+	return
 }
 
 func (c *Client) encryptFile(in io.Reader, file string, hdr stingle.Header, pk stingle.PublicKey, thumb bool) error {
