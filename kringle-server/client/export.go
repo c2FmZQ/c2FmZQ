@@ -56,7 +56,7 @@ func (c *Client) exportWorker(ch <-chan ListItem, out chan<- error, dir string) 
 func (c *Client) exportFile(item ListItem, dir string) (err error) {
 	var in io.ReadCloser
 	if in, err = os.Open(item.FilePath); errors.Is(err, os.ErrNotExist) {
-		in, err = c.download(item.File, item.Set, "0")
+		in, err = c.download(item.FSFile.File, item.Set, "0")
 	}
 	if err != nil {
 		return err
@@ -67,7 +67,7 @@ func (c *Client) exportFile(item ListItem, dir string) (err error) {
 	}
 	_, fn := filepath.Split(string(item.Header.Filename))
 	if fn == "" {
-		_, fn = filepath.Split(string(item.File))
+		_, fn = filepath.Split(string(item.FSFile.File))
 		fn = "decrypted-" + fn
 	}
 	fn = filepath.Join(dir, fn)

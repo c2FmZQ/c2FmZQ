@@ -2,6 +2,7 @@ package stingle
 
 import (
 	"bytes"
+	"crypto/rand"
 	"encoding/base64"
 	"encoding/binary"
 	"errors"
@@ -25,6 +26,37 @@ func DecryptBase64Headers(hdrs string, sk SecretKey) ([]Header, error) {
 		out = append(out, h)
 	}
 	return out, nil
+}
+
+// EncryptBase64Headers encrypts headers and encodes them.
+func EncryptBase64Headers(hdrs []Header, pk PublicKey) (string, error) {
+	var s []string
+	for _, hdr := range hdrs {
+		var buf bytes.Buffer
+		if err := EncryptHeader(&buf, hdr, pk); err != nil {
+			return "", err
+		}
+		s = append(s, base64.RawURLEncoding.EncodeToString(buf.Bytes()))
+	}
+	return strings.Join(s, "*"), nil
+}
+
+// NewHeader returns a Header with FileID, SymmetricKey, and ChunkSize set.
+func NewHeader() Header {
+	h := Header{
+		FileID:       make([]byte, 32),
+		Version:      1,
+		SymmetricKey: make([]byte, 32),
+		ChunkSize:    1 << 20,
+		FileType:     FileTypeGeneral,
+	}
+	if _, err := io.ReadFull(rand.Reader, h.FileID); err != nil {
+		panic(err)
+	}
+	if _, err := io.ReadFull(rand.Reader, h.SymmetricKey); err != nil {
+		panic(err)
+	}
+	return h
 }
 
 // DecryptHeader decrypts a file header from the reader.

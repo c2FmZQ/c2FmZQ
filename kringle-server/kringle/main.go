@@ -126,6 +126,12 @@ func main() {
 				ArgsUsage: `"<glob>" ... <output directory>`,
 				Action:    exportFiles,
 			},
+			&cli.Command{
+				Name:      "import",
+				Usage:     "Encrypts and import files.",
+				ArgsUsage: `"<glob>" ... <album>`,
+				Action:    importFiles,
+			},
 		},
 	}
 	sort.Sort(cli.CommandsByName(app.Commands))
@@ -317,4 +323,18 @@ func exportFiles(ctx *cli.Context) error {
 	patterns := args[:len(args)-1]
 	dir := args[len(args)-1]
 	return c.ExportFiles(patterns, dir)
+}
+
+func importFiles(ctx *cli.Context) error {
+	c, err := initClient(ctx)
+	if err != nil {
+		return err
+	}
+	args := ctx.Args().Slice()
+	if len(args) < 2 {
+		return errors.New("missing argument")
+	}
+	patterns := args[:len(args)-1]
+	dir := args[len(args)-1]
+	return c.ImportFiles(patterns, dir)
 }

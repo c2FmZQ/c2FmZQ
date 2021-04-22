@@ -26,6 +26,7 @@ type File struct {
 	DateModified json.Number `json:"dateModified"`
 	Headers      string      `json:"headers"`
 	AlbumID      string      `json:"albumId"`
+	LocalOnly    bool        `json:"localOnly,omitempty"`
 }
 
 // The Stingle API representation of an album.

@@ -20,8 +20,9 @@ type ListItem struct {
 	Filename    string
 	Header      stingle.Header
 	FilePath    string
+	FileSet     string
 	DateCreated time.Time
-	File        string
+	FSFile      stingle.File
 	Set         string
 	AlbumID     string
 	IsDir       bool
@@ -63,11 +64,11 @@ func (c *Client) glob(pattern string) ([]ListItem, error) {
 		return nil, err
 	}
 	type dir struct {
-		name  string
-		file  string
-		set   string
-		sk    stingle.SecretKey
-		album *stingle.Album
+		name    string
+		fileSet string
+		set     string
+		sk      stingle.SecretKey
+		album   *stingle.Album
 	}
 	dirs := []dir{
 		{"gallery", galleryFile, stingle.GallerySet, c.SecretKey, nil},
@@ -94,14 +95,16 @@ func (c *Client) glob(pattern string) ([]ListItem, error) {
 			continue
 		}
 		var fs FileSet
-		if _, err := c.storage.ReadDataFile(c.fileHash(d.file), &fs); err != nil {
+		if _, err := c.storage.ReadDataFile(c.fileHash(d.fileSet), &fs); err != nil {
 			return nil, err
 		}
 		if len(pathElems) == 1 {
 			li := ListItem{
 				Filename: d.name + "/",
+				FileSet:  d.fileSet,
 				IsDir:    true,
 				DirSize:  len(fs.Files),
+				Set:      d.set,
 			}
 			if d.album != nil {
 				li.AlbumID = d.album.AlbumID
@@ -125,8 +128,9 @@ func (c *Client) glob(pattern string) ([]ListItem, error) {
 					Filename:    d.name + "/" + fn,
 					Header:      hdrs[0],
 					FilePath:    c.blobPath(f.File, false),
+					FileSet:     d.fileSet,
 					DateCreated: time.Unix(ts/1000, 0),
-					File:        f.File,
+					FSFile:      *f,
 					Set:         d.set,
 					AlbumID:     f.AlbumID,
 				})

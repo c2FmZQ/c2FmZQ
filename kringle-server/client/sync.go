@@ -18,9 +18,12 @@ func (c *Client) Sync(patterns []string) error {
 	}
 	files := make(map[string]ListItem)
 	for _, item := range list {
-		fn := c.blobPath(item.File, false)
+		if item.FSFile.LocalOnly {
+			continue
+		}
+		fn := c.blobPath(item.FSFile.File, false)
 		if _, err := os.Stat(fn); errors.Is(err, os.ErrNotExist) {
-			files[item.File] = item
+			files[item.FSFile.File] = item
 		}
 	}
 
@@ -41,7 +44,13 @@ func (c *Client) Sync(patterns []string) error {
 			errors = append(errors, err)
 		}
 	}
-	fmt.Printf("Files downloaded: %d Errors: %d\n", len(files)-len(errors), len(errors))
+	if len(files) == 0 {
+		fmt.Println("All files already in sync.")
+	} else if errors == nil {
+		fmt.Printf("Successfully downloaded %d file(s).\n", len(files))
+	} else {
+		fmt.Printf("Successfully downloaded %d file(s), %d failed.\n", len(files)-len(errors), len(errors))
+	}
 	if errors != nil {
 		return fmt.Errorf("%w %v", errors[0], errors[1:])
 	}
@@ -57,7 +66,10 @@ func (c *Client) Free(patterns []string) error {
 	}
 	count := 0
 	for _, item := range list {
-		fn := c.blobPath(item.File, false)
+		if item.FSFile.LocalOnly {
+			continue
+		}
+		fn := c.blobPath(item.FSFile.File, false)
 		if _, err := os.Stat(fn); errors.Is(err, os.ErrNotExist) {
 			continue
 		}
@@ -66,7 +78,11 @@ func (c *Client) Free(patterns []string) error {
 		}
 		count++
 	}
-	fmt.Printf("Successfully freed %d file(s).\n", count)
+	if count == 0 {
+		fmt.Println("There are no files to delete.")
+	} else {
+		fmt.Printf("Successfully freed %d file(s).\n", count)
+	}
 	return nil
 }
 
@@ -85,12 +101,12 @@ func (c *Client) downloadWorker(ch <-chan ListItem, out chan<- error) {
 }
 
 func (c *Client) downloadFile(li ListItem) error {
-	r, err := c.download(li.File, li.Set, "0")
+	r, err := c.download(li.FSFile.File, li.Set, "0")
 	if err != nil {
 		return err
 	}
 	defer r.Close()
-	fn := c.blobPath(li.File, false)
+	fn := c.blobPath(li.FSFile.File, false)
 	dir, _ := filepath.Split(fn)
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return err
