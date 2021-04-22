@@ -47,7 +47,7 @@ func (s *Server) handleUpload(req *http.Request) *stingle.Response {
 		return stingle.ResponseNOK()
 	}
 
-	if up.set == database.AlbumSet {
+	if up.set == stingle.AlbumSet {
 		albumSpec, err := s.db.Album(user, up.albumID)
 		if err != nil {
 			log.Errorf("db.Album(%q, %q) failed: %v", user.Email, up.albumID, err)

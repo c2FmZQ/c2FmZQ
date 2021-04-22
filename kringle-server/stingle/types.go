@@ -55,6 +55,10 @@ func (p Permissions) AllowShare() bool { return len(p) == 4 && p[0] == '1' && p[
 func (p Permissions) AllowCopy() bool  { return len(p) == 4 && p[0] == '1' && p[3] == '1' }
 
 const (
+	GallerySet = "0"
+	TrashSet   = "1"
+	AlbumSet   = "2"
+
 	// Delete event types.
 	DeleteEventGallery     = 1 // A file is removed from the gallery.
 	DeleteEventTrash       = 2 // A file is removed from the trash (and moved somewhere else).

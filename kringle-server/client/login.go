@@ -70,6 +70,7 @@ func (c *Client) Login(email, password string) error {
 		return err
 	}
 	c.UserID = id
+	c.Email = email
 	pk, err := base64.StdEncoding.DecodeString(sr.Parts["serverPublicKey"].(string))
 	if err != nil {
 		return err
@@ -86,6 +87,10 @@ func (c *Client) Login(email, password string) error {
 	if err := c.storage.SaveDataFile(nil, c.storage.HashString(configFile), c); err != nil {
 		return err
 	}
+	c.storage.CreateEmptyFile(c.fileHash(galleryFile), &FileSet{})
+	c.storage.CreateEmptyFile(c.fileHash(trashFile), &FileSet{})
+	c.storage.CreateEmptyFile(c.fileHash(albumList), &AlbumList{})
+	c.storage.CreateEmptyFile(c.fileHash(contactsFile), &ContactList{})
 	fmt.Println("Logged in successfully.")
-	return nil
+	return c.GetUpdates()
 }

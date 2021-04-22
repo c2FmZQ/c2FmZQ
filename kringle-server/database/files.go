@@ -14,10 +14,6 @@ import (
 
 const (
 	fileSetPattern = "fileset-%s"
-
-	GallerySet = "0"
-	TrashSet   = "1"
-	AlbumSet   = "2"
 )
 
 // FileSet encapsulates to information of a file set, i.e. a group of files
@@ -88,7 +84,7 @@ func (d *Database) fileSetPath(user User, set string) string {
 // addFileToFileSet adds file to one of user's file sets.
 func (d *Database) addFileToFileSet(user User, file FileSpec, name, set, albumID string) (retErr error) {
 	var fileName string
-	if set == AlbumSet {
+	if set == stingle.AlbumSet {
 		albumRef, err := d.albumRef(user, albumID)
 		if err != nil {
 			return err
@@ -178,7 +174,7 @@ func (d *Database) FileSet(user User, set, albumID string) (*FileSet, error) {
 	defer recordLatency("FileSet")()
 
 	var fileName string
-	if set == AlbumSet {
+	if set == stingle.AlbumSet {
 		albumRef, err := d.albumRef(user, albumID)
 		if err != nil {
 			return nil, err
@@ -213,7 +209,7 @@ func (d *Database) fileSetForUpdate(user User, set, albumID string) (func(bool, 
 func (d *Database) fileSetsForUpdate(user User, sets, albumIDs []string) (func(bool, *error) error, []*FileSet, error) {
 	var filenames []string
 	for i := range sets {
-		if sets[i] == AlbumSet {
+		if sets[i] == stingle.AlbumSet {
 			albumRef, err := d.albumRef(user, albumIDs[i])
 			if err != nil {
 				return nil, nil, err
@@ -307,9 +303,9 @@ func (d *Database) MoveFile(user User, p MoveFileParams) (retErr error) {
 				AlbumID: p.AlbumIDFrom,
 				Date:    nowInMS(),
 			}
-			if p.SetFrom == GallerySet {
+			if p.SetFrom == stingle.GallerySet {
 				de.Type = stingle.DeleteEventGallery
-			} else if p.SetFrom == TrashSet {
+			} else if p.SetFrom == stingle.TrashSet {
 				de.Type = stingle.DeleteEventTrash
 			} else {
 				de.Type = stingle.DeleteEventAlbumFile
@@ -328,9 +324,9 @@ func (d *Database) MoveFile(user User, p MoveFileParams) (retErr error) {
 func (d *Database) EmptyTrash(user User, t int64) (retErr error) {
 	defer recordLatency("EmptyTrash")()
 
-	commit, fs, err := d.fileSetForUpdate(user, TrashSet, "")
+	commit, fs, err := d.fileSetForUpdate(user, stingle.TrashSet, "")
 	if err != nil {
-		log.Errorf("fileSetForUpdate(%q, %q, %q) failed: %v", user.Email, TrashSet, "", err)
+		log.Errorf("fileSetForUpdate(%q, %q, %q) failed: %v", user.Email, stingle.TrashSet, "", err)
 		return err
 	}
 	defer commit(true, &retErr)
@@ -356,9 +352,9 @@ func (d *Database) EmptyTrash(user User, t int64) (retErr error) {
 func (d *Database) DeleteFiles(user User, files []string) (retErr error) {
 	defer recordLatency("DeleteFiles")()
 
-	commit, fs, err := d.fileSetForUpdate(user, TrashSet, "")
+	commit, fs, err := d.fileSetForUpdate(user, stingle.TrashSet, "")
 	if err != nil {
-		log.Errorf("fileSetForUpdate(%q, %q, %q) failed: %v", user.Email, TrashSet, "", err)
+		log.Errorf("fileSetForUpdate(%q, %q, %q) failed: %v", user.Email, stingle.TrashSet, "", err)
 		return err
 	}
 	defer commit(true, &retErr)
@@ -402,7 +398,7 @@ func (d *Database) downloadFileSpec(fileSpec *FileSpec, thumb bool) (*os.File, e
 func (d *Database) DownloadFile(user User, set, filename string, thumb bool) (*os.File, error) {
 	defer recordLatency("DownloadFile")()
 
-	if set != AlbumSet {
+	if set != stingle.AlbumSet {
 		fileSpec, err := d.findFileInSet(user, set, "", filename)
 		if err != nil {
 			return nil, err
@@ -416,12 +412,12 @@ func (d *Database) DownloadFile(user User, set, filename string, thumb bool) (*o
 		return nil, err
 	}
 	for _, album := range albumRefs {
-		fileSpec, err := d.findFileInSet(user, AlbumSet, album.AlbumID, filename)
+		fileSpec, err := d.findFileInSet(user, stingle.AlbumSet, album.AlbumID, filename)
 		if errors.Is(err, os.ErrNotExist) {
 			continue
 		}
 		if err != nil {
-			log.Errorf("findFileInSet(%q, %q, %q, %q, %v) failed: %v", user.Email, AlbumSet, album.AlbumID, filename, thumb, err)
+			log.Errorf("findFileInSet(%q, %q, %q, %q, %v) failed: %v", user.Email, stingle.AlbumSet, album.AlbumID, filename, thumb, err)
 			return nil, err
 		}
 		return d.downloadFileSpec(fileSpec, thumb)

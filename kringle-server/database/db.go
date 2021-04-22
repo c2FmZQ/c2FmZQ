@@ -20,6 +20,7 @@ import (
 	"kringle-server/crypto"
 	"kringle-server/log"
 	"kringle-server/secure"
+	"kringle-server/stingle"
 )
 
 var (
@@ -216,8 +217,8 @@ func (d Database) DumpUsers() {
 		}
 		fmt.Printf("ID %d [%s]: %s\n", u.UserID, u.Email, d.filePath(user.home(userFile)))
 		fmt.Printf("  -contacts: %s\n", d.filePath(user.home(contactListFile)))
-		fmt.Printf("  -trash: %s\n", d.fileSetPath(user, TrashSet))
-		fmt.Printf("  -gallery: %s\n", d.fileSetPath(user, GallerySet))
+		fmt.Printf("  -trash: %s\n", d.fileSetPath(user, stingle.TrashSet))
+		fmt.Printf("  -gallery: %s\n", d.fileSetPath(user, stingle.GallerySet))
 		albums, err := d.AlbumRefs(user)
 		if err != nil {
 			log.Errorf("AlbumRefs(%q): %v", u.Email, err)

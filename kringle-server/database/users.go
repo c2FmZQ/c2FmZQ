@@ -131,10 +131,10 @@ func (d *Database) AddUser(u User) (retErr error) {
 		return err
 	}
 
-	if err := d.storage.CreateEmptyFile(d.fileSetPath(u, TrashSet), FileSet{}); err != nil {
+	if err := d.storage.CreateEmptyFile(d.fileSetPath(u, stingle.TrashSet), FileSet{}); err != nil {
 		return err
 	}
-	if err := d.storage.CreateEmptyFile(d.fileSetPath(u, GallerySet), FileSet{}); err != nil {
+	if err := d.storage.CreateEmptyFile(d.fileSetPath(u, stingle.GallerySet), FileSet{}); err != nil {
 		return err
 	}
 	if err := d.storage.CreateEmptyFile(d.filePath(u.home(albumManifest)), AlbumManifest{}); err != nil {

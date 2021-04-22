@@ -85,14 +85,20 @@ func main() {
 				Name:      "sync",
 				Aliases:   []string{"pull", "download"},
 				Usage:     "Download all the files that aren't already downloaded.",
-				ArgsUsage: " ",
+				ArgsUsage: `["glob"]  (default "*/*")`,
 				Action:    syncFiles,
+			},
+			&cli.Command{
+				Name:      "free",
+				Usage:     "Remove all the files that are backed up.",
+				ArgsUsage: `["glob"]  (default "*/*")`,
+				Action:    freeFiles,
 			},
 			&cli.Command{
 				Name:      "list",
 				Aliases:   []string{"ls"},
 				Usage:     "List the files in a file set.",
-				ArgsUsage: `["glob"]`,
+				ArgsUsage: `["glob"]  (default "*")`,
 				Action:    listFiles,
 			},
 		},
@@ -204,11 +210,29 @@ func syncFiles(ctx *cli.Context) error {
 	if err != nil {
 		return err
 	}
-
+	pattern := "*/*"
+	if ctx.Args().Len() > 0 {
+		pattern = ctx.Args().Get(0)
+	}
 	if err := c.GetUpdates(); err != nil {
 		return err
 	}
-	return c.Sync()
+	return c.Sync(pattern)
+}
+
+func freeFiles(ctx *cli.Context) error {
+	c, err := initClient(ctx)
+	if err != nil {
+		return err
+	}
+	pattern := "*/*"
+	if ctx.Args().Len() > 0 {
+		pattern = ctx.Args().Get(0)
+	}
+	if err := c.GetUpdates(); err != nil {
+		return err
+	}
+	return c.Free(pattern)
 }
 
 func listFiles(ctx *cli.Context) error {

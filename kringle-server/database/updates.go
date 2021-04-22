@@ -48,7 +48,7 @@ func (d *Database) FileUpdates(user User, set string, ts int64) ([]stingle.File,
 	ch := make(chan stingle.File)
 	var wg sync.WaitGroup
 
-	if set != AlbumSet {
+	if set != stingle.AlbumSet {
 		wg.Add(1)
 		go d.fileUpdatesForSet(user, set, "", ts, ch, &wg)
 	} else {
@@ -60,7 +60,7 @@ func (d *Database) FileUpdates(user User, set string, ts int64) ([]stingle.File,
 
 		for _, album := range albumRefs {
 			wg.Add(1)
-			go d.fileUpdatesForSet(user, AlbumSet, album.AlbumID, ts, ch, &wg)
+			go d.fileUpdatesForSet(user, stingle.AlbumSet, album.AlbumID, ts, ch, &wg)
 		}
 	}
 	go func(ch chan<- stingle.File, wg *sync.WaitGroup) {
@@ -126,8 +126,8 @@ func (d *Database) DeleteUpdates(user User, ts int64) ([]stingle.DeleteEvent, er
 
 	ch := make(chan stingle.DeleteEvent)
 	var wg sync.WaitGroup
-	for _, set := range []string{GallerySet, TrashSet, AlbumSet} {
-		if set == AlbumSet {
+	for _, set := range []string{stingle.GallerySet, stingle.TrashSet, stingle.AlbumSet} {
+		if set == stingle.AlbumSet {
 			for _, a := range manifest.Albums {
 				wg.Add(1)
 				go d.deleteUpdatesForSet(user, set, a.AlbumID, ts, ch, &wg)
@@ -182,8 +182,8 @@ func (d *Database) SpaceUsed(user User) (int64, error) {
 
 	ch := make(chan fileSize)
 	var wg sync.WaitGroup
-	for _, set := range []string{GallerySet, TrashSet, AlbumSet} {
-		if set == AlbumSet {
+	for _, set := range []string{stingle.GallerySet, stingle.TrashSet, stingle.AlbumSet} {
+		if set == stingle.AlbumSet {
 			for _, a := range manifest.Albums {
 				wg.Add(1)
 				go d.getFileSizes(user, set, a.AlbumID, ch, &wg)

@@ -27,7 +27,7 @@ type FileSet struct {
 // ContactList represents a list of contacts.
 type ContactList struct {
 	UpdateTimestamps
-	Contacts map[string]stingle.Contact `json:"contacts"`
+	Contacts map[int64]stingle.Contact `json:"contacts"`
 }
 
 // UpdateTimestamps represents update/delete timestamps.
@@ -50,7 +50,7 @@ func (c *Client) fileSetForUpdate(name string) (func(bool, *error) error, *FileS
 func (c *Client) fileSetsForUpdate(names []string) (func(bool, *error) error, []*FileSet, error) {
 	var filenames []string
 	for i := range names {
-		filenames = append(filenames, c.storage.HashString(names[i]))
+		filenames = append(filenames, c.fileHash(names[i]))
 	}
 
 	fileSets := make([]*FileSet, len(filenames))
@@ -82,7 +82,7 @@ func (c *Client) processAlbumUpdates(updates []stingle.Album) (retErr error) {
 		return nil
 	}
 	var al AlbumList
-	commit, err := c.storage.OpenForUpdate(c.storage.HashString(albumList), &al)
+	commit, err := c.storage.OpenForUpdate(c.fileHash(albumList), &al)
 	if err != nil {
 		return err
 	}
@@ -92,7 +92,7 @@ func (c *Client) processAlbumUpdates(updates []stingle.Album) (retErr error) {
 	}
 	for _, up := range updates {
 		if _, exists := al.Albums[up.AlbumID]; !exists {
-			c.storage.CreateEmptyFile(c.storage.HashString(albumPrefix+up.AlbumID), &FileSet{})
+			c.storage.CreateEmptyFile(c.fileHash(albumPrefix+up.AlbumID), &FileSet{})
 		}
 		al.Albums[up.AlbumID] = up
 		d, _ := up.DateModified.Int64()
@@ -109,16 +109,17 @@ func (c *Client) processContactUpdates(updates []stingle.Contact) (retErr error)
 		return nil
 	}
 	var cl ContactList
-	commit, err := c.storage.OpenForUpdate(c.storage.HashString(contactsFile), &cl)
+	commit, err := c.storage.OpenForUpdate(c.fileHash(contactsFile), &cl)
 	if err != nil {
 		return err
 	}
 	defer commit(true, &retErr)
 	if cl.Contacts == nil {
-		cl.Contacts = make(map[string]stingle.Contact)
+		cl.Contacts = make(map[int64]stingle.Contact)
 	}
 	for _, up := range updates {
-		cl.Contacts[up.Email] = up
+		id, _ := up.UserID.Int64()
+		cl.Contacts[id] = up
 		d, _ := up.DateModified.Int64()
 		if d > cl.LastUpdateTime {
 			cl.LastUpdateTime = d
@@ -191,7 +192,7 @@ func (c *Client) processDeleteFiles(name string, deletes []stingle.DeleteEvent) 
 
 func (c *Client) processDeleteAlbums(deletes []stingle.DeleteEvent) (retErr error) {
 	var al AlbumList
-	commit, err := c.storage.OpenForUpdate(c.storage.HashString(albumList), &al)
+	commit, err := c.storage.OpenForUpdate(c.fileHash(albumList), &al)
 	if err != nil {
 		return err
 	}
@@ -202,7 +203,7 @@ func (c *Client) processDeleteAlbums(deletes []stingle.DeleteEvent) (retErr erro
 			ad, _ := a.DateModified.Int64()
 			if d > ad {
 				delete(al.Albums, del.AlbumID)
-				if err := os.Remove(filepath.Join(c.storage.Dir(), c.storage.HashString(albumPrefix+del.AlbumID))); err != nil {
+				if err := os.Remove(filepath.Join(c.storage.Dir(), c.fileHash(albumPrefix+del.AlbumID))); err != nil {
 					return err
 				}
 			}
@@ -217,17 +218,18 @@ func (c *Client) processDeleteAlbums(deletes []stingle.DeleteEvent) (retErr erro
 
 func (c *Client) processDeleteContacts(deletes []stingle.DeleteEvent) (retErr error) {
 	var cl ContactList
-	commit, err := c.storage.OpenForUpdate(c.storage.HashString(contactsFile), &cl)
+	commit, err := c.storage.OpenForUpdate(c.fileHash(contactsFile), &cl)
 	if err != nil {
 		return err
 	}
 	defer commit(true, &retErr)
 	for _, del := range deletes {
 		d, _ := del.Date.Int64()
-		for email, contact := range cl.Contacts {
+		id, _ := strconv.ParseInt(del.File, 10, 64)
+		if contact, ok := cl.Contacts[id]; ok {
 			cd, _ := contact.DateModified.Int64()
-			if contact.UserID.String() == del.File && d > cd {
-				delete(cl.Contacts, email)
+			if d > cd {
+				delete(cl.Contacts, id)
 			}
 		}
 		if d > cl.LastDeleteTime {
@@ -294,14 +296,14 @@ func (c *Client) processDeleteUpdates(updates []stingle.DeleteEvent) (retErr err
 
 func (c *Client) getTimestamps(name string) (ts UpdateTimestamps, err error) {
 	foo := struct{ UpdateTimestamps }{}
-	_, err = c.storage.ReadDataFile(c.storage.HashString(name), &foo)
+	_, err = c.storage.ReadDataFile(c.fileHash(name), &foo)
 	ts = foo.UpdateTimestamps
 	return
 }
 
 func (c *Client) getAlbumTimestamps() (ts UpdateTimestamps, err error) {
 	var al AlbumList
-	_, err = c.storage.ReadDataFile(c.storage.HashString(albumList), &al)
+	_, err = c.storage.ReadDataFile(c.fileHash(albumList), &al)
 	for album := range al.Albums {
 		t, err := c.getTimestamps(albumPrefix + album)
 		if err != nil {

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 
@@ -29,10 +30,6 @@ func Create(s *secure.Storage) (*Client, error) {
 		return nil, err
 	}
 	c.storage = s
-	s.CreateEmptyFile(s.HashString(galleryFile), &FileSet{})
-	s.CreateEmptyFile(s.HashString(trashFile), &FileSet{})
-	s.CreateEmptyFile(s.HashString(albumList), &AlbumList{})
-	s.CreateEmptyFile(s.HashString(contactsFile), &ContactList{})
 	return &c, nil
 }
 
@@ -58,6 +55,10 @@ type Client struct {
 	HomeDir       string `json:"homeDir"`
 
 	storage *secure.Storage
+}
+
+func (c *Client) fileHash(fn string) string {
+	return c.storage.HashString(c.ServerBaseURL + "/" + c.Email + "/" + fn)
 }
 
 func (c *Client) encodeParams(params map[string]string) string {
@@ -90,4 +91,30 @@ func (c *Client) sendRequest(uri string, form url.Values) (*stingle.Response, er
 	}
 	log.Debugf("Response: %v", sr)
 	return &sr, nil
+}
+
+func (c *Client) download(file, set, thumb string) (io.ReadCloser, error) {
+	if c.ServerBaseURL == "" {
+		return nil, errors.New("ServerBaseURL is not set")
+	}
+	form := url.Values{}
+	form.Set("token", c.Token)
+	form.Set("file", file)
+	form.Set("set", set)
+	form.Set("thumb", thumb)
+
+	hc := http.Client{}
+	url := c.ServerBaseURL + "/v2/sync/download"
+
+	log.Debugf("SEND POST %v", url)
+	log.Debugf(" %v", form)
+	resp, err := hc.PostForm(url, form)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		resp.Body.Close()
+		return nil, fmt.Errorf("request returned status code %d", resp.StatusCode)
+	}
+	return resp.Body, nil
 }

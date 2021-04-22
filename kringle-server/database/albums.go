@@ -63,7 +63,7 @@ type AlbumSpec struct {
 func (d *Database) Album(user User, albumID string) (*AlbumSpec, error) {
 	defer recordLatency("Album")()
 
-	fs, err := d.FileSet(user, AlbumSet, albumID)
+	fs, err := d.FileSet(user, stingle.AlbumSet, albumID)
 	if err != nil {
 		return nil, err
 	}
@@ -95,7 +95,7 @@ func (d *Database) AddAlbum(owner User, album AlbumSpec) (retErr error) {
 	if err := d.storage.CreateEmptyFile(ap, FileSet{}); err != nil {
 		return err
 	}
-	commit, fs, err := d.fileSetForUpdate(owner, AlbumSet, album.AlbumID)
+	commit, fs, err := d.fileSetForUpdate(owner, stingle.AlbumSet, album.AlbumID)
 	if err != nil {
 		return err
 	}
@@ -118,7 +118,7 @@ func (d *Database) DeleteAlbum(owner User, albumID string) error {
 	if err != nil {
 		return err
 	}
-	fs, err := d.FileSet(owner, AlbumSet, albumID)
+	fs, err := d.FileSet(owner, stingle.AlbumSet, albumID)
 	if err != nil {
 		return err
 	}
@@ -149,7 +149,7 @@ func (d *Database) DeleteAlbum(owner User, albumID string) error {
 func (d *Database) ChangeAlbumCover(user User, albumID, cover string) (retErr error) {
 	defer recordLatency("ChangeAlbumCover")()
 
-	commit, fs, err := d.fileSetForUpdate(user, AlbumSet, albumID)
+	commit, fs, err := d.fileSetForUpdate(user, stingle.AlbumSet, albumID)
 	if err != nil {
 		return err
 	}
@@ -164,7 +164,7 @@ func (d *Database) ChangeAlbumCover(user User, albumID, cover string) (retErr er
 func (d *Database) ChangeMetadata(user User, albumID, metadata string) (retErr error) {
 	defer recordLatency("ChangeMetadata")()
 
-	commit, fs, err := d.fileSetForUpdate(user, AlbumSet, albumID)
+	commit, fs, err := d.fileSetForUpdate(user, stingle.AlbumSet, albumID)
 	if err != nil {
 		return err
 	}
@@ -179,7 +179,7 @@ func (d *Database) ChangeMetadata(user User, albumID, metadata string) (retErr e
 func (d *Database) AlbumPermissions(user User, albumID string) (stingle.Permissions, error) {
 	defer recordLatency("AlbumPermissions")()
 
-	fs, err := d.FileSet(user, AlbumSet, albumID)
+	fs, err := d.FileSet(user, stingle.AlbumSet, albumID)
 	if err != nil {
 		return stingle.Permissions(""), err
 	}
@@ -234,9 +234,9 @@ func (d *Database) AlbumUpdates(user User, ts int64) ([]stingle.Album, error) {
 	}
 	out := []stingle.Album{}
 	for _, v := range albumRefs {
-		fs, err := d.FileSet(user, AlbumSet, v.AlbumID)
+		fs, err := d.FileSet(user, stingle.AlbumSet, v.AlbumID)
 		if err != nil {
-			log.Errorf("d.FileSet(%q, %q, %q) failed: %v", user.Email, AlbumSet, v.AlbumID, err)
+			log.Errorf("d.FileSet(%q, %q, %q) failed: %v", user.Email, stingle.AlbumSet, v.AlbumID, err)
 			continue
 		}
 		if fs.Album.DateModified > ts {
@@ -266,7 +266,7 @@ func (d *Database) ShareAlbum(user User, sharing *stingle.Album, sharingKeys map
 	if err != nil {
 		return err
 	}
-	commit, fs, err := d.fileSetForUpdate(user, AlbumSet, sharing.AlbumID)
+	commit, fs, err := d.fileSetForUpdate(user, stingle.AlbumSet, sharing.AlbumID)
 	if err != nil {
 		return err
 	}
@@ -320,7 +320,7 @@ func (d *Database) ShareAlbum(user User, sharing *stingle.Album, sharingKeys map
 func (d *Database) UnshareAlbum(owner User, albumID string) (retErr error) {
 	defer recordLatency("UnshareAlbums")()
 
-	commit, fs, err := d.fileSetForUpdate(owner, AlbumSet, albumID)
+	commit, fs, err := d.fileSetForUpdate(owner, stingle.AlbumSet, albumID)
 	if err != nil {
 		return err
 	}
@@ -411,7 +411,7 @@ func (d *Database) removeAlbumRef(memberID int64, albumID string) (retErr error)
 func (d *Database) UpdatePerms(owner User, albumID string, permissions stingle.Permissions) (retErr error) {
 	defer recordLatency("UpdatePerms")()
 
-	commit, fs, err := d.fileSetForUpdate(owner, AlbumSet, albumID)
+	commit, fs, err := d.fileSetForUpdate(owner, stingle.AlbumSet, albumID)
 	if err != nil {
 		return err
 	}
@@ -425,7 +425,7 @@ func (d *Database) UpdatePerms(owner User, albumID string, permissions stingle.P
 func (d *Database) RemoveAlbumMember(user User, albumID string, memberID int64) (retErr error) {
 	defer recordLatency("RemoveAlbumMember")()
 
-	commit, fs, err := d.fileSetForUpdate(user, AlbumSet, albumID)
+	commit, fs, err := d.fileSetForUpdate(user, stingle.AlbumSet, albumID)
 	if err != nil {
 		return err
 	}

@@ -3,9 +3,11 @@ package client
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -20,9 +22,13 @@ type ListItem struct {
 	FilePath    string
 	DateCreated time.Time
 	File        string
+	Set         string
 	AlbumID     string
 	IsDir       bool
 	DirSize     int
+	IsOwner     bool
+	IsShared    bool
+	Members     string
 }
 
 // GlobFiles returns files that match the glob pattern.
@@ -39,17 +45,19 @@ func (c *Client) GlobFiles(pattern string) ([]ListItem, error) {
 	}
 
 	var al AlbumList
-	if _, err := c.storage.ReadDataFile(c.storage.HashString(albumList), &al); err != nil {
+	if _, err := c.storage.ReadDataFile(c.fileHash(albumList), &al); err != nil {
 		return nil, err
 	}
 	type dir struct {
-		name string
-		file string
-		sk   stingle.SecretKey
+		name  string
+		file  string
+		set   string
+		sk    stingle.SecretKey
+		album *stingle.Album
 	}
 	dirs := []dir{
-		{"gallery", galleryFile, c.SecretKey},
-		{"trash", trashFile, c.SecretKey},
+		{"gallery", galleryFile, stingle.GallerySet, c.SecretKey, nil},
+		{"trash", trashFile, stingle.TrashSet, c.SecretKey, nil},
 	}
 	for _, album := range al.Albums {
 		askBytes, err := c.SecretKey.SealBoxOpenBase64(album.EncPrivateKey)
@@ -61,7 +69,8 @@ func (c *Client) GlobFiles(pattern string) ([]ListItem, error) {
 		if err != nil {
 			return nil, err
 		}
-		dirs = append(dirs, dir{md.Name, albumPrefix + album.AlbumID, ask})
+		a := album
+		dirs = append(dirs, dir{md.Name, albumPrefix + album.AlbumID, stingle.AlbumSet, ask, &a})
 	}
 	var out []ListItem
 	for _, d := range dirs {
@@ -69,11 +78,21 @@ func (c *Client) GlobFiles(pattern string) ([]ListItem, error) {
 			continue
 		}
 		var fs FileSet
-		if _, err := c.storage.ReadDataFile(c.storage.HashString(d.file), &fs); err != nil {
+		if _, err := c.storage.ReadDataFile(c.fileHash(d.file), &fs); err != nil {
 			return nil, err
 		}
 		if len(pathElems) == 1 {
-			out = append(out, ListItem{Filename: d.name + "/", IsDir: true, DirSize: len(fs.Files)})
+			li := ListItem{
+				Filename: d.name + "/",
+				IsDir:    true,
+				DirSize:  len(fs.Files),
+			}
+			if d.album != nil {
+				li.IsOwner = d.album.IsOwner == "1"
+				li.IsShared = d.album.IsShared == "1"
+				li.Members = d.album.Members
+			}
+			out = append(out, li)
 			continue
 		}
 		for _, f := range fs.Files {
@@ -87,9 +106,10 @@ func (c *Client) GlobFiles(pattern string) ([]ListItem, error) {
 				out = append(out, ListItem{
 					Filename:    d.name + "/" + fn,
 					Header:      hdrs[0],
-					FilePath:    c.filepath(f.File, false),
+					FilePath:    c.blobPath(f.File, false),
 					DateCreated: time.Unix(ts/1000, 0),
 					File:        f.File,
+					Set:         d.set,
 					AlbumID:     f.AlbumID,
 				})
 			}
@@ -113,15 +133,40 @@ func (c *Client) ListFiles(pattern string) error {
 			maxSizeWidth = w
 		}
 	}
+	var cl ContactList
+	if _, err := c.storage.ReadDataFile(c.fileHash(contactsFile), &cl); err != nil {
+		return err
+	}
 
 	var out []string
 	for _, item := range li {
 		if item.IsDir {
-			s := ""
+			s := fmt.Sprintf("%*s %6d file", -maxFilenameWidth, item.Filename, item.DirSize)
 			if item.DirSize != 1 {
-				s = "s"
+				s += "s"
 			}
-			out = append(out, fmt.Sprintf("%*s %6d file%s\n", -maxFilenameWidth, item.Filename, item.DirSize, s))
+			if item.IsShared {
+				if item.IsOwner {
+					s += ", shared by me"
+				} else {
+					s += ", shared with me"
+				}
+				p := strings.Split(item.Members, ",")
+				s += fmt.Sprintf(", %d members: ", len(p))
+				var ml []string
+				for _, m := range p {
+					id, _ := strconv.ParseInt(m, 10, 64)
+					if id == c.UserID {
+						ml = append(ml, c.Email)
+						continue
+					}
+					ml = append(ml, cl.Contacts[id].Email)
+				}
+				sort.Strings(ml)
+				s += strings.Join(ml, ", ")
+			}
+			s += "\n"
+			out = append(out, s)
 			continue
 		}
 		duration := ""
@@ -130,7 +175,7 @@ func (c *Client) ListFiles(pattern string) error {
 		}
 
 		exifData := ""
-		if x, err := getExif(item.FilePath, item.Header); err == nil {
+		if x, err := c.getExif(item); err == nil {
 			sizeX, _ := x.Get("PixelXDimension")
 			sizeY, _ := x.Get("PixelYDimension")
 			if sizeX != nil && sizeY != nil {
@@ -153,11 +198,14 @@ func (c *Client) ListFiles(pattern string) error {
 	return nil
 }
 
-func getExif(filepath string, hdr stingle.Header) (*exif.Exif, error) {
-	if hdr.FileType != stingle.FileTypePhoto {
+func (c *Client) getExif(item ListItem) (x *exif.Exif, err error) {
+	if item.Header.FileType != stingle.FileTypePhoto {
 		return nil, errors.New("not a photo")
 	}
-	f, err := os.Open(filepath)
+	var f io.ReadCloser
+	if f, err = os.Open(item.FilePath); errors.Is(err, os.ErrNotExist) {
+		//f, err = c.download(item.File, item.Set, "0")
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -165,5 +213,5 @@ func getExif(filepath string, hdr stingle.Header) (*exif.Exif, error) {
 	if err := stingle.SkipHeader(f); err != nil {
 		return nil, err
 	}
-	return exif.Decode(stingle.DecryptFile(f, hdr))
+	return exif.Decode(stingle.DecryptFile(f, item.Header))
 }

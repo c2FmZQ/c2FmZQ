@@ -38,12 +38,12 @@ func (s *Server) handleGetUpdates(user database.User, req *http.Request) *stingl
 	cntST := parseInt(req.PostFormValue("cntST"), 0)
 	delST := parseInt(req.PostFormValue("delST"), 0)
 
-	files, err := s.db.FileUpdates(user, database.GallerySet, fileST)
+	files, err := s.db.FileUpdates(user, stingle.GallerySet, fileST)
 	if err != nil {
 		log.Errorf("FileUpdates() failed: %v", err)
 		return stingle.ResponseNOK()
 	}
-	trash, err := s.db.FileUpdates(user, database.TrashSet, trashST)
+	trash, err := s.db.FileUpdates(user, stingle.TrashSet, trashST)
 	if err != nil {
 		log.Errorf("FileUpdates() failed: %v", err)
 		return stingle.ResponseNOK()
@@ -53,7 +53,7 @@ func (s *Server) handleGetUpdates(user database.User, req *http.Request) *stingl
 		log.Errorf("AlbumUpdates() failed: %v", err)
 		return stingle.ResponseNOK()
 	}
-	albumFiles, err := s.db.FileUpdates(user, database.AlbumSet, albumFilesST)
+	albumFiles, err := s.db.FileUpdates(user, stingle.AlbumSet, albumFilesST)
 	if err != nil {
 		log.Errorf("FileUpdates() failed: %v", err)
 		return stingle.ResponseNOK()

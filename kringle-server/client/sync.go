@@ -4,107 +4,73 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"time"
 )
 
-type downloadItem struct {
-	url  string
-	path string
-}
-
-// Sync downloads all the files that are not already present in the local
-// storage.
-func (c *Client) Sync() error {
-	urls := make(map[string]string)
-	if err := c.syncFileSet(galleryFile, urls); err != nil {
-		return err
-	}
-	if err := c.syncFileSet(trashFile, urls); err != nil {
-		return err
-	}
-	var al AlbumList
-	_, err := c.storage.ReadDataFile(c.storage.HashString(albumList), &al)
+// Sync downloads all the files matching pattern that are not already present
+// in the local storage.
+func (c *Client) Sync(pattern string) error {
+	list, err := c.GlobFiles(pattern)
 	if err != nil {
 		return err
 	}
-	for album := range al.Albums {
-		if err := c.syncFileSet(albumPrefix+album, urls); err != nil {
-			return err
+	files := make(map[string]ListItem)
+	for _, item := range list {
+		fn := c.blobPath(item.File, false)
+		if _, err := os.Stat(fn); errors.Is(err, os.ErrNotExist) {
+			files[item.File] = item
 		}
 	}
 
-	qCh := make(chan downloadItem)
+	qCh := make(chan ListItem)
 	eCh := make(chan error)
 	for i := 0; i < 5; i++ {
 		go c.downloadWorker(qCh, eCh)
 	}
 	go func() {
-		for f, url := range urls {
-			qCh <- downloadItem{url, c.filepath(f, false)}
+		for _, li := range files {
+			qCh <- li
 		}
 		close(qCh)
 	}()
 	var errors []error
-	for range urls {
+	for range files {
 		if err := <-eCh; err != nil {
 			errors = append(errors, err)
 		}
 	}
-	fmt.Printf("Files downloaded: %d Errors: %d\n", len(urls)-len(errors), len(errors))
+	fmt.Printf("Files downloaded: %d Errors: %d\n", len(files)-len(errors), len(errors))
 	if errors != nil {
 		return fmt.Errorf("%w %v", errors[0], errors[1:])
 	}
 	return nil
 }
 
-func (c *Client) syncFileSet(name string, urls map[string]string) error {
-	var fs FileSet
-	if _, err := c.storage.ReadDataFile(c.storage.HashString(name), &fs); err != nil {
-		return err
-	}
-	var queue []string
-	for f := range fs.Files {
-		fn := c.filepath(f, false)
-		if _, err := os.Stat(fn); errors.Is(err, os.ErrNotExist) {
-			queue = append(queue, f)
-		}
-	}
-	if len(queue) == 0 {
-		return nil
-	}
-	var set string
-	switch name {
-	case galleryFile:
-		set = "0"
-	case trashFile:
-		set = "1"
-	default:
-		set = "2"
-	}
-	form := url.Values{}
-	form.Set("token", c.Token)
-	form.Set("is_thumb", "0")
-	for i, f := range queue {
-		form.Set(fmt.Sprintf("files[%d][filename]", i), f)
-		form.Set(fmt.Sprintf("files[%d][set]", i), set)
-	}
-	sr, err := c.sendRequest("/v2/sync/getDownloadUrls", form)
+// Free deletes all the files matching pattern that are already present in the
+// remote storage.
+func (c *Client) Free(pattern string) error {
+	list, err := c.GlobFiles(pattern)
 	if err != nil {
 		return err
 	}
-	u := make(map[string]string)
-	copyJSON(sr.Parts["urls"], &u)
-	for k, v := range u {
-		urls[k] = v
+	count := 0
+	for _, item := range list {
+		fn := c.blobPath(item.File, false)
+		if _, err := os.Stat(fn); errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err := os.Remove(fn); err != nil {
+			return err
+		}
+		count++
 	}
+	fmt.Printf("Successfully freed %d file(s).\n", count)
 	return nil
 }
 
-func (c *Client) filepath(name string, thumb bool) string {
+func (c *Client) blobPath(name string, thumb bool) string {
 	if thumb {
 		name = name + "-thumb"
 	}
@@ -112,36 +78,34 @@ func (c *Client) filepath(name string, thumb bool) string {
 	return filepath.Join(c.storage.Dir(), blobsDir, n[:2], n)
 }
 
-func (c *Client) downloadWorker(ch <-chan downloadItem, out chan<- error) {
+func (c *Client) downloadWorker(ch <-chan ListItem, out chan<- error) {
 	for i := range ch {
-		out <- c.downloadFile(i.url, i.path)
+		out <- c.downloadFile(i)
 	}
 }
 
-func (c *Client) downloadFile(url, path string) error {
-	resp, err := http.Get(url)
+func (c *Client) downloadFile(li ListItem) error {
+	r, err := c.download(li.File, li.Set, "0")
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("status code %d", resp.StatusCode)
-	}
-	dir, _ := filepath.Split(path)
+	defer r.Close()
+	fn := c.blobPath(li.File, false)
+	dir, _ := filepath.Split(fn)
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return err
 	}
-	tmp := fmt.Sprintf("%s-tmp-%d", path, time.Now().UnixNano())
+	tmp := fmt.Sprintf("%s-tmp-%d", fn, time.Now().UnixNano())
 	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL|os.O_SYNC, 0600)
 	if err != nil {
 		return err
 	}
-	if _, err := io.Copy(f, resp.Body); err != nil {
+	if _, err := io.Copy(f, r); err != nil {
 		f.Close()
 		return err
 	}
 	if err := f.Close(); err != nil {
 		return err
 	}
-	return os.Rename(tmp, path)
+	return os.Rename(tmp, fn)
 }
