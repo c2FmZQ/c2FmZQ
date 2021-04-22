@@ -94,3 +94,18 @@ func (c *Client) Login(email, password string) error {
 	fmt.Println("Logged in successfully.")
 	return c.GetUpdates()
 }
+
+func (c *Client) Logout() error {
+	form := url.Values{}
+	form.Set("token", c.Token)
+	sr, err := c.sendRequest("/v2/login/logout", form)
+	if err != nil {
+		return err
+	}
+	if sr.Status != "ok" {
+		return sr
+	}
+	c.Token = ""
+	fmt.Println("Logged out successfully.")
+	return nil
+}

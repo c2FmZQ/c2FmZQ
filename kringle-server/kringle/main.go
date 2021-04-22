@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/urfave/cli/v2" // cli
@@ -75,6 +76,12 @@ func main() {
 				Action:    login,
 			},
 			&cli.Command{
+				Name:      "logout",
+				Usage:     "Logout.",
+				ArgsUsage: " ",
+				Action:    logout,
+			},
+			&cli.Command{
 				Name:      "updates",
 				Aliases:   []string{"up", "update"},
 				Usage:     "Pull metadata updates.",
@@ -85,24 +92,43 @@ func main() {
 				Name:      "sync",
 				Aliases:   []string{"pull", "download"},
 				Usage:     "Download all the files that aren't already downloaded.",
-				ArgsUsage: `["glob"]  (default "*/*")`,
+				ArgsUsage: `["glob"] ... (default "*/*")`,
 				Action:    syncFiles,
 			},
 			&cli.Command{
 				Name:      "free",
 				Usage:     "Remove all the files that are backed up.",
-				ArgsUsage: `["glob"]  (default "*/*")`,
+				ArgsUsage: `["glob"] ... (default "*/*")`,
 				Action:    freeFiles,
+			},
+			&cli.Command{
+				Name:      "hide",
+				Usage:     "Hide albums.",
+				ArgsUsage: `["glob"] ...`,
+				Action:    hideAlbums,
+			},
+			&cli.Command{
+				Name:      "unhide",
+				Usage:     "Unhide albums.",
+				ArgsUsage: "[name] ...",
+				Action:    unhideAlbums,
 			},
 			&cli.Command{
 				Name:      "list",
 				Aliases:   []string{"ls"},
 				Usage:     "List the files in a file set.",
-				ArgsUsage: `["glob"]  (default "*")`,
+				ArgsUsage: `["glob"] ... (default "*")`,
 				Action:    listFiles,
+			},
+			&cli.Command{
+				Name:      "export",
+				Usage:     "Decrypt and export files.",
+				ArgsUsage: `"<glob>" ... <output directory>`,
+				Action:    exportFiles,
 			},
 		},
 	}
+	sort.Sort(cli.CommandsByName(app.Commands))
 
 	if err := app.Run(os.Args); err != nil {
 		log.Fatal(err)
@@ -196,6 +222,14 @@ func login(ctx *cli.Context) error {
 	return c.Login(email, string(password))
 }
 
+func logout(ctx *cli.Context) error {
+	c, err := initClient(ctx)
+	if err != nil {
+		return err
+	}
+	return c.Logout()
+}
+
 func updates(ctx *cli.Context) error {
 	c, err := initClient(ctx)
 	if err != nil {
@@ -210,14 +244,14 @@ func syncFiles(ctx *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	pattern := "*/*"
+	patterns := []string{"*/*"}
 	if ctx.Args().Len() > 0 {
-		pattern = ctx.Args().Get(0)
+		patterns = ctx.Args().Slice()
 	}
 	if err := c.GetUpdates(); err != nil {
 		return err
 	}
-	return c.Sync(pattern)
+	return c.Sync(patterns)
 }
 
 func freeFiles(ctx *cli.Context) error {
@@ -225,14 +259,38 @@ func freeFiles(ctx *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	pattern := "*/*"
+	patterns := []string{"*/*"}
 	if ctx.Args().Len() > 0 {
-		pattern = ctx.Args().Get(0)
+		patterns = ctx.Args().Slice()
 	}
 	if err := c.GetUpdates(); err != nil {
 		return err
 	}
-	return c.Free(pattern)
+	return c.Free(patterns)
+}
+
+func hideAlbums(ctx *cli.Context) error {
+	c, err := initClient(ctx)
+	if err != nil {
+		return err
+	}
+	patterns := []string{"*"}
+	if ctx.Args().Len() > 0 {
+		patterns = ctx.Args().Slice()
+	}
+	return c.Hide(patterns, true)
+}
+
+func unhideAlbums(ctx *cli.Context) error {
+	c, err := initClient(ctx)
+	if err != nil {
+		return err
+	}
+	patterns := []string{"*"}
+	if ctx.Args().Len() > 0 {
+		patterns = ctx.Args().Slice()
+	}
+	return c.Hide(patterns, false)
 }
 
 func listFiles(ctx *cli.Context) error {
@@ -240,9 +298,23 @@ func listFiles(ctx *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	pattern := "*"
+	patterns := []string{"*"}
 	if ctx.Args().Len() > 0 {
-		pattern = ctx.Args().Get(0)
+		patterns = ctx.Args().Slice()
 	}
-	return c.ListFiles(pattern)
+	return c.ListFiles(patterns)
+}
+
+func exportFiles(ctx *cli.Context) error {
+	c, err := initClient(ctx)
+	if err != nil {
+		return err
+	}
+	args := ctx.Args().Slice()
+	if len(args) < 2 {
+		return errors.New("missing argument")
+	}
+	patterns := args[:len(args)-1]
+	dir := args[len(args)-1]
+	return c.ExportFiles(patterns, dir)
 }

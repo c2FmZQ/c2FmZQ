@@ -22,7 +22,7 @@ func TestUploadDownload(t *testing.T) {
 	}
 
 	// Upload to gallery.
-	sr, err := c.uploadFile("filename1", database.GallerySet, "", 1000)
+	sr, err := c.uploadFile("filename1", stingle.GallerySet, "", 1000)
 	if err != nil {
 		t.Errorf("c.uploadFile failed: %v", err)
 	}
@@ -31,7 +31,7 @@ func TestUploadDownload(t *testing.T) {
 	}
 
 	// Upload album.
-	if sr, err = c.uploadFile("filename2", database.AlbumSet, "album1", 1000); err != nil {
+	if sr, err = c.uploadFile("filename2", stingle.AlbumSet, "album1", 1000); err != nil {
 		t.Errorf("c.uploadFile failed: %v", err)
 	}
 	if want, got := "ok", sr.Status; want != got {
@@ -39,7 +39,7 @@ func TestUploadDownload(t *testing.T) {
 	}
 
 	// Upload to a non-existent album should fail.
-	if sr, err = c.uploadFile("filename3", database.AlbumSet, "DoesNotExist", 1000); err != nil {
+	if sr, err = c.uploadFile("filename3", stingle.AlbumSet, "DoesNotExist", 1000); err != nil {
 		t.Errorf("c.uploadFile failed: %v", err)
 	}
 	if want, got := "nok", sr.Status; want != got {
@@ -48,10 +48,10 @@ func TestUploadDownload(t *testing.T) {
 
 	// Download with /v2/sync/download
 	for _, f := range []struct{ filename, set, thumb, body string }{
-		{"filename1", database.GallerySet, "0", `Content of "file" filename "filename1"`},
-		{"filename1", database.GallerySet, "1", `Content of "thumb" filename "filename1"`},
-		{"filename2", database.AlbumSet, "0", `Content of "file" filename "filename2"`},
-		{"filename2", database.AlbumSet, "1", `Content of "thumb" filename "filename2"`},
+		{"filename1", stingle.GallerySet, "0", `Content of "file" filename "filename1"`},
+		{"filename1", stingle.GallerySet, "1", `Content of "thumb" filename "filename1"`},
+		{"filename2", stingle.AlbumSet, "0", `Content of "file" filename "filename2"`},
+		{"filename2", stingle.AlbumSet, "1", `Content of "thumb" filename "filename2"`},
 	} {
 		body, err := c.downloadPost(f.filename, f.set, f.thumb)
 		if err != nil {
@@ -64,8 +64,8 @@ func TestUploadDownload(t *testing.T) {
 
 	// Download with /v2/sync/getUrl
 	for _, f := range []struct{ filename, set, body string }{
-		{"filename1", database.GallerySet, `Content of "file" filename "filename1"`},
-		{"filename2", database.AlbumSet, `Content of "file" filename "filename2"`},
+		{"filename1", stingle.GallerySet, `Content of "file" filename "filename1"`},
+		{"filename2", stingle.AlbumSet, `Content of "file" filename "filename2"`},
 	} {
 		url, err := c.getURL(f.filename, f.set)
 		if err != nil {
@@ -82,7 +82,7 @@ func TestUploadDownload(t *testing.T) {
 
 	// Download with /v2/sync/getDownloadUrls
 	files := []string{"filename1", "filename2"}
-	sets := []string{database.GallerySet, database.AlbumSet}
+	sets := []string{stingle.GallerySet, stingle.AlbumSet}
 	urls, err := c.getDownloadURLs(files, sets, false)
 	if err != nil {
 		t.Errorf("c.getDownloadURLs(%v, %v, false) failed: %v", files, sets, err)
@@ -129,7 +129,7 @@ func TestEmptyTrash(t *testing.T) {
 	// Upload to trash.
 	for i := 0; i < 10; i++ {
 		f := fmt.Sprintf("filename%d", i)
-		sr, err := c.uploadFile(f, database.TrashSet, "", 1000)
+		sr, err := c.uploadFile(f, stingle.TrashSet, "", 1000)
 		if err != nil {
 			t.Errorf("c.uploadFile(%q) failed: %v", f, err)
 		}
@@ -146,9 +146,9 @@ func TestEmptyTrash(t *testing.T) {
 	// Attempts to download the deleted files should fail.
 	for i := 0; i < 10; i++ {
 		f := fmt.Sprintf("filename%d", i)
-		url, err := c.getURL(f, database.TrashSet)
+		url, err := c.getURL(f, stingle.TrashSet)
 		if err != nil {
-			t.Errorf("c.getURL(%q, %q) failed: %v", f, database.TrashSet, err)
+			t.Errorf("c.getURL(%q, %q) failed: %v", f, stingle.TrashSet, err)
 		}
 		if _, err := c.downloadGet(url); err == nil {
 			t.Errorf("c.downloadGet(%q) should have failed, but didn't", url)
@@ -168,7 +168,7 @@ func TestDelete(t *testing.T) {
 	// Upload to trash.
 	for i := 0; i < 10; i++ {
 		f := fmt.Sprintf("filename%d", i)
-		sr, err := c.uploadFile(f, database.TrashSet, "", 1000)
+		sr, err := c.uploadFile(f, stingle.TrashSet, "", 1000)
 		if err != nil {
 			t.Errorf("c.uploadFile(%q) failed: %v", f, err)
 		}
@@ -186,9 +186,9 @@ func TestDelete(t *testing.T) {
 	// Attempts to download the deleted files should fail.
 	for i := 0; i < 10; i++ {
 		f := fmt.Sprintf("filename%d", i)
-		url, err := c.getURL(f, database.TrashSet)
+		url, err := c.getURL(f, stingle.TrashSet)
 		if err != nil {
-			t.Errorf("c.getURL(%q, %q) failed: %v", f, database.TrashSet, err)
+			t.Errorf("c.getURL(%q, %q) failed: %v", f, stingle.TrashSet, err)
 		}
 		if i < 2 {
 			// These are deleted.
@@ -226,7 +226,7 @@ func TestMoveFile(t *testing.T) {
 	// Upload to gallery.
 	for i := 0; i < 10; i++ {
 		f := fmt.Sprintf("filename%d", i)
-		sr, err := c.uploadFile(f, database.GallerySet, "", 1000)
+		sr, err := c.uploadFile(f, stingle.GallerySet, "", 1000)
 		if err != nil {
 			t.Errorf("c.uploadFile(%q) failed: %v", f, err)
 		}
@@ -239,8 +239,8 @@ func TestMoveFile(t *testing.T) {
 
 	// Move 2 files to trash.
 	if err := c.moveFiles(database.MoveFileParams{
-		SetFrom:   database.GallerySet,
-		SetTo:     database.TrashSet,
+		SetFrom:   stingle.GallerySet,
+		SetTo:     stingle.TrashSet,
 		Filenames: []string{"filename0", "filename1"},
 		IsMoving:  true,
 	}); err != nil {
@@ -251,8 +251,8 @@ func TestMoveFile(t *testing.T) {
 
 	// Move 2 files to album1.
 	if err := c.moveFiles(database.MoveFileParams{
-		SetFrom:   database.GallerySet,
-		SetTo:     database.AlbumSet,
+		SetFrom:   stingle.GallerySet,
+		SetTo:     stingle.AlbumSet,
 		AlbumIDTo: "album1",
 		Filenames: []string{"filename2", "filename3"},
 		Headers:   []string{"filename2 headers album1", "filename3 headers album1"},
@@ -265,8 +265,8 @@ func TestMoveFile(t *testing.T) {
 
 	// Copy 2 files to album2.
 	if err := c.moveFiles(database.MoveFileParams{
-		SetFrom:   database.GallerySet,
-		SetTo:     database.AlbumSet,
+		SetFrom:   stingle.GallerySet,
+		SetTo:     stingle.AlbumSet,
 		AlbumIDTo: "album2",
 		Filenames: []string{"filename4", "filename5"},
 		Headers:   []string{"filename4 headers album2", "filename5 headers album2"},

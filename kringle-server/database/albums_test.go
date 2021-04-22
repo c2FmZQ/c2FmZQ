@@ -54,15 +54,15 @@ func TestAlbums(t *testing.T) {
 	// Add 10 files in Gallery.
 	for i := 0; i < 10; i++ {
 		f := fmt.Sprintf("file%d", i)
-		if err := addFile(db, user, f, database.GallerySet, ""); err != nil {
-			t.Errorf("addFile(%q, %q, %q) failed: %v", f, database.GallerySet, "", err)
+		if err := addFile(db, user, f, stingle.GallerySet, ""); err != nil {
+			t.Errorf("addFile(%q, %q, %q) failed: %v", f, stingle.GallerySet, "", err)
 		}
 	}
 
 	// Move 4 files from Gallery to Trash.
 	mvp := database.MoveFileParams{
-		SetFrom:   database.GallerySet,
-		SetTo:     database.AlbumSet,
+		SetFrom:   stingle.GallerySet,
+		SetTo:     stingle.AlbumSet,
 		AlbumIDTo: "my-album",
 		IsMoving:  true,
 		Filenames: []string{"file1", "file2", "file3", "file4"},
@@ -73,11 +73,11 @@ func TestAlbums(t *testing.T) {
 	}
 
 	// Check the new number of files in Gallery and Album.
-	gallerySize := numFilesInSet(t, db, user, database.GallerySet, "")
+	gallerySize := numFilesInSet(t, db, user, stingle.GallerySet, "")
 	if want, got := 6, gallerySize; want != got {
 		t.Errorf("Unexpected number of files in Gallery: Want %d, got %d", want, got)
 	}
-	albumSize := numFilesInSet(t, db, user, database.AlbumSet, "my-album")
+	albumSize := numFilesInSet(t, db, user, stingle.AlbumSet, "my-album")
 	if want, got := 4, albumSize; want != got {
 		t.Errorf("Unexpected number of files in Album: Want %d, got %d", want, got)
 	}
@@ -103,9 +103,9 @@ func TestAlbums(t *testing.T) {
 	if err := db.ShareAlbum(user, &stingleAlbum, sharingKeys); err != nil {
 		t.Errorf("db.ShareAlbum(%q, %v) failed: %v", user.Email, stingleAlbum, err)
 	}
-	fs, err := db.FileSet(bobUser, database.AlbumSet, "my-album")
+	fs, err := db.FileSet(bobUser, stingle.AlbumSet, "my-album")
 	if err != nil {
-		t.Fatalf("d.FileSet(%q, %q, %q) failed: %v", bobUser.Email, database.AlbumSet, "my-album", err)
+		t.Fatalf("d.FileSet(%q, %q, %q) failed: %v", bobUser.Email, stingle.AlbumSet, "my-album", err)
 	}
 
 	expAlbumSpec := database.AlbumSpec{

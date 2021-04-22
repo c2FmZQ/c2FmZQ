@@ -238,7 +238,8 @@ func (s *Server) auth(f func(database.User, *http.Request) *stingle.Response) ht
 		_, user, err := s.checkToken(req.PostFormValue("token"), "session")
 		if err != nil {
 			log.Errorf("%s %s (INVALID TOKEN: %v)", req.Method, req.URL, err)
-			if err := stingle.ResponseOK().AddPart("logout", "1").Send(w); err != nil {
+			sr := stingle.ResponseNOK().AddPart("logout", "1").AddError("You are not logged in")
+			if err := sr.Send(w); err != nil {
 				log.Errorf("Send: %v", err)
 			}
 			return

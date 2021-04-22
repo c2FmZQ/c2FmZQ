@@ -49,6 +49,10 @@ type AlbumSpec struct {
 	PublicKey string `json:"publicKey"`
 	// Whether the album is shared.
 	IsShared bool `json:"isShared"`
+	// Whether the album is hidden.
+	IsHidden bool `json:"isHidden"`
+	// Whether the album is locked.
+	IsLocked bool `json:"isLocked"`
 	// The album's permissions settings.
 	Permissions stingle.Permissions `json:"permissions"`
 	// The file to use as album cover.
@@ -215,7 +219,7 @@ func convertAlbumSpecToStingleAlbum(album *AlbumSpec) stingle.Album {
 		Metadata:      album.Metadata,
 		PublicKey:     album.PublicKey,
 		IsShared:      boolToNumber(album.IsShared),
-		IsHidden:      "0",
+		IsHidden:      boolToNumber(album.IsHidden),
 		IsOwner:       "1",
 		Permissions:   string(album.Permissions),
 		IsLocked:      "0",
@@ -282,6 +286,8 @@ func (d *Database) ShareAlbum(user User, sharing *stingle.Album, sharingKeys map
 	}
 	if fs.Album.OwnerID == user.UserID {
 		fs.Album.IsShared = true
+		fs.Album.IsHidden = sharing.IsHidden == "1"
+		fs.Album.IsLocked = sharing.IsLocked == "1"
 		fs.Album.Permissions = stingle.Permissions(sharing.Permissions)
 	}
 	for _, m := range strings.Split(sharing.Members, ",") {
@@ -408,7 +414,7 @@ func (d *Database) removeAlbumRef(memberID int64, albumID string) (retErr error)
 }
 
 // UpdatePerms updates the permissions on an album.
-func (d *Database) UpdatePerms(owner User, albumID string, permissions stingle.Permissions) (retErr error) {
+func (d *Database) UpdatePerms(owner User, albumID string, permissions stingle.Permissions, isHidden, isLocked bool) (retErr error) {
 	defer recordLatency("UpdatePerms")()
 
 	commit, fs, err := d.fileSetForUpdate(owner, stingle.AlbumSet, albumID)
@@ -417,6 +423,8 @@ func (d *Database) UpdatePerms(owner User, albumID string, permissions stingle.P
 	}
 	defer commit(true, &retErr)
 	fs.Album.Permissions = permissions
+	fs.Album.IsHidden = isHidden
+	fs.Album.IsLocked = isLocked
 	fs.Album.DateModified = nowInMS()
 	return nil
 }

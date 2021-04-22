@@ -281,7 +281,7 @@ func (s *Server) handleEditPerms(user database.User, req *http.Request) *stingle
 		return stingle.ResponseNOK().AddError("You are not the owner of the album")
 	}
 
-	if err := s.db.UpdatePerms(user, album.AlbumID, stingle.Permissions(album.Permissions)); err != nil {
+	if err := s.db.UpdatePerms(user, album.AlbumID, stingle.Permissions(album.Permissions), album.IsHidden == "1", album.IsLocked == "1"); err != nil {
 		log.Errorf("UpdatePerms(%q, %q): %v", album.AlbumID, album.Permissions, err)
 		return stingle.ResponseNOK()
 	}

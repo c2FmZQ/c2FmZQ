@@ -15,19 +15,19 @@ import (
 // AlbumList represents a list of albums.
 type AlbumList struct {
 	UpdateTimestamps
-	Albums map[string]stingle.Album `json:"albums"`
+	Albums map[string]*stingle.Album `json:"albums"`
 }
 
 // FileSet represents a file set.
 type FileSet struct {
 	UpdateTimestamps
-	Files map[string]stingle.File `json:"files"`
+	Files map[string]*stingle.File `json:"files"`
 }
 
 // ContactList represents a list of contacts.
 type ContactList struct {
 	UpdateTimestamps
-	Contacts map[int64]stingle.Contact `json:"contacts"`
+	Contacts map[int64]*stingle.Contact `json:"contacts"`
 }
 
 // UpdateTimestamps represents update/delete timestamps.
@@ -63,7 +63,7 @@ func (c *Client) fileSetsForUpdate(names []string) (func(bool, *error) error, []
 	}
 	for _, fs := range fileSets {
 		if fs.Files == nil {
-			fs.Files = make(map[string]stingle.File)
+			fs.Files = make(map[string]*stingle.File)
 		}
 	}
 	return commit, fileSets, nil
@@ -88,13 +88,14 @@ func (c *Client) processAlbumUpdates(updates []stingle.Album) (retErr error) {
 	}
 	defer commit(true, &retErr)
 	if al.Albums == nil {
-		al.Albums = make(map[string]stingle.Album)
+		al.Albums = make(map[string]*stingle.Album)
 	}
 	for _, up := range updates {
 		if _, exists := al.Albums[up.AlbumID]; !exists {
 			c.storage.CreateEmptyFile(c.fileHash(albumPrefix+up.AlbumID), &FileSet{})
 		}
-		al.Albums[up.AlbumID] = up
+		na := up
+		al.Albums[up.AlbumID] = &na
 		d, _ := up.DateModified.Int64()
 		if d > al.LastUpdateTime {
 			al.LastUpdateTime = d
@@ -115,11 +116,12 @@ func (c *Client) processContactUpdates(updates []stingle.Contact) (retErr error)
 	}
 	defer commit(true, &retErr)
 	if cl.Contacts == nil {
-		cl.Contacts = make(map[int64]stingle.Contact)
+		cl.Contacts = make(map[int64]*stingle.Contact)
 	}
 	for _, up := range updates {
 		id, _ := up.UserID.Int64()
-		cl.Contacts[id] = up
+		nc := up
+		cl.Contacts[id] = &nc
 		d, _ := up.DateModified.Int64()
 		if d > cl.LastUpdateTime {
 			cl.LastUpdateTime = d
@@ -139,7 +141,8 @@ func (c *Client) processFileUpdates(name string, updates []stingle.File) (retErr
 	}
 	defer commit(true, &retErr)
 	for _, up := range updates {
-		fs.Files[up.File] = up
+		nf := up
+		fs.Files[up.File] = &nf
 		d, _ := up.DateModified.Int64()
 		if d > fs.LastUpdateTime {
 			fs.LastUpdateTime = d

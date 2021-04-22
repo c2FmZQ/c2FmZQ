@@ -59,18 +59,18 @@ func TestFiles(t *testing.T) {
 	// Add 10 files in Gallery.
 	for i := 0; i < 10; i++ {
 		f := fmt.Sprintf("file%d", i)
-		if err := addFile(db, user, f, database.GallerySet, ""); err != nil {
-			t.Errorf("addFile(%q, %q, %q) failed: %v", f, database.GallerySet, "", err)
+		if err := addFile(db, user, f, stingle.GallerySet, ""); err != nil {
+			t.Errorf("addFile(%q, %q, %q) failed: %v", f, stingle.GallerySet, "", err)
 		}
 	}
 	// Adding a file to a non-existent album should fail.
-	if err := addFile(db, user, "fileX", database.AlbumSet, "NonExistenAlbum"); !errors.Is(err, os.ErrNotExist) {
+	if err := addFile(db, user, "fileX", stingle.AlbumSet, "NonExistenAlbum"); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("addFile(fileX, AlbumSet, 'NonExistenAlbum') returned unexpected error: want %v, got %v", os.ErrNotExist, err)
 	}
 
-	f, err := db.DownloadFile(user, database.GallerySet, "file1", false)
+	f, err := db.DownloadFile(user, stingle.GallerySet, "file1", false)
 	if err != nil {
-		t.Fatalf("db.DownloadFile(%q, %q, %q) failed: %v", user.Email, database.GallerySet, "file1", false)
+		t.Fatalf("db.DownloadFile(%q, %q, %q) failed: %v", user.Email, stingle.GallerySet, "file1", false)
 	}
 	slurp, err := io.ReadAll(f)
 	if err != nil {
@@ -82,19 +82,19 @@ func TestFiles(t *testing.T) {
 	}
 
 	// Check the number of files in Gallery and Trash.
-	gallerySize := numFilesInSet(t, db, user, database.GallerySet, "")
+	gallerySize := numFilesInSet(t, db, user, stingle.GallerySet, "")
 	if want, got := 10, gallerySize; want != got {
 		t.Errorf("Unexpected number of files in Gallery: Want %d, got %d", want, got)
 	}
-	trashSize := numFilesInSet(t, db, user, database.TrashSet, "")
+	trashSize := numFilesInSet(t, db, user, stingle.TrashSet, "")
 	if want, got := 0, trashSize; want != got {
 		t.Errorf("Unexpected number of files in Trash: Want %d, got %d", want, got)
 	}
 
 	// Move 4 files from Gallery to Trash.
 	mvp := database.MoveFileParams{
-		SetFrom:   database.GallerySet,
-		SetTo:     database.TrashSet,
+		SetFrom:   stingle.GallerySet,
+		SetTo:     stingle.TrashSet,
 		IsMoving:  true,
 		Filenames: []string{"file1", "file2", "file3", "file4"},
 	}
@@ -103,11 +103,11 @@ func TestFiles(t *testing.T) {
 	}
 
 	// Check the new number of files in Gallery and Trash.
-	gallerySize = numFilesInSet(t, db, user, database.GallerySet, "")
+	gallerySize = numFilesInSet(t, db, user, stingle.GallerySet, "")
 	if want, got := 6, gallerySize; want != got {
 		t.Errorf("Unexpected number of files in Gallery: Want %d, got %d", want, got)
 	}
-	trashSize = numFilesInSet(t, db, user, database.TrashSet, "")
+	trashSize = numFilesInSet(t, db, user, stingle.TrashSet, "")
 	if want, got := 4, trashSize; want != got {
 		t.Errorf("Unexpected number of files in Trash: Want %d, got %d", want, got)
 	}
@@ -119,11 +119,11 @@ func TestFiles(t *testing.T) {
 	}
 
 	// Check the new number of files in Gallery and Trash.
-	gallerySize = numFilesInSet(t, db, user, database.GallerySet, "")
+	gallerySize = numFilesInSet(t, db, user, stingle.GallerySet, "")
 	if want, got := 6, gallerySize; want != got {
 		t.Errorf("Unexpected number of files in Gallery: Want %d, got %d", want, got)
 	}
-	trashSize = numFilesInSet(t, db, user, database.TrashSet, "")
+	trashSize = numFilesInSet(t, db, user, stingle.TrashSet, "")
 	if want, got := 2, trashSize; want != got {
 		t.Errorf("Unexpected number of files in Trash: Want %d, got %d", want, got)
 	}
@@ -135,11 +135,11 @@ func TestFiles(t *testing.T) {
 	}
 
 	// Check the new number of files in Gallery and Trash.
-	gallerySize = numFilesInSet(t, db, user, database.GallerySet, "")
+	gallerySize = numFilesInSet(t, db, user, stingle.GallerySet, "")
 	if want, got := 6, gallerySize; want != got {
 		t.Errorf("Unexpected number of files in Gallery: Want %d, got %d", want, got)
 	}
-	trashSize = numFilesInSet(t, db, user, database.TrashSet, "")
+	trashSize = numFilesInSet(t, db, user, stingle.TrashSet, "")
 	if want, got := 0, trashSize; want != got {
 		t.Errorf("Unexpected number of files in Trash: Want %d, got %d", want, got)
 	}

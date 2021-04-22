@@ -251,7 +251,7 @@ func TestAlbumEdits(t *testing.T) {
 		t.Errorf("alice.renameAlbum failed: %v", err)
 	}
 	database.CurrentTimeForTesting = 4000
-	if err := alice.editPerms(stingle.Album{AlbumID: "album", Permissions: "1101"}); err != nil {
+	if err := alice.editPerms(stingle.Album{AlbumID: "album", Permissions: "1101", IsHidden: "1"}); err != nil {
 		t.Errorf("alice.editPerms failed: %v", err)
 	}
 
@@ -266,7 +266,7 @@ func TestAlbumEdits(t *testing.T) {
 			"dateCreated":   "1000",
 			"dateModified":  "4000",
 			"encPrivateKey": "album encPrivateKey",
-			"isHidden":      "0",
+			"isHidden":      "1",
 			"isLocked":      "0",
 			"isOwner":       "1",
 			"isShared":      "1",
@@ -303,7 +303,7 @@ func TestAlbumEdits(t *testing.T) {
 			"dateCreated":   "1000",
 			"dateModified":  "5000",
 			"encPrivateKey": "album encPrivateKey",
-			"isHidden":      "0",
+			"isHidden":      "1",
 			"isLocked":      "0",
 			"isOwner":       "1",
 			"isShared":      "1",

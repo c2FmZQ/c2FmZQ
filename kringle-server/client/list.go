@@ -28,11 +28,25 @@ type ListItem struct {
 	DirSize     int
 	IsOwner     bool
 	IsShared    bool
+	IsHidden    bool
 	Members     string
 }
 
-// GlobFiles returns files that match the glob pattern.
-func (c *Client) GlobFiles(pattern string) ([]ListItem, error) {
+// GlobFiles returns files that match the glob patterns.
+func (c *Client) GlobFiles(patterns []string) ([]ListItem, error) {
+	var li []ListItem
+	for _, p := range patterns {
+		items, err := c.glob(p)
+		if err != nil {
+			return nil, err
+		}
+		li = append(li, items...)
+	}
+	return li, nil
+}
+
+// glob returns files that match the glob pattern.
+func (c *Client) glob(pattern string) ([]ListItem, error) {
 	if _, err := path.Match(pattern, ""); err != nil {
 		return nil, err
 	}
@@ -70,11 +84,13 @@ func (c *Client) GlobFiles(pattern string) ([]ListItem, error) {
 			return nil, err
 		}
 		a := album
-		dirs = append(dirs, dir{md.Name, albumPrefix + album.AlbumID, stingle.AlbumSet, ask, &a})
+		dirs = append(dirs, dir{md.Name, albumPrefix + album.AlbumID, stingle.AlbumSet, ask, a})
 	}
 	var out []ListItem
 	for _, d := range dirs {
-		if matched, _ := path.Match(pathElems[0], d.name); !matched {
+		if d.album != nil && d.album.IsHidden == "1" && pathElems[0] != d.name {
+			continue
+		} else if matched, _ := path.Match(pathElems[0], d.name); !matched {
 			continue
 		}
 		var fs FileSet
@@ -88,8 +104,10 @@ func (c *Client) GlobFiles(pattern string) ([]ListItem, error) {
 				DirSize:  len(fs.Files),
 			}
 			if d.album != nil {
+				li.AlbumID = d.album.AlbumID
 				li.IsOwner = d.album.IsOwner == "1"
 				li.IsShared = d.album.IsShared == "1"
+				li.IsHidden = d.album.IsHidden == "1"
 				li.Members = d.album.Members
 			}
 			out = append(out, li)
@@ -118,8 +136,8 @@ func (c *Client) GlobFiles(pattern string) ([]ListItem, error) {
 	return out, nil
 }
 
-func (c *Client) ListFiles(pattern string) error {
-	li, err := c.GlobFiles(pattern)
+func (c *Client) ListFiles(patterns []string) error {
+	li, err := c.GlobFiles(patterns)
 	if err != nil {
 		return err
 	}

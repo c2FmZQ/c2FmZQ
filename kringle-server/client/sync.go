@@ -11,8 +11,8 @@ import (
 
 // Sync downloads all the files matching pattern that are not already present
 // in the local storage.
-func (c *Client) Sync(pattern string) error {
-	list, err := c.GlobFiles(pattern)
+func (c *Client) Sync(patterns []string) error {
+	list, err := c.GlobFiles(patterns)
 	if err != nil {
 		return err
 	}
@@ -50,8 +50,8 @@ func (c *Client) Sync(pattern string) error {
 
 // Free deletes all the files matching pattern that are already present in the
 // remote storage.
-func (c *Client) Free(pattern string) error {
-	list, err := c.GlobFiles(pattern)
+func (c *Client) Free(patterns []string) error {
+	list, err := c.GlobFiles(patterns)
 	if err != nil {
 		return err
 	}
