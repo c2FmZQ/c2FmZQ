@@ -41,22 +41,29 @@ func EncryptBase64Headers(hdrs []Header, pk PublicKey) (string, error) {
 	return strings.Join(s, "*"), nil
 }
 
-// NewHeader returns a Header with FileID, SymmetricKey, and ChunkSize set.
-func NewHeader() Header {
-	h := Header{
-		FileID:       make([]byte, 32),
-		Version:      1,
-		SymmetricKey: make([]byte, 32),
-		ChunkSize:    1 << 20,
-		FileType:     FileTypeGeneral,
+// NewHeaders returns a pair of Headers with FileID, SymmetricKey, and ChunkSize
+// set.
+func NewHeaders(filename string) (hdrs [2]Header) {
+	for i := 0; i < 2; i++ {
+		hdrs[i].FileID = make([]byte, 32)
+		hdrs[i].Version = 1
+		hdrs[i].SymmetricKey = make([]byte, 32)
+		hdrs[i].ChunkSize = 1 << 20
+		hdrs[i].FileType = FileTypeGeneral
+		hdrs[i].Filename = make([]byte, len(filename))
+		copy(hdrs[i].Filename, []byte(filename))
 	}
-	if _, err := io.ReadFull(rand.Reader, h.FileID); err != nil {
+	if _, err := io.ReadFull(rand.Reader, hdrs[0].FileID); err != nil {
 		panic(err)
 	}
-	if _, err := io.ReadFull(rand.Reader, h.SymmetricKey); err != nil {
+	if _, err := io.ReadFull(rand.Reader, hdrs[0].SymmetricKey); err != nil {
 		panic(err)
 	}
-	return h
+	copy(hdrs[1].FileID, hdrs[0].FileID)
+	if _, err := io.ReadFull(rand.Reader, hdrs[1].SymmetricKey); err != nil {
+		panic(err)
+	}
+	return
 }
 
 // DecryptHeader decrypts a file header from the reader.

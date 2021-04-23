@@ -62,43 +62,41 @@ func (c *Client) importFile(file string, dst ListItem, pk stingle.PublicKey) err
 	if err != nil {
 		return err
 	}
-
-	hdr1 := stingle.NewHeader()
 	_, fn := filepath.Split(file)
-	hdr1.Filename = []byte(fn)
-	hdr1.DataSize = fi.Size()
+	hdrs := stingle.NewHeaders(fn)
+	hdrs[0].DataSize = fi.Size()
 
 	creationTime := time.Now()
 	switch ext := strings.ToLower(filepath.Ext(file)); ext {
 	case ".jpg", ".jpeg", ".png", ".gif":
-		hdr1.FileType = stingle.FileTypePhoto
+		hdrs[0].FileType = stingle.FileTypePhoto
 	case ".mp4", ".mov":
-		hdr1.FileType = stingle.FileTypeVideo
+		hdrs[0].FileType = stingle.FileTypeVideo
 	default:
-		hdr1.FileType = stingle.FileTypeGeneral
+		hdrs[0].FileType = stingle.FileTypeGeneral
 	}
-	if hdr1.FileType == stingle.FileTypeVideo {
+	if hdrs[0].FileType == stingle.FileTypeVideo {
 		if dur, ct, err := videoMetadata(file); err == nil {
-			hdr1.VideoDuration = dur
+			hdrs[0].VideoDuration = dur
 			if !ct.IsZero() {
 				creationTime = ct
 			}
 		}
 	}
 	var thumbnail []byte
-	if hdr1.FileType == stingle.FileTypeVideo {
-		thumbnail, err = c.videoThumbnail(file, hdr1.VideoDuration)
+	if hdrs[0].FileType == stingle.FileTypeVideo {
+		thumbnail, err = c.videoThumbnail(file)
 	} else {
 		thumbnail, err = c.photoThumbnail(file)
 	}
 	if err != nil {
 		return err
 	}
-	hdr2 := stingle.NewHeader()
-	hdr2.DataSize = int64(len(thumbnail))
-	hdr2.FileType = stingle.FileTypePhoto
+	hdrs[1].DataSize = int64(len(thumbnail))
+	hdrs[1].FileType = hdrs[0].FileType
+	hdrs[1].VideoDuration = hdrs[0].VideoDuration
 
-	encHdrs, err := stingle.EncryptBase64Headers([]stingle.Header{hdr1, hdr2}, pk)
+	encHdrs, err := stingle.EncryptBase64Headers(hdrs[:], pk)
 	if err != nil {
 		return err
 	}
@@ -121,10 +119,10 @@ func (c *Client) importFile(file string, dst ListItem, pk stingle.PublicKey) err
 		return err
 	}
 	defer in.Close()
-	if err := c.encryptFile(in, sFile.File, hdr1, pk, false); err != nil {
+	if err := c.encryptFile(in, sFile.File, hdrs[0], pk, false); err != nil {
 		return err
 	}
-	if err := c.encryptFile(bytes.NewBuffer(thumbnail), sFile.File, hdr2, pk, true); err != nil {
+	if err := c.encryptFile(bytes.NewBuffer(thumbnail), sFile.File, hdrs[1], pk, true); err != nil {
 		return err
 	}
 	commit, fs, err := c.fileSetForUpdate(dst.FileSet)
@@ -183,15 +181,12 @@ func (c *Client) photoThumbnail(filename string) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func (c *Client) videoThumbnail(file string, dur int32) ([]byte, error) {
+func (c *Client) videoThumbnail(file string) ([]byte, error) {
 	bin, err := exec.LookPath("ffmpeg")
 	if err != nil {
 		return nil, err
 	}
-	font := "/usr/share/fonts/corefonts/verdanab.ttf"
-	vf := fmt.Sprintf(`scale=320:240,drawtext=fontfile=%s:text='|> %s':fontcolor=white:fontsize=24:box=1:boxcolor=black@0.3:boxborderw=10:x=(w-text_w)/2:y=(h-text_h)/2`,
-		font, time.Duration(dur)*time.Second)
-	cmd := exec.Command(bin, "-i", file, "-frames:v", "1", "-an", "-vf", vf, "-f", "apng", "pipe:1")
+	cmd := exec.Command(bin, "-i", file, "-frames:v", "1", "-an", "-vf", "scale=320:240", "-f", "apng", "pipe:1")
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	b, err := cmd.Output()
