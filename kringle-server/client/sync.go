@@ -51,11 +51,11 @@ func (c *Client) Pull(patterns []string) error {
 		}
 	}
 	if len(files) == 0 {
-		fmt.Println("No files to download.")
+		fmt.Fprintln(c.writer, "No files to download.")
 	} else if errors == nil {
-		fmt.Printf("Successfully downloaded %d file(s).\n", len(files))
+		fmt.Fprintf(c.writer, "Successfully downloaded %d file(s).\n", len(files))
 	} else {
-		fmt.Printf("Successfully downloaded %d file(s), %d failed.\n", len(files)-len(errors), len(errors))
+		fmt.Fprintf(c.writer, "Successfully downloaded %d file(s), %d failed.\n", len(files)-len(errors), len(errors))
 	}
 	if errors != nil {
 		return fmt.Errorf("%w %v", errors[0], errors[1:])
@@ -96,11 +96,11 @@ func (c *Client) Push(patterns []string) error {
 	}
 
 	if len(files) == 0 {
-		fmt.Println("No files to upload.")
+		fmt.Fprintln(c.writer, "No files to upload.")
 	} else if errors == nil {
-		fmt.Printf("Successfully uploaded %d file(s).\n", len(files))
+		fmt.Fprintf(c.writer, "Successfully uploaded %d file(s).\n", len(files))
 	} else {
-		fmt.Printf("Successfully uploaded %d file(s), %d failed.\n", len(files)-len(errors), len(errors))
+		fmt.Fprintf(c.writer, "Successfully uploaded %d file(s), %d failed.\n", len(files)-len(errors), len(errors))
 	}
 	if errors != nil {
 		return fmt.Errorf("%w %v", errors[0], errors[1:])
@@ -130,9 +130,9 @@ func (c *Client) Free(patterns []string) error {
 		count++
 	}
 	if count == 0 {
-		fmt.Println("There are no files to delete.")
+		fmt.Fprintln(c.writer, "There are no files to delete.")
 	} else {
-		fmt.Printf("Successfully freed %d file(s).\n", count)
+		fmt.Fprintf(c.writer, "Successfully freed %d file(s).\n", count)
 	}
 	return nil
 }

@@ -39,10 +39,10 @@ func (c *Client) Hide(names []string, hidden bool) (retErr error) {
 		count++
 	}
 	if hidden && count > 0 {
-		fmt.Printf("Successfully hidden %d album(s).\n", count)
+		fmt.Fprintf(c.writer, "Successfully hidden %d album(s).\n", count)
 	}
 	if !hidden && count > 0 {
-		fmt.Printf("Successfully unhidden %d album(s).\n", count)
+		fmt.Fprintf(c.writer, "Successfully unhidden %d album(s).\n", count)
 	}
 	return nil
 }

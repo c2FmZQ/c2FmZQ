@@ -7,6 +7,7 @@ require (
 	github.com/disintegration/imaging v1.6.2 // indirect
 	github.com/go-test/deep v1.0.7
 	github.com/jamesruan/sodium v0.0.0-20181216154042-9620b83ffeae
+	github.com/mattn/go-shellwords v1.0.11 // indirect
 	github.com/prometheus/client_golang v1.10.0
 	github.com/rwcarlsen/goexif v0.0.0-20190401172101-9e8deecbddbd // indirect
 	github.com/urfave/cli/v2 v2.3.0

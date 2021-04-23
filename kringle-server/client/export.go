@@ -37,9 +37,9 @@ func (c *Client) ExportFiles(patterns []string, dir string) error {
 		}
 	}
 	if errors != nil {
-		fmt.Printf("Files exported successfully: %d, %d with errors.\n", len(li)-len(errors), len(errors))
+		fmt.Fprintf(c.writer, "Files exported successfully: %d, %d with errors.\n", len(li)-len(errors), len(errors))
 	} else {
-		fmt.Printf("Files exported successfully: %d\n", len(li))
+		fmt.Fprintf(c.writer, "Files exported successfully: %d\n", len(li))
 	}
 	if errors != nil {
 		return fmt.Errorf("%w %v", errors[0], errors[1:])

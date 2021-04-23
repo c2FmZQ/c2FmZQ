@@ -36,11 +36,11 @@ func (s *Server) handleCreateAccount(req *http.Request) *stingle.Response {
 	}
 	email := req.PostFormValue("email")
 	if _, err := s.db.User(email); err == nil {
-		return stingle.ResponseNOK().AddError("User already exists")
+		return stingle.ResponseNOK()
 	}
 	pk, err := stingle.DecodeKeyBundle(req.PostFormValue("keyBundle"))
 	if err != nil {
-		return stingle.ResponseNOK().AddError("KeyBundle cannot be parsed")
+		return stingle.ResponseNOK()
 	}
 	hashed, err := bcrypt.GenerateFromPassword([]byte(req.PostFormValue("password")), 12)
 	if err != nil {
@@ -78,7 +78,7 @@ func (s *Server) handlePreLogin(req *http.Request) *stingle.Response {
 	email := req.PostFormValue("email")
 	u, err := s.db.User(email)
 	if err != nil {
-		return stingle.ResponseNOK().AddError("User doesn't exist")
+		return stingle.ResponseNOK()
 	}
 	return stingle.ResponseOK().AddPart("salt", u.Salt)
 }
@@ -110,7 +110,7 @@ func (s *Server) handleLogin(req *http.Request) *stingle.Response {
 	hashed, err := base64.StdEncoding.DecodeString(u.HashedPassword)
 	if err != nil {
 		log.Errorf("base64.StdEncoding.DecodeString: %v", err)
-		return stingle.ResponseNOK()
+		return stingle.ResponseNOK().AddError("Invalid credentials")
 	}
 	if err != nil || bcrypt.CompareHashAndPassword(hashed, []byte(pass)) != nil {
 		return stingle.ResponseNOK().AddError("Invalid credentials")
@@ -222,7 +222,7 @@ func (s *Server) handleCheckKey(req *http.Request) *stingle.Response {
 	email := req.PostFormValue("email")
 	u, err := s.db.User(email)
 	if err != nil {
-		return stingle.ResponseNOK().AddError("User doesn't exist")
+		return stingle.ResponseNOK()
 	}
 	rnd := make([]byte, 32)
 	if _, err := rand.Read(rnd); err != nil {
@@ -255,7 +255,7 @@ func (s *Server) handleRecoverAccount(req *http.Request) *stingle.Response {
 	email := req.PostFormValue("email")
 	user, err := s.db.User(email)
 	if err != nil {
-		return stingle.ResponseNOK().AddError("User doesn't exist")
+		return stingle.ResponseNOK()
 	}
 	params, err := s.decodeParams(req.PostFormValue("params"), user)
 	if err != nil {

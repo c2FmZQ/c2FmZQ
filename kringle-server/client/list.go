@@ -116,6 +116,9 @@ func (c *Client) glob(pattern string) ([]ListItem, error) {
 			out = append(out, li)
 			continue
 		}
+		if pathElems[1] == "" {
+			pathElems[1] = "*"
+		}
 		for _, f := range fs.Files {
 			hdrs, err := stingle.DecryptBase64Headers(f.Headers, d.sk)
 			if err != nil {
@@ -215,7 +218,7 @@ func (c *Client) ListFiles(patterns []string) error {
 	}
 	sort.Strings(out)
 	for _, l := range out {
-		fmt.Print(l)
+		fmt.Fprint(c.writer, l)
 	}
 	return nil
 }

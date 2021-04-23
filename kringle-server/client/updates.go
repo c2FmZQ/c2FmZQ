@@ -331,7 +331,7 @@ func max(values ...int64) (m int64) {
 	return
 }
 
-func (c *Client) GetUpdates() error {
+func (c *Client) GetUpdates(quiet bool) error {
 	galleryTS, err := c.getTimestamps(galleryFile)
 	if err != nil {
 		return err
@@ -418,6 +418,8 @@ func (c *Client) GetUpdates() error {
 		return err
 	}
 
-	fmt.Println("Metadata synced successfully.")
+	if !quiet {
+		fmt.Fprintln(c.writer, "Metadata synced successfully.")
+	}
 	return nil
 }

@@ -53,7 +53,7 @@ func (c *Client) ImportFiles(patterns []string, dir string) error {
 			return err
 		}
 	}
-	fmt.Printf("Successfully imported %d file(s)\n", len(files))
+	fmt.Fprintf(c.writer, "Successfully imported %d file(s)\n", len(files))
 	return nil
 }
 

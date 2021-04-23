@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 
 	"kringle-server/log"
 	"kringle-server/secure"
@@ -29,6 +30,7 @@ func Create(s *secure.Storage) (*Client, error) {
 	if err := s.CreateEmptyFile(s.HashString(configFile), &c); err != nil {
 		return nil, err
 	}
+	c.writer = os.Stdout
 	c.storage = s
 	return &c, nil
 }
@@ -39,6 +41,7 @@ func Load(s *secure.Storage) (*Client, error) {
 	if _, err := s.ReadDataFile(s.HashString(configFile), &c); err != nil {
 		return nil, err
 	}
+	c.writer = os.Stdout
 	c.storage = s
 	return &c, nil
 }
@@ -55,6 +58,11 @@ type Client struct {
 	HomeDir       string `json:"homeDir"`
 
 	storage *secure.Storage
+	writer  io.Writer
+}
+
+func (c *Client) SetWriter(w io.Writer) {
+	c.writer = w
 }
 
 func (c *Client) fileHash(fn string) string {

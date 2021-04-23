@@ -39,7 +39,7 @@ func (c *Client) CreateAccount(email, password string) error {
 	if err := c.storage.SaveDataFile(nil, c.storage.HashString(configFile), c); err != nil {
 		return err
 	}
-	fmt.Println("Account created successfully.")
+	fmt.Fprintln(c.writer, "Account created successfully.")
 	return nil
 }
 
@@ -91,8 +91,8 @@ func (c *Client) Login(email, password string) error {
 	c.storage.CreateEmptyFile(c.fileHash(trashFile), &FileSet{})
 	c.storage.CreateEmptyFile(c.fileHash(albumList), &AlbumList{})
 	c.storage.CreateEmptyFile(c.fileHash(contactsFile), &ContactList{})
-	fmt.Println("Logged in successfully.")
-	return c.GetUpdates()
+	fmt.Fprintln(c.writer, "Logged in successfully.")
+	return nil
 }
 
 func (c *Client) Logout() error {
@@ -106,6 +106,6 @@ func (c *Client) Logout() error {
 		return sr
 	}
 	c.Token = ""
-	fmt.Println("Logged out successfully.")
+	fmt.Fprintln(c.writer, "Logged out successfully.")
 	return nil
 }
