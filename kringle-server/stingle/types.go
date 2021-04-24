@@ -2,6 +2,7 @@
 package stingle
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -46,6 +47,27 @@ type Album struct {
 	Members       string            `json:"members"`
 	SyncLocal     json.Number       `json:"syncLocal,omitempty"`
 	SharingKeys   map[string]string `json:"sharingKeys,omitempty"`
+	LocalOnly     bool              `json:"localOnly,omitempty"`
+}
+
+// SK returns the album's decrypted SecretKey.
+func (a Album) SK(sk SecretKey) (ask SecretKey, err error) {
+	b, err := sk.SealBoxOpenBase64(a.EncPrivateKey)
+	if err != nil {
+		return
+	}
+	ask = SecretKeyFromBytes(b)
+	return
+}
+
+// PK returns the album's decoded PublicKey.
+func (a Album) PK() (pk PublicKey, err error) {
+	b, err := base64.StdEncoding.DecodeString(a.PublicKey)
+	if err != nil {
+		return
+	}
+	pk = PublicKeyFromBytes(b)
+	return
 }
 
 // Permissions that control what album members can do.

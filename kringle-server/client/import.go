@@ -25,6 +25,7 @@ import (
 
 // ImportFiles encrypts and imports files.
 func (c *Client) ImportFiles(patterns []string, dir string) error {
+	dir = strings.TrimSuffix(dir, "/")
 	li, err := c.glob(dir)
 	if err != nil {
 		return err
@@ -34,10 +35,20 @@ func (c *Client) ImportFiles(patterns []string, dir string) error {
 	}
 	dst := li[0]
 	pk := c.SecretKey.PublicKey()
-	if dst.AlbumID != "" {
-		if pk, err = c.albumPK(dst.AlbumID); err != nil {
+	if dst.Album != nil {
+		if pk, err = dst.Album.PK(); err != nil {
 			return err
 		}
+	}
+
+	existingItems, err := c.glob(dir + "/*")
+	if err != nil {
+		return err
+	}
+	exist := make(map[string]bool)
+	for _, item := range existingItems {
+		_, fn := filepath.Split(item.Filename)
+		exist[fn] = true
 	}
 
 	var files []string
@@ -49,11 +60,16 @@ func (c *Client) ImportFiles(patterns []string, dir string) error {
 		files = append(files, m...)
 	}
 	for _, file := range files {
+		_, fn := filepath.Split(file)
+		if exist[fn] {
+			fmt.Fprintf(c.writer, "Skipping %s (already exists in %s)\n", file, dir)
+			continue
+		}
+		fmt.Fprintf(c.writer, "Importing %s -> %s\n", file, dir)
 		if err := c.importFile(file, dst, pk); err != nil {
 			return err
 		}
 	}
-	fmt.Fprintf(c.writer, "Successfully imported %d file(s)\n", len(files))
 	return nil
 }
 
@@ -106,8 +122,10 @@ func (c *Client) importFile(file string, dst ListItem, pk stingle.PublicKey) err
 		DateCreated:  json.Number(strconv.FormatInt(creationTime.UnixNano()/1000000, 10)),
 		DateModified: json.Number(strconv.FormatInt(time.Now().UnixNano()/1000000, 10)),
 		Headers:      encHdrs,
-		AlbumID:      dst.AlbumID,
 		LocalOnly:    true,
+	}
+	if dst.Album != nil {
+		sFile.AlbumID = dst.Album.AlbumID
 	}
 	if x, err := c.importExif(file); err == nil {
 		if t, err := x.DateTime(); err == nil {
@@ -139,22 +157,6 @@ func makeSPFilename() string {
 		panic(err)
 	}
 	return base64.RawURLEncoding.EncodeToString(b) + ".sp"
-}
-
-func (c *Client) albumPK(albumID string) (pk stingle.PublicKey, err error) {
-	var al AlbumList
-	if _, err = c.storage.ReadDataFile(c.fileHash(albumList), &al); err != nil {
-		return pk, err
-	}
-	album, ok := al.Albums[albumID]
-	if !ok {
-		return pk, os.ErrNotExist
-	}
-	b, err := base64.StdEncoding.DecodeString(album.PublicKey)
-	if err != nil {
-		return pk, err
-	}
-	return stingle.PublicKeyFromBytes(b), nil
 }
 
 func (c *Client) importExif(file string) (x *exif.Exif, err error) {

@@ -79,7 +79,7 @@ func (s *Server) handleUpload(req *http.Request) *stingle.Response {
 //     - setTo: The set to which the files are moving (or being copied)
 //     - albumIdFrom: The ID of the album from which the files are moving, or ""
 //                    if moving from Trash or Gallery.
-//     - albumIdTo: The IS of the album to which the files are moving, or "" if
+//     - albumIdTo: The ID of the album to which the files are moving, or "" if
 //                  moving to Trash or Gallery.
 //     - isMoving: "0" if the files are being copied, "1" if they are moving.
 //     - count: The number of files being copied or moved.

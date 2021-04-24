@@ -1,6 +1,7 @@
 package stingle
 
 import (
+	"bytes"
 	"encoding/binary"
 	"errors"
 )
@@ -26,4 +27,13 @@ func DecryptAlbumMetadata(md string, sk SecretKey) (*AlbumMetadata, error) {
 	}
 	name := string(b[:l])
 	return &AlbumMetadata{Name: name}, nil
+}
+
+// EncryptAlbumMetadata encrypts an album's metadata.
+func EncryptAlbumMetadata(md AlbumMetadata, pk PublicKey) string {
+	var buf bytes.Buffer
+	buf.Write([]byte{1}) // version
+	binary.Write(&buf, binary.BigEndian, uint32(len(md.Name)))
+	buf.Write([]byte(md.Name))
+	return pk.SealBoxBase64(buf.Bytes())
 }

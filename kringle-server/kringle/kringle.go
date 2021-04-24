@@ -121,7 +121,7 @@ func makeKringle() *kringle {
 				Name:      "upload",
 				Aliases:   []string{"push", "sync"},
 				Usage:     "Upload files that haven't been uploaded yet.",
-				ArgsUsage: `["glob"] ... (default "*/*")`,
+				ArgsUsage: `["glob"] ... (default "*" "*/*")`,
 				Action:    app.pushFiles,
 				Category:  "Sync",
 			},
@@ -131,6 +131,14 @@ func makeKringle() *kringle {
 				ArgsUsage: `["glob"] ... (default "*/*")`,
 				Action:    app.freeFiles,
 				Category:  "Sync",
+			},
+			&cli.Command{
+				Name:      "create-album",
+				Aliases:   []string{"mkdir"},
+				Usage:     "Create new albums.",
+				ArgsUsage: `<name> ...`,
+				Action:    app.createAlbums,
+				Category:  "Albums",
 			},
 			&cli.Command{
 				Name:      "hide",
@@ -152,6 +160,14 @@ func makeKringle() *kringle {
 				Usage:     "List albums and files.",
 				ArgsUsage: `["glob"] ... (default "*")`,
 				Action:    app.listFiles,
+				Category:  "Files",
+			},
+			&cli.Command{
+				Name:      "move",
+				Aliases:   []string{"mv"},
+				Usage:     "Move files to a different album, or rename an album.",
+				ArgsUsage: `<"glob"> ... <dest>`,
+				Action:    app.moveFiles,
 				Category:  "Files",
 			},
 			&cli.Command{
@@ -402,7 +418,7 @@ func (k *kringle) pushFiles(ctx *cli.Context) error {
 	if err := k.initClient(ctx, true); err != nil {
 		return err
 	}
-	patterns := []string{"*/*"}
+	patterns := []string{"*", "*/*"}
 	if ctx.Args().Len() > 0 {
 		patterns = ctx.Args().Slice()
 	}
@@ -418,6 +434,17 @@ func (k *kringle) freeFiles(ctx *cli.Context) error {
 		patterns = ctx.Args().Slice()
 	}
 	return k.client.Free(patterns)
+}
+
+func (k *kringle) createAlbums(ctx *cli.Context) error {
+	if err := k.initClient(ctx, true); err != nil {
+		return err
+	}
+	names := ctx.Args().Slice()
+	if len(names) == 0 {
+		return nil
+	}
+	return k.client.AddAlbums(names)
 }
 
 func (k *kringle) hideAlbums(ctx *cli.Context) error {
@@ -451,6 +478,18 @@ func (k *kringle) listFiles(ctx *cli.Context) error {
 		patterns = ctx.Args().Slice()
 	}
 	return k.client.ListFiles(patterns)
+}
+
+func (k *kringle) moveFiles(ctx *cli.Context) error {
+	if err := k.initClient(ctx, true); err != nil {
+		return err
+	}
+	args := ctx.Args().Slice()
+	if len(args) < 2 {
+		cli.ShowSubcommandHelp(ctx)
+		return nil
+	}
+	return k.client.Move(args[:len(args)-1], args[len(args)-1])
 }
 
 func (k *kringle) exportFiles(ctx *cli.Context) error {

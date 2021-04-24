@@ -16,21 +16,17 @@ import (
 	"kringle-server/stingle"
 )
 
+// ListItem is the information returned by GlobFiles() for each item.
 type ListItem struct {
-	Filename    string
-	Header      stingle.Header
-	FilePath    string
-	FileSet     string
-	DateCreated time.Time
-	FSFile      stingle.File
-	Set         string
-	AlbumID     string
-	IsDir       bool
-	DirSize     int
-	IsOwner     bool
-	IsShared    bool
-	IsHidden    bool
-	Members     string
+	Filename string         // kringle representation, e.g. album/ or album/file.jpg
+	IsDir    bool           // Whether this is a directory, i.e. gallery, trash, or album.
+	Header   stingle.Header // The decrypted file header.
+	FilePath string         // Path where the file content is stored.
+	FileSet  string         // Path where the FileSet is stored.
+	FSFile   stingle.File   // The stingle.File object for this item.
+	DirSize  int            // The number of items in the directory.
+	Set      string         // The Set value, i.e. "0" for gallery, "1" for trash, "2" for albums.
+	Album    *stingle.Album // Pointer to stingle.Album if this is part of an album.
 }
 
 // GlobFiles returns files that match the glob patterns.
@@ -48,21 +44,16 @@ func (c *Client) GlobFiles(patterns []string) ([]ListItem, error) {
 
 // glob returns files that match the glob pattern.
 func (c *Client) glob(pattern string) ([]ListItem, error) {
+	// Sanity check the pattern.
 	if _, err := path.Match(pattern, ""); err != nil {
 		return nil, err
 	}
+	// The directory structure can only be 2 deep.
 	pathElems := strings.SplitN(pattern, "/", 2)
 	if len(pathElems) > 2 {
 		return nil, nil
 	}
-	if len(pathElems) == 0 || (len(pathElems) == 1 && pathElems[0] == "") {
-		pathElems = []string{"*"}
-	}
 
-	var al AlbumList
-	if _, err := c.storage.ReadDataFile(c.fileHash(albumList), &al); err != nil {
-		return nil, err
-	}
 	type dir struct {
 		name    string
 		fileSet string
@@ -74,19 +65,22 @@ func (c *Client) glob(pattern string) ([]ListItem, error) {
 		{"gallery", galleryFile, stingle.GallerySet, c.SecretKey, nil},
 		{"trash", trashFile, stingle.TrashSet, c.SecretKey, nil},
 	}
+	var al AlbumList
+	if _, err := c.storage.ReadDataFile(c.fileHash(albumList), &al); err != nil {
+		return nil, err
+	}
 	for _, album := range al.Albums {
-		askBytes, err := c.SecretKey.SealBoxOpenBase64(album.EncPrivateKey)
+		ask, err := album.SK(c.SecretKey)
 		if err != nil {
 			return nil, err
 		}
-		ask := stingle.SecretKeyFromBytes(askBytes)
 		md, err := stingle.DecryptAlbumMetadata(album.Metadata, ask)
 		if err != nil {
 			return nil, err
 		}
-		a := album
-		dirs = append(dirs, dir{md.Name, albumPrefix + album.AlbumID, stingle.AlbumSet, ask, a})
+		dirs = append(dirs, dir{md.Name, albumPrefix + album.AlbumID, stingle.AlbumSet, ask, album})
 	}
+
 	var out []ListItem
 	for _, d := range dirs {
 		if d.album != nil && d.album.IsHidden == "1" && pathElems[0] != d.name {
@@ -98,6 +92,7 @@ func (c *Client) glob(pattern string) ([]ListItem, error) {
 		if _, err := c.storage.ReadDataFile(c.fileHash(d.fileSet), &fs); err != nil {
 			return nil, err
 		}
+		// Only show directories.
 		if len(pathElems) == 1 {
 			li := ListItem{
 				Filename: d.name + "/",
@@ -105,20 +100,12 @@ func (c *Client) glob(pattern string) ([]ListItem, error) {
 				IsDir:    true,
 				DirSize:  len(fs.Files),
 				Set:      d.set,
-			}
-			if d.album != nil {
-				li.AlbumID = d.album.AlbumID
-				li.IsOwner = d.album.IsOwner == "1"
-				li.IsShared = d.album.IsShared == "1"
-				li.IsHidden = d.album.IsHidden == "1"
-				li.Members = d.album.Members
+				Album:    d.album,
 			}
 			out = append(out, li)
 			continue
 		}
-		if pathElems[1] == "" {
-			pathElems[1] = "*"
-		}
+		// Look for matching files.
 		for _, f := range fs.Files {
 			hdrs, err := stingle.DecryptBase64Headers(f.Headers, d.sk)
 			if err != nil {
@@ -126,16 +113,14 @@ func (c *Client) glob(pattern string) ([]ListItem, error) {
 			}
 			fn := string(hdrs[0].Filename)
 			if matched, _ := path.Match(pathElems[1], fn); matched {
-				ts, _ := f.DateCreated.Int64()
 				out = append(out, ListItem{
-					Filename:    d.name + "/" + fn,
-					Header:      hdrs[0],
-					FilePath:    c.blobPath(f.File, false),
-					FileSet:     d.fileSet,
-					DateCreated: time.Unix(ts/1000, 0),
-					FSFile:      *f,
-					Set:         d.set,
-					AlbumID:     f.AlbumID,
+					Filename: d.name + "/" + fn,
+					Header:   hdrs[0],
+					FilePath: c.blobPath(f.File, false),
+					FileSet:  d.fileSet,
+					FSFile:   *f,
+					Set:      d.set,
+					Album:    d.album,
 				})
 			}
 		}
@@ -170,13 +155,13 @@ func (c *Client) ListFiles(patterns []string) error {
 			if item.DirSize != 1 {
 				s += "s"
 			}
-			if item.IsShared {
-				if item.IsOwner {
+			if item.Album != nil && item.Album.IsShared == "1" {
+				if item.Album.IsOwner == "1" {
 					s += ", shared by me"
 				} else {
 					s += ", shared with me"
 				}
-				p := strings.Split(item.Members, ",")
+				p := strings.Split(item.Album.Members, ",")
 				s += fmt.Sprintf(", %d members: ", len(p))
 				var ml []string
 				for _, m := range p {
@@ -189,6 +174,9 @@ func (c *Client) ListFiles(patterns []string) error {
 				}
 				sort.Strings(ml)
 				s += strings.Join(ml, ", ")
+			}
+			if item.Album != nil && item.Album.LocalOnly {
+				s += ", Local"
 			}
 			s += "\n"
 			out = append(out, s)
@@ -212,9 +200,14 @@ func (c *Client) ListFiles(patterns []string) error {
 		} else if errors.Is(err, os.ErrNotExist) {
 			exifData = " (remote only)"
 		}
-		out = append(out, fmt.Sprintf("%*s %*d %s %s%s%s\n", -maxFilenameWidth, item.Filename, maxSizeWidth, item.Header.DataSize,
-			item.DateCreated.Format("2006-01-02 15:04:05"), stingle.FileType(item.Header.FileType),
-			exifData, duration))
+		local := ""
+		if item.FSFile.LocalOnly {
+			local = " Local"
+		}
+		ms, _ := item.FSFile.DateCreated.Int64()
+		out = append(out, fmt.Sprintf("%*s %*d %s %s%s%s%s\n", -maxFilenameWidth, item.Filename, maxSizeWidth, item.Header.DataSize,
+			time.Unix(ms/1000, 0).Format("2006-01-02 15:04:05"), stingle.FileType(item.Header.FileType),
+			exifData, duration, local))
 	}
 	sort.Strings(out)
 	for _, l := range out {

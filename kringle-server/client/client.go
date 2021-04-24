@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"time"
 
 	"kringle-server/log"
 	"kringle-server/secure"
@@ -59,6 +60,14 @@ type Client struct {
 
 	storage *secure.Storage
 	writer  io.Writer
+}
+
+func nowString() string {
+	return fmt.Sprintf("%d", time.Now().UnixNano()/1000000)
+}
+
+func nowJSON() json.Number {
+	return json.Number(nowString())
 }
 
 func (c *Client) SetWriter(w io.Writer) {

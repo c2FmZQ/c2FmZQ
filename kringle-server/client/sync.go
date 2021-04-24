@@ -7,6 +7,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"time"
@@ -48,6 +49,7 @@ func (c *Client) Pull(patterns []string) error {
 	for range files {
 		if err := <-eCh; err != nil {
 			errors = append(errors, err)
+
 		}
 	}
 	if len(files) == 0 {
@@ -59,6 +61,28 @@ func (c *Client) Pull(patterns []string) error {
 	}
 	if errors != nil {
 		return fmt.Errorf("%w %v", errors[0], errors[1:])
+	}
+	return nil
+}
+
+func (c *Client) createRemoteAlbum(album *stingle.Album) error {
+	params := make(map[string]string)
+	params["albumId"] = album.AlbumID
+	params["dateCreated"] = album.DateCreated.String()
+	params["dateModified"] = album.DateModified.String()
+	params["encPrivateKey"] = album.EncPrivateKey
+	params["metadata"] = album.Metadata
+	params["publicKey"] = album.PublicKey
+	form := url.Values{}
+	form.Set("token", c.Token)
+	form.Set("params", c.encodeParams(params))
+
+	sr, err := c.sendRequest("/v2/sync/addAlbum", form)
+	if err != nil {
+		return err
+	}
+	if sr.Status != "ok" {
+		return sr
 	}
 	return nil
 }
@@ -75,6 +99,24 @@ func (c *Client) Push(patterns []string) error {
 			continue
 		}
 		files[item.FSFile.File] = item
+	}
+
+	albumsToCreate := make(map[string]*stingle.Album)
+	for _, item := range list {
+		if item.IsDir && item.Album != nil && item.Album.LocalOnly {
+			albumsToCreate[item.Album.AlbumID] = item.Album
+		}
+	}
+	for _, item := range files {
+		if item.Album == nil || !item.Album.LocalOnly {
+			continue
+		}
+		albumsToCreate[item.Album.AlbumID] = item.Album
+	}
+	for _, album := range albumsToCreate {
+		if err := c.createRemoteAlbum(album); err != nil {
+			return err
+		}
 	}
 
 	qCh := make(chan ListItem)
@@ -211,10 +253,14 @@ func (c *Client) uploadFile(item ListItem) error {
 				return
 			}
 		}
+		var albumID string
+		if item.Album != nil {
+			albumID = item.Album.AlbumID
+		}
 		for _, f := range []struct{ name, value string }{
 			{"headers", item.FSFile.Headers},
 			{"set", item.Set},
-			{"albumId", item.AlbumID},
+			{"albumId", albumID},
 			{"dateCreated", item.FSFile.DateCreated.String()},
 			{"dateModified", item.FSFile.DateModified.String()},
 			{"version", item.FSFile.Version},
