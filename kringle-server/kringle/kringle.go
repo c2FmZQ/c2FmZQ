@@ -133,11 +133,18 @@ func makeKringle() *kringle {
 				Category:  "Sync",
 			},
 			&cli.Command{
-				Name:      "create-album",
+				Name:      "create",
 				Aliases:   []string{"mkdir"},
 				Usage:     "Create new directory (album).",
 				ArgsUsage: `<name> ...`,
-				Action:    app.createAlbums,
+				Action:    app.createAlbum,
+				Category:  "Albums",
+			},
+			&cli.Command{
+				Name:      "rename",
+				Usage:     "Rename a directory (album).",
+				ArgsUsage: `<old name> <new name>`,
+				Action:    app.renameAlbum,
 				Category:  "Albums",
 			},
 			&cli.Command{
@@ -165,7 +172,7 @@ func makeKringle() *kringle {
 			&cli.Command{
 				Name:      "copy",
 				Aliases:   []string{"cp"},
-				Usage:     "Copy files to a different directory, or rename a directory.",
+				Usage:     "Copy files to a different directory.",
 				ArgsUsage: `<"glob"> ... <dest>`,
 				Action:    app.copyFiles,
 				Category:  "Files",
@@ -444,7 +451,7 @@ func (k *kringle) freeFiles(ctx *cli.Context) error {
 	return k.client.Free(patterns)
 }
 
-func (k *kringle) createAlbums(ctx *cli.Context) error {
+func (k *kringle) createAlbum(ctx *cli.Context) error {
 	if err := k.initClient(ctx, true); err != nil {
 		return err
 	}
@@ -453,6 +460,18 @@ func (k *kringle) createAlbums(ctx *cli.Context) error {
 		return nil
 	}
 	return k.client.AddAlbums(names)
+}
+
+func (k *kringle) renameAlbum(ctx *cli.Context) error {
+	if err := k.initClient(ctx, true); err != nil {
+		return err
+	}
+	args := ctx.Args().Slice()
+	if len(args) < 2 {
+		cli.ShowSubcommandHelp(ctx)
+		return nil
+	}
+	return k.client.RenameAlbum(args[:len(args)-1], args[len(args)-1])
 }
 
 func (k *kringle) hideAlbums(ctx *cli.Context) error {

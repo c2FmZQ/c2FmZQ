@@ -149,6 +149,29 @@ func (c *Client) Copy(patterns []string, dest string) error {
 	return nil
 }
 
+// RenameAlbum renames an album.
+func (c *Client) RenameAlbum(patterns []string, dest string) error {
+	dest = strings.TrimSuffix(dest, "/")
+	di, err := c.glob(dest)
+	if err != nil {
+		return err
+	}
+	si, err := c.GlobFiles(patterns)
+	if err != nil {
+		return err
+	}
+	if len(si) == 0 {
+		return fmt.Errorf("no match for: %s", strings.Join(patterns, " "))
+	}
+	if len(si) > 1 {
+		return fmt.Errorf("more than one match for: %s", strings.Join(patterns, " "))
+	}
+	if len(di) != 0 {
+		return fmt.Errorf("destination already exists: %s", di[0].Filename)
+	}
+	return c.renameAlbum(si[0], dest)
+}
+
 // Move moves files to an existing album, or renames an album.
 func (c *Client) Move(patterns []string, dest string) error {
 	dest = strings.TrimSuffix(dest, "/")
