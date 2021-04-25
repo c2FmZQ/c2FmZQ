@@ -6,7 +6,12 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"golang.org/x/image/font"
+	"golang.org/x/image/font/inconsolata"
+	"golang.org/x/image/math/fixed"
 	"image"
+	"image/color"
+	"image/png"
 	"io"
 	"math"
 	"os"
@@ -100,10 +105,17 @@ func (c *Client) importFile(file string, dst ListItem, pk stingle.PublicKey) err
 		}
 	}
 	var thumbnail []byte
-	if hdrs[0].FileType == stingle.FileTypeVideo {
+	switch hdrs[0].FileType {
+	case stingle.FileTypeVideo:
 		thumbnail, err = c.videoThumbnail(file)
-	} else {
+	case stingle.FileTypePhoto:
 		thumbnail, err = c.photoThumbnail(file)
+	default:
+		thumbnail, err = c.genericThumbnail(file)
+	}
+	if err != nil {
+		// Fallback to a genetic thumbnail.
+		thumbnail, err = c.genericThumbnail(file)
 	}
 	if err != nil {
 		return err
@@ -168,10 +180,41 @@ func (c *Client) importExif(file string) (x *exif.Exif, err error) {
 	return exif.Decode(f)
 }
 
+func (c *Client) genericThumbnail(filename string) ([]byte, error) {
+	_, filename = filepath.Split(filename)
+	ext := filepath.Ext(filename)
+	filename = filename[:len(filename)-len(ext)]
+	img := image.NewRGBA(image.Rect(0, 0, 120, 120))
+
+	for _, label := range []struct {
+		txt  string
+		x, y int
+		col  color.RGBA
+	}{
+		{filename, 10, 10, color.RGBA{200, 200, 200, 255}},
+		{ext, 10, 30, color.RGBA{200, 200, 200, 255}},
+	} {
+		point := fixed.Point26_6{fixed.Int26_6(label.x * 64), fixed.Int26_6(label.y * 64)}
+		d := &font.Drawer{
+			Dst:  img,
+			Src:  image.NewUniform(label.col),
+			Face: inconsolata.Bold8x16,
+			Dot:  point,
+		}
+		d.DrawString(label.txt)
+	}
+
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
 func (c *Client) photoThumbnail(filename string) ([]byte, error) {
 	img, err := imaging.Open(filename, imaging.AutoOrientation(true))
 	if err != nil {
-		img = image.NewGray(image.Rect(0, 0, 240, 320))
+		return nil, err
 	}
 	img = imaging.Fill(img, 240, 320, imaging.Center, imaging.Lanczos)
 
