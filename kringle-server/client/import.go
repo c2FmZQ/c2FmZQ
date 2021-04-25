@@ -236,7 +236,7 @@ func (c *Client) videoThumbnail(file string) ([]byte, error) {
 	cmd.Stderr = &stderr
 	b, err := cmd.Output()
 	if err != nil {
-		log.Errorf("ffmpeg: %s", stderr)
+		log.Errorf("ffmpeg: %s", stderr.String())
 		return nil, err
 	}
 	return b, nil
@@ -260,7 +260,7 @@ func videoMetadata(file string) (duration int32, creationTime time.Time, err err
 	cmd.Stderr = &stderr
 	b, err := cmd.Output()
 	if err != nil {
-		log.Errorf("ffprobe: %s", stderr)
+		log.Errorf("ffprobe: %s", stderr.String())
 		return
 	}
 	if err = json.Unmarshal(b, &streamInfo); err != nil {

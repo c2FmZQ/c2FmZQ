@@ -37,6 +37,9 @@ func (c *Client) GlobFiles(patterns []string) ([]ListItem, error) {
 		if err != nil {
 			return nil, err
 		}
+		if len(items) == 0 {
+			fmt.Fprintf(c.writer, "no match for: %s\n", p)
+		}
 		li = append(li, items...)
 	}
 	return li, nil
@@ -48,6 +51,7 @@ func (c *Client) glob(pattern string) ([]ListItem, error) {
 	if _, err := path.Match(pattern, ""); err != nil {
 		return nil, err
 	}
+	pattern = strings.TrimSuffix(pattern, "/")
 	// The directory structure can only be 2 deep.
 	pathElems := strings.SplitN(pattern, "/", 2)
 	if len(pathElems) > 2 {

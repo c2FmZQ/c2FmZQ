@@ -62,6 +62,9 @@ func (c *Client) Pull(patterns []string) error {
 }
 
 func (c *Client) createRemoteAlbum(album *stingle.Album) error {
+	if !album.LocalOnly {
+		return nil
+	}
 	params := make(map[string]string)
 	params["albumId"] = album.AlbumID
 	params["dateCreated"] = album.DateCreated.String()
@@ -80,6 +83,7 @@ func (c *Client) createRemoteAlbum(album *stingle.Album) error {
 	if sr.Status != "ok" {
 		return sr
 	}
+	album.LocalOnly = false
 	return nil
 }
 

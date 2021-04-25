@@ -66,10 +66,11 @@ func (d *Database) incRefCount(blob string, delta int) int {
 	}
 	log.Debugf("RefCount(%q)%+d -> %d", blob, delta, blobSpec.RefCount)
 	if blobSpec.RefCount == 0 {
-		if err := os.Remove(blob); err != nil {
+		fn := filepath.Join(d.dir, blob)
+		if err := os.Remove(fn); err != nil {
 			log.Errorf("os.Remove(%q) failed: %v", blob, err)
 		}
-		if err := os.Remove(blob + ".ref"); err != nil {
+		if err := os.Remove(fn + ".ref"); err != nil {
 			log.Errorf("os.Remove(%q) failed: %v", blob+".ref", err)
 		}
 	}

@@ -186,6 +186,14 @@ func makeKringle() *kringle {
 				Category:  "Files",
 			},
 			&cli.Command{
+				Name:      "delete",
+				Aliases:   []string{"rm"},
+				Usage:     "Delete files (move them to trash, or delete them from trash).",
+				ArgsUsage: `<"glob"> ...`,
+				Action:    app.deleteFiles,
+				Category:  "Files",
+			},
+			&cli.Command{
 				Name:      "export",
 				Usage:     "Decrypt and export files.",
 				ArgsUsage: `"<glob>" ... <output directory>`,
@@ -529,6 +537,18 @@ func (k *kringle) moveFiles(ctx *cli.Context) error {
 		return nil
 	}
 	return k.client.Move(args[:len(args)-1], args[len(args)-1])
+}
+
+func (k *kringle) deleteFiles(ctx *cli.Context) error {
+	if err := k.initClient(ctx, true); err != nil {
+		return err
+	}
+	args := ctx.Args().Slice()
+	if len(args) == 0 {
+		cli.ShowSubcommandHelp(ctx)
+		return nil
+	}
+	return k.client.Delete(args)
 }
 
 func (k *kringle) exportFiles(ctx *cli.Context) error {

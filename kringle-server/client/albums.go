@@ -80,7 +80,7 @@ func (c *Client) Hide(names []string, hidden bool) (retErr error) {
 	if err != nil {
 		return err
 	}
-	defer commit(true, &retErr)
+	defer commit(false, &retErr)
 	for _, item := range li {
 		if item.Album == nil {
 			continue
@@ -105,7 +105,7 @@ func (c *Client) Hide(names []string, hidden bool) (retErr error) {
 			fmt.Fprintf(c.writer, "Unhid %s\n", item.Filename)
 		}
 	}
-	return nil
+	return commit(true, nil)
 }
 
 // Copy copies files to an existing album.
@@ -215,6 +215,45 @@ func (c *Client) Move(patterns []string, dest string) error {
 	return nil
 }
 
+// Delete moves files trash, or deletes them from trash.
+func (c *Client) Delete(patterns []string) error {
+	si, err := c.GlobFiles(patterns)
+	if err != nil {
+		return err
+	}
+	if len(si) == 0 {
+		return nil
+	}
+	di, err := c.glob("trash")
+	if err != nil || len(di) != 1 {
+		return err
+	}
+	groups := make(map[string][]ListItem)
+	for _, item := range si {
+		if item.IsDir {
+			fmt.Fprintf(c.writer, "Skipping directory %s\n", item.Filename)
+			continue
+		}
+		key := item.Set + "/"
+		if item.Album != nil {
+			key += item.Album.AlbumID
+		}
+		groups[key] = append(groups[key], item)
+	}
+	for _, li := range groups {
+		if li[0].Set == stingle.TrashSet {
+			if err := c.deleteFiles(li); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := c.moveFiles(li, di[0], true); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (c *Client) renameAlbum(li ListItem, name string) (retErr error) {
 	var albumID string
 	if li.Album != nil {
@@ -280,14 +319,18 @@ func (c *Client) moveFiles(fromItems []ListItem, toItem ListItem, moving bool) (
 	if fromSet == toSet && fromAlbumID == toAlbumID {
 		return fmt.Errorf("source and destination are the same: %s", toItem.Filename)
 	}
-	if fromAlbum != nil && fromAlbum.LocalOnly {
-		if err := c.createRemoteAlbum(fromAlbum); err != nil {
-			return err
-		}
-	}
 	if toAlbum != nil && toAlbum.LocalOnly {
-		if err := c.createRemoteAlbum(toAlbum); err != nil {
-			return err
+		allLocal := true
+		for _, item := range fromItems {
+			if !item.FSFile.LocalOnly {
+				allLocal = false
+				break
+			}
+		}
+		if !allLocal {
+			if err := c.createRemoteAlbum(toAlbum); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -355,16 +398,54 @@ func (c *Client) moveFiles(fromItems []ListItem, toItem ListItem, moving bool) (
 	}
 	params["count"] = fmt.Sprintf("%d", count)
 
-	form := url.Values{}
-	form.Set("token", c.Token)
-	form.Set("params", c.encodeParams(params))
+	if count > 0 {
+		form := url.Values{}
+		form.Set("token", c.Token)
+		form.Set("params", c.encodeParams(params))
 
-	sr, err := c.sendRequest("/v2/sync/moveFile", form)
+		sr, err := c.sendRequest("/v2/sync/moveFile", form)
+		if err != nil {
+			return err
+		}
+		if sr.Status != "ok" {
+			return sr
+		}
+	}
+	return commit(true, nil)
+}
+
+func (c *Client) deleteFiles(li []ListItem) (retErr error) {
+	commit, fs, err := c.fileSetForUpdate(trashFile)
 	if err != nil {
 		return err
 	}
-	if sr.Status != "ok" {
-		return sr
+	defer commit(false, &retErr)
+
+	params := make(map[string]string)
+	count := 0
+	for _, item := range li {
+		if _, ok := fs.Files[item.FSFile.File]; ok {
+			fmt.Fprintf(c.writer, "Deleting %s\n", item.Filename)
+			delete(fs.Files, item.FSFile.File)
+			if !item.FSFile.LocalOnly {
+				params[fmt.Sprintf("filename%d", count)] = item.FSFile.File
+				count++
+			}
+		}
+	}
+	params["count"] = fmt.Sprintf("%d", count)
+	if count > 0 {
+		form := url.Values{}
+		form.Set("token", c.Token)
+		form.Set("params", c.encodeParams(params))
+
+		sr, err := c.sendRequest("/v2/sync/delete", form)
+		if err != nil {
+			return err
+		}
+		if sr.Status != "ok" {
+			return sr
+		}
 	}
 	return commit(true, nil)
 }
