@@ -135,21 +135,21 @@ func makeKringle() *kringle {
 			&cli.Command{
 				Name:      "create-album",
 				Aliases:   []string{"mkdir"},
-				Usage:     "Create new albums.",
+				Usage:     "Create new directory (album).",
 				ArgsUsage: `<name> ...`,
 				Action:    app.createAlbums,
 				Category:  "Albums",
 			},
 			&cli.Command{
 				Name:      "hide",
-				Usage:     "Hide albums.",
+				Usage:     "Hide directory.",
 				ArgsUsage: `["glob"] ...`,
 				Action:    app.hideAlbums,
 				Category:  "Albums",
 			},
 			&cli.Command{
 				Name:      "unhide",
-				Usage:     "Unhide albums.",
+				Usage:     "Unhide directory.",
 				ArgsUsage: "[name] ...",
 				Action:    app.unhideAlbums,
 				Category:  "Albums",
@@ -157,15 +157,23 @@ func makeKringle() *kringle {
 			&cli.Command{
 				Name:      "list",
 				Aliases:   []string{"ls"},
-				Usage:     "List albums and files.",
+				Usage:     "List files and directories.",
 				ArgsUsage: `["glob"] ... (default "*")`,
 				Action:    app.listFiles,
 				Category:  "Files",
 			},
 			&cli.Command{
+				Name:      "copy",
+				Aliases:   []string{"cp"},
+				Usage:     "Copy files to a different directory, or rename a directory.",
+				ArgsUsage: `<"glob"> ... <dest>`,
+				Action:    app.copyFiles,
+				Category:  "Files",
+			},
+			&cli.Command{
 				Name:      "move",
 				Aliases:   []string{"mv"},
-				Usage:     "Move files to a different album, or rename an album.",
+				Usage:     "Move files to a different directory, or rename a directory.",
 				ArgsUsage: `<"glob"> ... <dest>`,
 				Action:    app.moveFiles,
 				Category:  "Files",
@@ -180,7 +188,7 @@ func makeKringle() *kringle {
 			&cli.Command{
 				Name:      "import",
 				Usage:     "Encrypt and import files.",
-				ArgsUsage: `"<glob>" ... <album>`,
+				ArgsUsage: `"<glob>" ... <directory>`,
 				Action:    app.importFiles,
 				Category:  "Import/Export",
 			},
@@ -478,6 +486,18 @@ func (k *kringle) listFiles(ctx *cli.Context) error {
 		patterns = ctx.Args().Slice()
 	}
 	return k.client.ListFiles(patterns)
+}
+
+func (k *kringle) copyFiles(ctx *cli.Context) error {
+	if err := k.initClient(ctx, true); err != nil {
+		return err
+	}
+	args := ctx.Args().Slice()
+	if len(args) < 2 {
+		cli.ShowSubcommandHelp(ctx)
+		return nil
+	}
+	return k.client.Copy(args[:len(args)-1], args[len(args)-1])
 }
 
 func (k *kringle) moveFiles(ctx *cli.Context) error {

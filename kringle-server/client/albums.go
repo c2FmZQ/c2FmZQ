@@ -108,6 +108,47 @@ func (c *Client) Hide(names []string, hidden bool) (retErr error) {
 	return nil
 }
 
+// Copy copies files to an existing album.
+func (c *Client) Copy(patterns []string, dest string) error {
+	dest = strings.TrimSuffix(dest, "/")
+	di, err := c.glob(dest)
+	if err != nil {
+		return err
+	}
+	si, err := c.GlobFiles(patterns)
+	if err != nil {
+		return err
+	}
+	if len(si) == 0 {
+		return fmt.Errorf("no match for: %s", strings.Join(patterns, " "))
+	}
+	if len(di) == 0 {
+		return fmt.Errorf("no match for: %s", dest)
+	}
+	if len(di) != 1 || !di[0].IsDir {
+		return fmt.Errorf("destination must be a directory: %s", dest)
+	}
+	for _, item := range si {
+		if item.IsDir {
+			return fmt.Errorf("cannot move a directory to another directory: %s", item.Filename)
+		}
+	}
+	groups := make(map[string][]ListItem)
+	for _, item := range si {
+		key := item.Set + "/"
+		if item.Album != nil {
+			key += item.Album.AlbumID
+		}
+		groups[key] = append(groups[key], item)
+	}
+	for _, li := range groups {
+		if err := c.moveFiles(li, di[0], false); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // Move moves files to an existing album, or renames an album.
 func (c *Client) Move(patterns []string, dest string) error {
 	dest = strings.TrimSuffix(dest, "/")
@@ -128,11 +169,11 @@ func (c *Client) Move(patterns []string, dest string) error {
 	}
 	// Move files to a different album.
 	if len(di) != 1 || !di[0].IsDir {
-		return fmt.Errorf("destination must be an album: %s", dest)
+		return fmt.Errorf("destination must be a directory: %s", dest)
 	}
 	for _, item := range si {
 		if item.IsDir {
-			return fmt.Errorf("cannot move albums to another album: %s", item.Filename)
+			return fmt.Errorf("cannot move a directory to another directory: %s", item.Filename)
 		}
 	}
 	groups := make(map[string][]ListItem)

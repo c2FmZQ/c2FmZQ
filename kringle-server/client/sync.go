@@ -54,10 +54,6 @@ func (c *Client) Pull(patterns []string) error {
 	}
 	if len(files) == 0 {
 		fmt.Fprintln(c.writer, "No files to download.")
-	} else if errors == nil {
-		fmt.Fprintf(c.writer, "Successfully downloaded %d file(s).\n", len(files))
-	} else {
-		fmt.Fprintf(c.writer, "Successfully downloaded %d file(s), %d failed.\n", len(files)-len(errors), len(errors))
 	}
 	if errors != nil {
 		return fmt.Errorf("%w %v", errors[0], errors[1:])
@@ -139,10 +135,6 @@ func (c *Client) Push(patterns []string) error {
 
 	if len(files) == 0 {
 		fmt.Fprintln(c.writer, "No files to upload.")
-	} else if errors == nil {
-		fmt.Fprintf(c.writer, "Successfully uploaded %d file(s).\n", len(files))
-	} else {
-		fmt.Fprintf(c.writer, "Successfully uploaded %d file(s), %d failed.\n", len(files)-len(errors), len(errors))
 	}
 	if errors != nil {
 		return fmt.Errorf("%w %v", errors[0], errors[1:])
@@ -166,15 +158,14 @@ func (c *Client) Free(patterns []string) error {
 		if _, err := os.Stat(fn); errors.Is(err, os.ErrNotExist) {
 			continue
 		}
+		fmt.Fprintf(c.writer, "Freeing %s\n", item.Filename)
 		if err := os.Remove(fn); err != nil {
 			return err
 		}
 		count++
 	}
 	if count == 0 {
-		fmt.Fprintln(c.writer, "There are no files to delete.")
-	} else {
-		fmt.Fprintf(c.writer, "Successfully freed %d file(s).\n", count)
+		fmt.Fprintln(c.writer, "There are no files to free.")
 	}
 	return nil
 }
@@ -189,12 +180,14 @@ func (c *Client) blobPath(name string, thumb bool) string {
 
 func (c *Client) downloadWorker(ch <-chan ListItem, out chan<- error) {
 	for i := range ch {
+		fmt.Fprintf(c.writer, "Downloading %s\n", i.Filename)
 		out <- c.downloadFile(i)
 	}
 }
 
 func (c *Client) uploadWorker(ch <-chan ListItem, out chan<- error) {
 	for i := range ch {
+		fmt.Fprintf(c.writer, "Uploading %s\n", i.Filename)
 		out <- c.uploadFile(i)
 	}
 }
