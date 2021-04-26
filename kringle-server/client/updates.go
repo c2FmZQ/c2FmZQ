@@ -15,13 +15,15 @@ import (
 // AlbumList represents a list of albums.
 type AlbumList struct {
 	UpdateTimestamps
-	Albums map[string]*stingle.Album `json:"albums"`
+	Albums       map[string]*stingle.Album `json:"albums"`
+	RemoteAlbums map[string]*stingle.Album `json:"remoteAlbums"`
 }
 
 // FileSet represents a file set.
 type FileSet struct {
 	UpdateTimestamps
-	Files map[string]*stingle.File `json:"files"`
+	Files       map[string]*stingle.File `json:"files"`
+	RemoteFiles map[string]*stingle.File `json:"remoteFiles"`
 }
 
 // ContactList represents a list of contacts.
@@ -65,6 +67,9 @@ func (c *Client) fileSetsForUpdate(names []string) (func(bool, *error) error, []
 		if fs.Files == nil {
 			fs.Files = make(map[string]*stingle.File)
 		}
+		if fs.RemoteFiles == nil {
+			fs.RemoteFiles = make(map[string]*stingle.File)
+		}
 	}
 	return commit, fileSets, nil
 }
@@ -90,18 +95,39 @@ func (c *Client) processAlbumUpdates(updates []stingle.Album) (retErr error) {
 	if al.Albums == nil {
 		al.Albums = make(map[string]*stingle.Album)
 	}
+	if al.RemoteAlbums == nil {
+		al.RemoteAlbums = make(map[string]*stingle.Album)
+	}
 	for _, up := range updates {
-		if _, exists := al.Albums[up.AlbumID]; !exists {
+		if up.AlbumID == "" {
+			continue
+		}
+		// Update remote album.
+		if _, ok := al.RemoteAlbums[up.AlbumID]; !ok {
 			c.storage.CreateEmptyFile(c.fileHash(albumPrefix+up.AlbumID), &FileSet{})
 		}
 		na := up
-		al.Albums[up.AlbumID] = &na
+		al.RemoteAlbums[up.AlbumID] = &na
+
+		// Update local album.
+		la, ok := al.Albums[up.AlbumID]
+		if !ok {
+			c.storage.CreateEmptyFile(c.fileHash(albumPrefix+up.AlbumID), &FileSet{})
+			al.Albums[up.AlbumID] = &na
+		} else {
+			nad, _ := na.DateModified.Int64()
+			lad, _ := la.DateModified.Int64()
+			if nad > lad {
+				al.Albums[up.AlbumID] = &na
+			}
+		}
+
 		d, _ := up.DateModified.Int64()
 		if d > al.LastUpdateTime {
 			al.LastUpdateTime = d
 		}
 	}
-	log.Debugf("AlbumList: [%d] %#v", len(al.Albums), al)
+	log.Debugf("AlbumList: [%d] %#v", len(al.RemoteAlbums), al)
 	return nil
 }
 
@@ -142,13 +168,14 @@ func (c *Client) processFileUpdates(name string, updates []stingle.File) (retErr
 	defer commit(true, &retErr)
 	for _, up := range updates {
 		nf := up
+		fs.RemoteFiles[up.File] = &nf
 		fs.Files[up.File] = &nf
 		d, _ := up.DateModified.Int64()
 		if d > fs.LastUpdateTime {
 			fs.LastUpdateTime = d
 		}
 	}
-	log.Debugf("FileSet(%q): [%d] %#v", name, len(fs.Files), fs)
+	log.Debugf("FileSet(%q): [%d] %#v", name, len(fs.RemoteFiles), fs)
 	return nil
 }
 
@@ -185,11 +212,17 @@ func (c *Client) processDeleteFiles(name string, deletes []stingle.DeleteEvent) 
 				delete(fs.Files, del.File)
 			}
 		}
+		if f, ok := fs.RemoteFiles[del.File]; ok {
+			fd, _ := f.DateModified.Int64()
+			if d > fd {
+				delete(fs.RemoteFiles, del.File)
+			}
+		}
 		if d > fs.LastDeleteTime {
 			fs.LastDeleteTime = d
 		}
 	}
-	log.Debugf("FileSet(%q): [%d] %#v", name, len(fs.Files), fs)
+	log.Debugf("FileSet(%q): [%d] %#v", name, len(fs.RemoteFiles), fs)
 	return nil
 }
 
@@ -206,16 +239,24 @@ func (c *Client) processDeleteAlbums(deletes []stingle.DeleteEvent) (retErr erro
 			ad, _ := a.DateModified.Int64()
 			if d > ad {
 				delete(al.Albums, del.AlbumID)
-				if err := os.Remove(filepath.Join(c.storage.Dir(), c.fileHash(albumPrefix+del.AlbumID))); err != nil {
-					return err
-				}
+			}
+		}
+		if a, ok := al.RemoteAlbums[del.AlbumID]; ok {
+			ad, _ := a.DateModified.Int64()
+			if d > ad {
+				delete(al.RemoteAlbums, del.AlbumID)
+			}
+		}
+		if al.Albums[del.AlbumID] == nil && al.RemoteAlbums[del.AlbumID] == nil {
+			if err := os.Remove(filepath.Join(c.storage.Dir(), c.fileHash(albumPrefix+del.AlbumID))); err != nil {
+				return err
 			}
 		}
 		if d > al.LastDeleteTime {
 			al.LastDeleteTime = d
 		}
 	}
-	log.Debugf("Albums: [%d] %#v", len(al.Albums), al)
+	log.Debugf("Albums: [%d] %#v", len(al.RemoteAlbums), al)
 	return nil
 }
 

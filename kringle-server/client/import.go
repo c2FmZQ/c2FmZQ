@@ -134,7 +134,6 @@ func (c *Client) importFile(file string, dst ListItem, pk stingle.PublicKey) err
 		DateCreated:  json.Number(strconv.FormatInt(creationTime.UnixNano()/1000000, 10)),
 		DateModified: json.Number(strconv.FormatInt(time.Now().UnixNano()/1000000, 10)),
 		Headers:      encHdrs,
-		LocalOnly:    true,
 	}
 	if dst.Album != nil {
 		sFile.AlbumID = dst.Album.AlbumID

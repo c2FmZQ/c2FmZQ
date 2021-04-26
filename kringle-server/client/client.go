@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"kringle-server/log"
@@ -74,6 +75,14 @@ func (c *Client) SetWriter(w io.Writer) {
 	c.writer = w
 }
 
+func (c *Client) Printf(format string, args ...interface{}) {
+	fmt.Fprintf(c.writer, format, args...)
+}
+
+func (c *Client) Print(args ...interface{}) {
+	fmt.Fprintln(c.writer, args...)
+}
+
 func (c *Client) fileHash(fn string) string {
 	return c.storage.HashString(c.ServerBaseURL + "/" + c.Email + "/" + fn)
 }
@@ -84,6 +93,7 @@ func (c *Client) encodeParams(params map[string]string) string {
 }
 
 func (c *Client) sendRequest(uri string, form url.Values) (*stingle.Response, error) {
+	c.ServerBaseURL = strings.TrimSuffix(c.ServerBaseURL, "/")
 	if c.ServerBaseURL == "" {
 		return nil, errors.New("ServerBaseURL is not set")
 	}
@@ -111,6 +121,7 @@ func (c *Client) sendRequest(uri string, form url.Values) (*stingle.Response, er
 }
 
 func (c *Client) download(file, set, thumb string) (io.ReadCloser, error) {
+	c.ServerBaseURL = strings.TrimSuffix(c.ServerBaseURL, "/")
 	if c.ServerBaseURL == "" {
 		return nil, errors.New("ServerBaseURL is not set")
 	}

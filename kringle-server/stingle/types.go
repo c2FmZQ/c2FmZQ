@@ -27,7 +27,6 @@ type File struct {
 	DateModified json.Number `json:"dateModified"`
 	Headers      string      `json:"headers"`
 	AlbumID      string      `json:"albumId"`
-	LocalOnly    bool        `json:"localOnly,omitempty"`
 }
 
 // The Stingle API representation of an album.
@@ -47,7 +46,15 @@ type Album struct {
 	Members       string            `json:"members"`
 	SyncLocal     json.Number       `json:"syncLocal,omitempty"`
 	SharingKeys   map[string]string `json:"sharingKeys,omitempty"`
-	LocalOnly     bool              `json:"localOnly,omitempty"`
+}
+
+// Name returns the decrypted file name.
+func (f File) Name(sk SecretKey) (string, error) {
+	hdrs, err := DecryptBase64Headers(f.Headers, sk)
+	if err != nil {
+		return "", err
+	}
+	return string(hdrs[0].Filename), nil
 }
 
 // SK returns the album's decrypted SecretKey.
@@ -68,6 +75,19 @@ func (a Album) PK() (pk PublicKey, err error) {
 	}
 	pk = PublicKeyFromBytes(b)
 	return
+}
+
+// Name returns the decrypted album name.
+func (a Album) Name(sk SecretKey) (string, error) {
+	ask, err := a.SK(sk)
+	if err != nil {
+		return "", err
+	}
+	md, err := DecryptAlbumMetadata(a.Metadata, ask)
+	if err != nil {
+		return "", err
+	}
+	return md.Name, nil
 }
 
 // Permissions that control what album members can do.

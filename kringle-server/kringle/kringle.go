@@ -103,8 +103,8 @@ func makeKringle() *kringle {
 			},
 			&cli.Command{
 				Name:      "updates",
-				Aliases:   []string{"up", "update"},
-				Usage:     "Pull metadata updates.",
+				Aliases:   []string{"update"},
+				Usage:     "Pull metadata updates from remote server.",
 				ArgsUsage: " ",
 				Action:    app.updates,
 				Category:  "Sync",
@@ -118,12 +118,18 @@ func makeKringle() *kringle {
 				Category:  "Sync",
 			},
 			&cli.Command{
-				Name:      "upload",
-				Aliases:   []string{"push", "sync"},
-				Usage:     "Upload files that haven't been uploaded yet.",
-				ArgsUsage: `["glob"] ... (default "*" "*/*")`,
-				Action:    app.pushFiles,
+				Name:      "sync",
+				Usage:     "Send changes to remote server.",
+				ArgsUsage: " ",
+				Action:    app.syncFiles,
 				Category:  "Sync",
+				Flags: []cli.Flag{
+					&cli.BoolFlag{
+						Name:  "dryrun",
+						Value: false,
+						Usage: "Show what would be synced without actually syncing.",
+					},
+				},
 			},
 			&cli.Command{
 				Name:      "free",
@@ -133,11 +139,19 @@ func makeKringle() *kringle {
 				Category:  "Sync",
 			},
 			&cli.Command{
-				Name:      "create",
+				Name:      "create-album",
 				Aliases:   []string{"mkdir"},
 				Usage:     "Create new directory (album).",
 				ArgsUsage: `<name> ...`,
 				Action:    app.createAlbum,
+				Category:  "Albums",
+			},
+			&cli.Command{
+				Name:      "delete-album",
+				Aliases:   []string{"rmdir"},
+				Usage:     "Remove a directory (album).",
+				ArgsUsage: `<name> ...`,
+				Action:    app.removeAlbum,
 				Category:  "Albums",
 			},
 			&cli.Command{
@@ -187,7 +201,7 @@ func makeKringle() *kringle {
 			},
 			&cli.Command{
 				Name:      "delete",
-				Aliases:   []string{"rm"},
+				Aliases:   []string{"rm", "remove"},
 				Usage:     "Delete files (move them to trash, or delete them from trash).",
 				ArgsUsage: `<"glob"> ...`,
 				Action:    app.deleteFiles,
@@ -437,15 +451,11 @@ func (k *kringle) pullFiles(ctx *cli.Context) error {
 	return k.client.Pull(patterns)
 }
 
-func (k *kringle) pushFiles(ctx *cli.Context) error {
+func (k *kringle) syncFiles(ctx *cli.Context) error {
 	if err := k.initClient(ctx, true); err != nil {
 		return err
 	}
-	patterns := []string{"*", "*/*"}
-	if ctx.Args().Len() > 0 {
-		patterns = ctx.Args().Slice()
-	}
-	return k.client.Push(patterns)
+	return k.client.Sync(ctx.Bool("dryrun"))
 }
 
 func (k *kringle) freeFiles(ctx *cli.Context) error {
@@ -468,6 +478,17 @@ func (k *kringle) createAlbum(ctx *cli.Context) error {
 		return nil
 	}
 	return k.client.AddAlbums(names)
+}
+
+func (k *kringle) removeAlbum(ctx *cli.Context) error {
+	if err := k.initClient(ctx, true); err != nil {
+		return err
+	}
+	patterns := ctx.Args().Slice()
+	if len(patterns) == 0 {
+		return nil
+	}
+	return k.client.RemoveAlbums(patterns)
 }
 
 func (k *kringle) renameAlbum(ctx *cli.Context) error {

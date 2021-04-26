@@ -130,7 +130,7 @@ func (d *Database) DeleteAlbum(owner User, albumID string) error {
 		return err
 	}
 	defer d.storage.Unlock(albumRef.File)
-	if err := os.Remove(albumRef.File); err != nil {
+	if err := os.Remove(filepath.Join(d.Dir(), albumRef.File)); err != nil {
 		log.Errorf("os.Remove(%q) failed: %v", albumRef.File, err)
 	}
 

@@ -3,10 +3,10 @@ package client
 import (
 	"crypto/rand"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"io"
-	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"kringle-server/stingle"
@@ -47,13 +47,18 @@ func (c *Client) addAlbum(name string) error {
 		IsHidden:      "0",
 		IsOwner:       "1",
 		IsLocked:      "0",
-		LocalOnly:     true,
 	}
 
 	var al AlbumList
 	commit, err := c.storage.OpenForUpdate(c.fileHash(albumList), &al)
 	if err != nil {
 		return err
+	}
+	if al.Albums == nil {
+		al.Albums = make(map[string]*stingle.Album)
+	}
+	if al.RemoteAlbums == nil {
+		al.RemoteAlbums = make(map[string]*stingle.Album)
 	}
 	al.Albums[albumID] = &album
 	if err := c.storage.CreateEmptyFile(c.fileHash(albumPrefix+albumID), &FileSet{}); err != nil {
@@ -63,11 +68,53 @@ func (c *Client) addAlbum(name string) error {
 		return err
 	}
 	fmt.Fprintf(c.writer, "Created %s\n", name)
-	//if err := c.createRemoteAlbum(&album); err != nil {
-	//	fmt.Fprintf(c.writer, "Failed to create %s remotely\n", name)
-	//	return err
-	//}
 	return nil
+}
+
+// RemoveAlbums deletes albums.
+func (c *Client) RemoveAlbums(patterns []string) error {
+	li, err := c.GlobFiles(patterns)
+	if err != nil {
+		return err
+	}
+	for _, item := range li {
+		if !item.IsDir || item.Album == nil {
+			return fmt.Errorf("cannot remove %s", item.Filename)
+		}
+	}
+	for _, item := range li {
+		if err := c.removeAlbum(item); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *Client) removeAlbum(item ListItem) (retErr error) {
+	c.Printf("Removing %s\n", item.Filename)
+	var al AlbumList
+	commit, err := c.storage.OpenForUpdate(c.fileHash(albumList), &al)
+	if err != nil {
+		return err
+	}
+	defer commit(false, &retErr)
+	if item.Album == nil {
+		return fmt.Errorf("not an album: %s", item.Filename)
+	}
+	delete(al.Albums, item.Album.AlbumID)
+	var fs FileSet
+	if _, err := c.storage.ReadDataFile(c.fileHash(albumPrefix+item.Album.AlbumID), &fs); err != nil {
+		return err
+	}
+	if len(fs.Files) > 0 {
+		return fmt.Errorf("album is not empty: %s", item.Filename)
+	}
+	if _, ok := al.RemoteAlbums[item.Album.AlbumID]; !ok {
+		if err := os.Remove(filepath.Join(c.storage.Dir(), c.fileHash(albumPrefix+item.Album.AlbumID))); err != nil {
+			return err
+		}
+	}
+	return commit(true, nil)
 }
 
 func (c *Client) Hide(names []string, hidden bool) (retErr error) {
@@ -82,7 +129,7 @@ func (c *Client) Hide(names []string, hidden bool) (retErr error) {
 	}
 	defer commit(false, &retErr)
 	for _, item := range li {
-		if item.Album == nil {
+		if !item.IsDir || item.Album == nil {
 			continue
 		}
 		album, ok := al.Albums[item.Album.AlbumID]
@@ -91,17 +138,9 @@ func (c *Client) Hide(names []string, hidden bool) (retErr error) {
 		}
 		if hidden {
 			album.IsHidden = "1"
-		} else {
-			album.IsHidden = "0"
-		}
-		if !album.LocalOnly {
-			if err := c.editPerms(album); err != nil {
-				return err
-			}
-		}
-		if hidden {
 			fmt.Fprintf(c.writer, "Hid %s\n", item.Filename)
 		} else {
+			album.IsHidden = "0"
 			fmt.Fprintf(c.writer, "Unhid %s\n", item.Filename)
 		}
 	}
@@ -231,7 +270,9 @@ func (c *Client) Delete(patterns []string) error {
 	groups := make(map[string][]ListItem)
 	for _, item := range si {
 		if item.IsDir {
-			fmt.Fprintf(c.writer, "Skipping directory %s\n", item.Filename)
+			if err := c.removeAlbum(item); err != nil {
+				return err
+			}
 			continue
 		}
 		key := item.Set + "/"
@@ -282,24 +323,6 @@ func (c *Client) renameAlbum(li ListItem, name string) (retErr error) {
 	md := stingle.EncryptAlbumMetadata(stingle.AlbumMetadata{Name: name}, pk)
 	al.Albums[albumID].Metadata = md
 	al.Albums[albumID].DateModified = nowJSON()
-
-	if !li.Album.LocalOnly {
-		params := make(map[string]string)
-		params["albumId"] = albumID
-		params["metadata"] = md
-
-		form := url.Values{}
-		form.Set("token", c.Token)
-		form.Set("params", c.encodeParams(params))
-
-		sr, err := c.sendRequest("/v2/sync/renameAlbum", form)
-		if err != nil {
-			return err
-		}
-		if sr.Status != "ok" {
-			return sr
-		}
-	}
 	return commit(true, nil)
 }
 
@@ -318,20 +341,6 @@ func (c *Client) moveFiles(fromItems []ListItem, toItem ListItem, moving bool) (
 
 	if fromSet == toSet && fromAlbumID == toAlbumID {
 		return fmt.Errorf("source and destination are the same: %s", toItem.Filename)
-	}
-	if toAlbum != nil && toAlbum.LocalOnly {
-		allLocal := true
-		for _, item := range fromItems {
-			if !item.FSFile.LocalOnly {
-				allLocal = false
-				break
-			}
-		}
-		if !allLocal {
-			if err := c.createRemoteAlbum(toAlbum); err != nil {
-				return err
-			}
-		}
 	}
 
 	sk, pk := c.SecretKey, c.SecretKey.PublicKey()
@@ -355,16 +364,6 @@ func (c *Client) moveFiles(fromItems []ListItem, toItem ListItem, moving bool) (
 	}
 	defer commit(false, &retErr)
 
-	params := make(map[string]string)
-	params["setFrom"] = fromSet
-	params["setTo"] = toSet
-	params["albumIdFrom"] = fromAlbumID
-	params["albumIdTo"] = toAlbumID
-	params["isMoving"] = "0"
-	if moving {
-		params["isMoving"] = "1"
-	}
-	count := 0
 	for _, item := range fromItems {
 		ff := item.FSFile
 		if moving {
@@ -384,32 +383,10 @@ func (c *Client) moveFiles(fromItems []ListItem, toItem ListItem, moving bool) (
 				return err
 			}
 			ff.Headers = h
-			if !ff.LocalOnly {
-				params[fmt.Sprintf("headers%d", count)] = h
-			}
-		}
-		if !ff.LocalOnly {
-			params[fmt.Sprintf("filename%d", count)] = ff.File
-			count++
 		}
 		ff.DateModified = nowJSON()
 		ff.AlbumID = toAlbumID
 		fs[1].Files[ff.File] = &ff
-	}
-	params["count"] = fmt.Sprintf("%d", count)
-
-	if count > 0 {
-		form := url.Values{}
-		form.Set("token", c.Token)
-		form.Set("params", c.encodeParams(params))
-
-		sr, err := c.sendRequest("/v2/sync/moveFile", form)
-		if err != nil {
-			return err
-		}
-		if sr.Status != "ok" {
-			return sr
-		}
 	}
 	return commit(true, nil)
 }
@@ -421,53 +398,11 @@ func (c *Client) deleteFiles(li []ListItem) (retErr error) {
 	}
 	defer commit(false, &retErr)
 
-	params := make(map[string]string)
-	count := 0
 	for _, item := range li {
 		if _, ok := fs.Files[item.FSFile.File]; ok {
 			fmt.Fprintf(c.writer, "Deleting %s\n", item.Filename)
 			delete(fs.Files, item.FSFile.File)
-			if !item.FSFile.LocalOnly {
-				params[fmt.Sprintf("filename%d", count)] = item.FSFile.File
-				count++
-			}
-		}
-	}
-	params["count"] = fmt.Sprintf("%d", count)
-	if count > 0 {
-		form := url.Values{}
-		form.Set("token", c.Token)
-		form.Set("params", c.encodeParams(params))
-
-		sr, err := c.sendRequest("/v2/sync/delete", form)
-		if err != nil {
-			return err
-		}
-		if sr.Status != "ok" {
-			return sr
 		}
 	}
 	return commit(true, nil)
-}
-
-func (c *Client) editPerms(album *stingle.Album) error {
-	ja, err := json.Marshal(album)
-	if err != nil {
-		return err
-	}
-	params := make(map[string]string)
-	params["album"] = string(ja)
-
-	form := url.Values{}
-	form.Set("token", c.Token)
-	form.Set("params", c.encodeParams(params))
-
-	sr, err := c.sendRequest("/v2/sync/editPerms", form)
-	if err != nil {
-		return err
-	}
-	if sr.Status != "ok" {
-		return sr
-	}
-	return nil
 }

@@ -18,15 +18,16 @@ import (
 
 // ListItem is the information returned by GlobFiles() for each item.
 type ListItem struct {
-	Filename string         // kringle representation, e.g. album/ or album/file.jpg
-	IsDir    bool           // Whether this is a directory, i.e. gallery, trash, or album.
-	Header   stingle.Header // The decrypted file header.
-	FilePath string         // Path where the file content is stored.
-	FileSet  string         // Path where the FileSet is stored.
-	FSFile   stingle.File   // The stingle.File object for this item.
-	DirSize  int            // The number of items in the directory.
-	Set      string         // The Set value, i.e. "0" for gallery, "1" for trash, "2" for albums.
-	Album    *stingle.Album // Pointer to stingle.Album if this is part of an album.
+	Filename  string         // kringle representation, e.g. album/ or album/file.jpg
+	IsDir     bool           // Whether this is a directory, i.e. gallery, trash, or album.
+	Header    stingle.Header // The decrypted file header.
+	FilePath  string         // Path where the file content is stored.
+	FileSet   string         // Path where the FileSet is stored.
+	FSFile    stingle.File   // The stingle.File object for this item.
+	DirSize   int            // The number of items in the directory.
+	Set       string         // The Set value, i.e. "0" for gallery, "1" for trash, "2" for albums.
+	Album     *stingle.Album // Pointer to stingle.Album if this is part of an album.
+	LocalOnly bool           // Indicates that this item only exists locally.
 }
 
 // GlobFiles returns files that match the glob patterns.
@@ -64,16 +65,18 @@ func (c *Client) glob(pattern string) ([]ListItem, error) {
 		set     string
 		sk      stingle.SecretKey
 		album   *stingle.Album
+		local   bool
 	}
 	dirs := []dir{
-		{"gallery", galleryFile, stingle.GallerySet, c.SecretKey, nil},
-		{"trash", trashFile, stingle.TrashSet, c.SecretKey, nil},
+		{"gallery", galleryFile, stingle.GallerySet, c.SecretKey, nil, false},
+		{"trash", trashFile, stingle.TrashSet, c.SecretKey, nil, false},
 	}
 	var al AlbumList
 	if _, err := c.storage.ReadDataFile(c.fileHash(albumList), &al); err != nil {
 		return nil, err
 	}
 	for _, album := range al.Albums {
+		local := al.RemoteAlbums[album.AlbumID] == nil
 		ask, err := album.SK(c.SecretKey)
 		if err != nil {
 			return nil, err
@@ -82,7 +85,7 @@ func (c *Client) glob(pattern string) ([]ListItem, error) {
 		if err != nil {
 			return nil, err
 		}
-		dirs = append(dirs, dir{md.Name, albumPrefix + album.AlbumID, stingle.AlbumSet, ask, album})
+		dirs = append(dirs, dir{md.Name, albumPrefix + album.AlbumID, stingle.AlbumSet, ask, album, local})
 	}
 
 	var out []ListItem
@@ -99,18 +102,20 @@ func (c *Client) glob(pattern string) ([]ListItem, error) {
 		// Only show directories.
 		if len(pathElems) == 1 {
 			li := ListItem{
-				Filename: d.name + "/",
-				FileSet:  d.fileSet,
-				IsDir:    true,
-				DirSize:  len(fs.Files),
-				Set:      d.set,
-				Album:    d.album,
+				Filename:  d.name + "/",
+				FileSet:   d.fileSet,
+				IsDir:     true,
+				DirSize:   len(fs.Files),
+				Set:       d.set,
+				Album:     d.album,
+				LocalOnly: d.local,
 			}
 			out = append(out, li)
 			continue
 		}
 		// Look for matching files.
 		for _, f := range fs.Files {
+			local := fs.RemoteFiles[f.File] == nil
 			hdrs, err := stingle.DecryptBase64Headers(f.Headers, d.sk)
 			if err != nil {
 				return nil, err
@@ -118,13 +123,14 @@ func (c *Client) glob(pattern string) ([]ListItem, error) {
 			fn := string(hdrs[0].Filename)
 			if matched, _ := path.Match(pathElems[1], fn); matched {
 				out = append(out, ListItem{
-					Filename: d.name + "/" + fn,
-					Header:   hdrs[0],
-					FilePath: c.blobPath(f.File, false),
-					FileSet:  d.fileSet,
-					FSFile:   *f,
-					Set:      d.set,
-					Album:    d.album,
+					Filename:  d.name + "/" + fn,
+					Header:    hdrs[0],
+					FilePath:  c.blobPath(f.File, false),
+					FileSet:   d.fileSet,
+					FSFile:    *f,
+					Set:       d.set,
+					Album:     d.album,
+					LocalOnly: local,
 				})
 			}
 		}
@@ -179,7 +185,7 @@ func (c *Client) ListFiles(patterns []string) error {
 				sort.Strings(ml)
 				s += strings.Join(ml, ", ")
 			}
-			if item.Album != nil && item.Album.LocalOnly {
+			if item.LocalOnly {
 				s += ", Local"
 			}
 			s += "\n"
@@ -201,11 +207,9 @@ func (c *Client) ListFiles(patterns []string) error {
 			if lat, lon, err := x.LatLong(); err == nil {
 				exifData = exifData + fmt.Sprintf(" GPS: %f,%f", lat, lon)
 			}
-		} else if errors.Is(err, os.ErrNotExist) {
-			exifData = " (remote only)"
 		}
 		local := ""
-		if item.FSFile.LocalOnly {
+		if item.LocalOnly {
 			local = " Local"
 		}
 		ms, _ := item.FSFile.DateCreated.Int64()
