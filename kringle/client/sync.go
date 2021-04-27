@@ -53,7 +53,13 @@ func (c *Client) Sync(dryrun bool) error {
 	if err != nil {
 		return err
 	}
-	return c.applyDiffs(d, dryrun)
+	if err := c.applyDiffs(d, dryrun); err != nil {
+		return err
+	}
+	if dryrun {
+		return nil
+	}
+	return c.GetUpdates(true)
 }
 
 func (c *Client) applyDiffs(d *albumDiffs, dryrun bool) error {

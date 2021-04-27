@@ -3,21 +3,11 @@
 package client_test
 
 import (
-	"fmt"
-	"image"
-	"image/jpeg"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
 
-	"kringle/client"
-	"kringle/crypto"
-	"kringle/database"
-	"kringle/log"
-	"kringle/secure"
-	"kringle/server"
+	"github.com/go-test/deep"
 )
 
 func TestLoginLogout(t *testing.T) {
@@ -40,7 +30,7 @@ func TestImportExportSync(t *testing.T) {
 	}
 
 	testdir := t.TempDir()
-	if err := makeImages(testdir, 10); err != nil {
+	if err := makeImages(testdir, 0, 10); err != nil {
 		t.Fatalf("makeImages: %v", err)
 	}
 	if n, err := c.ImportFiles([]string{filepath.Join(testdir, "*")}, "gallery"); err != nil {
@@ -97,56 +87,133 @@ func TestImportExportSync(t *testing.T) {
 	}
 }
 
-func startServer(t *testing.T) (*client.Client, func()) {
+func TestCopyMoveDelete(t *testing.T) {
+	c, done := startServer(t)
+	defer done()
+	if err := login(c, "alice@", "pass"); err != nil {
+		t.Fatalf("login: %v", err)
+	}
+
 	testdir := t.TempDir()
-	log.Record = t.Log
-	log.Level = 3
-	db := database.New(filepath.Join(testdir, "data"), "")
-	s := server.New(db, "", "")
-	s.AllowCreateAccount = true
+	if err := makeImages(testdir, 0, 5); err != nil {
+		t.Fatalf("makeImages: %v", err)
+	}
+	if n, err := c.ImportFiles([]string{filepath.Join(testdir, "*")}, "gallery"); err != nil {
+		t.Errorf("c.ImportFiles: %v", err)
+	} else if want, got := 5, n; want != got {
+		t.Errorf("Unexpected ImportFiles result. Want %d, got %d", want, got)
+	}
 
-	srv := httptest.NewServer(s.Handler())
-	c := newClient(t, srv.Client())
-	c.ServerBaseURL = srv.URL
-	return c, srv.Close
-}
+	if err := c.AddAlbums([]string{"alpha", "beta", "charlie"}); err != nil {
+		t.Fatalf("AddAlbums: %v", err)
+	}
 
-func newClient(t *testing.T, hc *http.Client) *client.Client {
-	testdir := t.TempDir()
-	masterKey, err := crypto.CreateMasterKey()
+	if err := c.Copy([]string{"gallery/image00[0-1].jpg"}, "alpha"); err != nil {
+		t.Fatalf("c.Copy: %v", err)
+	}
+
+	if err := c.Move([]string{"gallery/image00[2-3].jpg"}, "beta"); err != nil {
+		t.Fatalf("c.Move: %v", err)
+	}
+
+	want := []string{
+		"alpha/ LOCAL",
+		"beta/ LOCAL",
+		"charlie/ LOCAL",
+		"gallery/",
+		"trash/",
+		"alpha/image000.jpg LOCAL",
+		"alpha/image001.jpg LOCAL",
+		"beta/image002.jpg LOCAL",
+		"beta/image003.jpg LOCAL",
+		"gallery/image000.jpg LOCAL",
+		"gallery/image001.jpg LOCAL",
+		"gallery/image004.jpg LOCAL",
+	}
+	got, err := globAll(c)
 	if err != nil {
-		t.Fatalf("Failed to create master key: %v", err)
+		t.Fatalf("globAll: %v", err)
 	}
-	storage := secure.NewStorage(testdir, &masterKey.EncryptionKey)
-	c, err := client.Create(storage)
-	if err != nil {
-		t.Fatalf("client.Create: %v", err)
+	if diff := deep.Equal(want, got); diff != nil {
+		t.Fatalf("Unexpected file list. Diff: %v", diff)
 	}
-	c.SetHTTPClient(hc)
-	return c
-}
 
-func login(c *client.Client, email, password string) error {
-	if err := c.CreateAccount(email, password); err != nil {
-		return err
+	if err := c.Delete([]string{"alpha/image000.jpg", "gallery/image004.jpg"}); err != nil {
+		t.Fatalf("c.Delete: %v", err)
 	}
-	return c.Login(email, password)
-}
 
-func makeImages(dir string, n int) error {
-	img := image.NewRGBA(image.Rect(0, 0, 100, 100))
-	for i := 0; i < n; i++ {
-		fn := filepath.Join(dir, fmt.Sprintf("image%d.jpg", i))
-		f, err := os.Create(fn)
-		if err != nil {
-			return err
-		}
-		if err := jpeg.Encode(f, img, &jpeg.Options{Quality: 70}); err != nil {
-			return err
-		}
-		if err := f.Close(); err != nil {
-			return err
-		}
+	want = []string{
+		"alpha/ LOCAL",
+		"beta/ LOCAL",
+		"charlie/ LOCAL",
+		"gallery/",
+		"trash/",
+		"alpha/image001.jpg LOCAL",
+		"beta/image002.jpg LOCAL",
+		"beta/image003.jpg LOCAL",
+		"gallery/image000.jpg LOCAL",
+		"gallery/image001.jpg LOCAL",
+		"trash/image000.jpg LOCAL",
+		"trash/image004.jpg LOCAL",
 	}
-	return nil
+	if got, err = globAll(c); err != nil {
+		t.Fatalf("globAll: %v", err)
+	}
+	if diff := deep.Equal(want, got); diff != nil {
+		t.Fatalf("Unexpected file list. Diff: %v", diff)
+	}
+
+	if err := c.Delete([]string{"trash/*"}); err != nil {
+		t.Fatalf("c.Delete: %v", err)
+	}
+
+	want = []string{
+		"alpha/ LOCAL",
+		"beta/ LOCAL",
+		"charlie/ LOCAL",
+		"gallery/",
+		"trash/",
+		"alpha/image001.jpg LOCAL",
+		"beta/image002.jpg LOCAL",
+		"beta/image003.jpg LOCAL",
+		"gallery/image000.jpg LOCAL",
+		"gallery/image001.jpg LOCAL",
+	}
+	if got, err = globAll(c); err != nil {
+		t.Fatalf("globAll: %v", err)
+	}
+	if diff := deep.Equal(want, got); diff != nil {
+		t.Fatalf("Unexpected file list. Diff: %v", diff)
+	}
+
+	// Delete alpha should fail because it's not empty.
+	if err := c.Delete([]string{"alpha"}); err == nil {
+		t.Fatal("c.Delete succeeded unexpectedly.")
+	}
+	// Delete charlie should succeed because it is empty.
+	if err := c.Delete([]string{"charlie"}); err != nil {
+		t.Fatalf("c.Delete: %v", err)
+	}
+
+	if err := c.Sync(false); err != nil {
+		t.Fatalf("c.Sync: %v", err)
+	}
+
+	want = []string{
+		"alpha/",
+		"beta/",
+		"gallery/",
+		"trash/",
+		"alpha/image001.jpg",
+		"beta/image002.jpg",
+		"beta/image003.jpg",
+		"gallery/image000.jpg",
+		"gallery/image001.jpg",
+	}
+	if got, err = globAll(c); err != nil {
+		t.Fatalf("globAll: %v", err)
+	}
+	if diff := deep.Equal(want, got); diff != nil {
+		t.Fatalf("Unexpected file list. Diff: %v", diff)
+	}
 }
