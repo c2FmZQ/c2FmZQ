@@ -219,7 +219,7 @@ func (r *Response) AddError(value string) *Response {
 	return r
 }
 
-// Send sends the .
+// Send sends the Response.
 func (r Response) Send(w io.Writer) error {
 	if r.Status == "" {
 		log.Panic("Response has empty status")
