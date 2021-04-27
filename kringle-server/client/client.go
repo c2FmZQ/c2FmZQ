@@ -32,8 +32,9 @@ func Create(s *secure.Storage) (*Client, error) {
 	if err := s.CreateEmptyFile(s.HashString(configFile), &c); err != nil {
 		return nil, err
 	}
-	c.writer = os.Stdout
+	c.hc = &http.Client{}
 	c.storage = s
+	c.writer = os.Stdout
 	return &c, nil
 }
 
@@ -43,8 +44,9 @@ func Load(s *secure.Storage) (*Client, error) {
 	if _, err := s.ReadDataFile(s.HashString(configFile), &c); err != nil {
 		return nil, err
 	}
-	c.writer = os.Stdout
+	c.hc = &http.Client{}
 	c.storage = s
+	c.writer = os.Stdout
 	return &c, nil
 }
 
@@ -59,20 +61,18 @@ type Client struct {
 	ServerBaseURL string `json:"serverBaseURL"`
 	HomeDir       string `json:"homeDir"`
 
+	hc *http.Client
+
 	storage *secure.Storage
 	writer  io.Writer
 }
 
-func nowString() string {
-	return fmt.Sprintf("%d", time.Now().UnixNano()/1000000)
-}
-
-func nowJSON() json.Number {
-	return json.Number(nowString())
-}
-
 func (c *Client) SetWriter(w io.Writer) {
 	c.writer = w
+}
+
+func (c *Client) SetHTTPClient(hc *http.Client) {
+	c.hc = hc
 }
 
 func (c *Client) Printf(format string, args ...interface{}) {
@@ -81,6 +81,14 @@ func (c *Client) Printf(format string, args ...interface{}) {
 
 func (c *Client) Print(args ...interface{}) {
 	fmt.Fprintln(c.writer, args...)
+}
+
+func nowString() string {
+	return fmt.Sprintf("%d", time.Now().UnixNano()/1000000)
+}
+
+func nowJSON() json.Number {
+	return json.Number(nowString())
 }
 
 func (c *Client) fileHash(fn string) string {
@@ -97,12 +105,11 @@ func (c *Client) sendRequest(uri string, form url.Values) (*stingle.Response, er
 	if c.ServerBaseURL == "" {
 		return nil, errors.New("ServerBaseURL is not set")
 	}
-	hc := http.Client{}
 	url := c.ServerBaseURL + uri
 
 	log.Debugf("SEND POST %v", url)
 	log.Debugf(" %v", form)
-	resp, err := hc.PostForm(url, form)
+	resp, err := c.hc.PostForm(url, form)
 	if err != nil {
 		return nil, err
 	}
@@ -131,12 +138,11 @@ func (c *Client) download(file, set, thumb string) (io.ReadCloser, error) {
 	form.Set("set", set)
 	form.Set("thumb", thumb)
 
-	hc := http.Client{}
 	url := c.ServerBaseURL + "/v2/sync/download"
 
 	log.Debugf("SEND POST %v", url)
 	log.Debugf(" %v", form)
-	resp, err := hc.PostForm(url, form)
+	resp, err := c.hc.PostForm(url, form)
 	if err != nil {
 		return nil, err
 	}

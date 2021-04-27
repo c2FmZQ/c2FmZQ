@@ -53,130 +53,187 @@ func (c *Client) Sync(dryrun bool) error {
 	if err != nil {
 		return err
 	}
-	if dryrun {
-		return c.showDiffs(d)
-	}
-	return c.applyDiffs(d)
+	return c.applyDiffs(d, dryrun)
 }
 
-func (c *Client) applyDiffs(d *albumDiffs) error {
-	for _, album := range d.AlbumsToAdd {
-		if err := c.sendAddAlbum(album); err != nil {
+func (c *Client) applyDiffs(d *albumDiffs, dryrun bool) error {
+	var al AlbumList
+	if _, err := c.storage.ReadDataFile(c.fileHash(albumList), &al); err != nil {
+		return err
+	}
+	if len(d.AlbumsToAdd) > 0 {
+		if err := c.applyAlbumsToAdd(d.AlbumsToAdd, dryrun); err != nil {
 			return err
 		}
 	}
-	for _, album := range d.AlbumsToRename {
-		if err := c.sendRenameAlbum(album); err != nil {
+	if len(d.AlbumsToRename) > 0 {
+		if err := c.applyAlbumsToRename(d.AlbumsToRename, dryrun); err != nil {
 			return err
 		}
 	}
-	for _, album := range d.AlbumPermsToChange {
-		if err := c.sendEditPerms(album); err != nil {
+	if len(d.AlbumPermsToChange) > 0 {
+		if err := c.applyAlbumPermsToChange(d.AlbumPermsToChange, dryrun); err != nil {
 			return err
 		}
 	}
 	if len(d.FilesToAdd) > 0 {
-		qCh := make(chan FileLoc)
-		eCh := make(chan error)
-		for i := 0; i < 5; i++ {
-			go c.uploadWorker(qCh, eCh)
-		}
-		go func() {
-			for _, f := range d.FilesToAdd {
-				qCh <- f
-			}
-			close(qCh)
-		}()
-		var errors []error
-		for range d.FilesToAdd {
-			if err := <-eCh; err != nil {
-				errors = append(errors, err)
-			}
-		}
-		if errors != nil {
-			return fmt.Errorf("%w %v", errors[0], errors[1:])
+		if err := c.applyFilesToAdd(d.FilesToAdd, al, dryrun); err != nil {
+			return err
 		}
 	}
-	for k, files := range d.FilesToMove {
-		if err := c.sendMoveFiles(k, files); err != nil {
+	if len(d.FilesToMove) > 0 {
+		if err := c.applyFilesToMove(d.FilesToMove, al, dryrun); err != nil {
 			return err
 		}
 	}
 	if len(d.FilesToDelete) > 0 {
-		var files []*stingle.File
-		for _, f := range d.FilesToDelete {
-			files = append(files, f.File)
-		}
-		if err := c.sendDelete(files); err != nil {
+		if err := c.applyFilesToDelete(d.FilesToDelete, al, dryrun); err != nil {
 			return err
 		}
 	}
-	for _, album := range d.AlbumsToRemove {
-		if err := c.sendDeleteAlbum(album.AlbumID); err != nil {
+	if len(d.AlbumsToRemove) > 0 {
+		if err := c.applyAlbumsToRemove(d.AlbumPermsToChange, dryrun); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (c *Client) showDiffs(d *albumDiffs) error {
-	var al AlbumList
-	if _, err := c.storage.ReadDataFile(c.fileHash(albumList), &al); err != nil {
-		return err
+func (c *Client) applyAlbumsToAdd(albums []*stingle.Album, dryrun bool) error {
+	c.showAlbumsToSync("Albums to add:", albums)
+	if dryrun {
+		return nil
 	}
-
-	if len(d.AlbumsToAdd) > 0 {
-		c.showAlbumsToSync("Albums to add:", d.AlbumsToAdd)
-	}
-	if len(d.AlbumsToRename) > 0 {
-		c.showAlbumsToSync("Albums to rename:", d.AlbumsToRename)
-	}
-	if len(d.AlbumPermsToChange) > 0 {
-		c.showAlbumsToSync("Album permissions to change:", d.AlbumPermsToChange)
-	}
-	if len(d.FilesToAdd) > 0 {
-		c.showFilesToSync("Files to add:", d.FilesToAdd, al)
-	}
-	if len(d.FilesToMove) > 0 {
-		c.Print("Files to move:")
-		for k, v := range d.FilesToMove {
-			src, err := c.translateSetAlbumIDToName(k.SetFrom, k.AlbumIDFrom, al)
-			if err != nil {
-				src = fmt.Sprintf("Set:%s Album:%s", k.SetFrom, k.AlbumIDFrom)
-			}
-			dst, err := c.translateSetAlbumIDToName(k.SetTo, k.AlbumIDTo, al)
-			if err != nil {
-				dst = fmt.Sprintf("Set:%s Album:%s", k.SetTo, k.AlbumIDTo)
-			}
-			op := "Moving"
-			if !k.Moving {
-				op = "Copying"
-			}
-			var files []string
-			for _, f := range v {
-				sk := c.SecretKey
-				if k.AlbumIDTo != "" {
-					sk, err = al.Albums[k.AlbumIDTo].SK(sk)
-					if err != nil {
-						c.Printf("SK: %v\n", err)
-					}
-				}
-				n, err := f.Name(sk)
-				if err != nil {
-					n = f.File
-				}
-				files = append(files, n)
-			}
-			c.Printf("* %s %s -> %s: %s\n", op, src, dst, strings.Join(files, ","))
+	for _, album := range albums {
+		if err := c.sendAddAlbum(album); err != nil {
+			return err
 		}
 	}
-	if len(d.FilesToDelete) > 0 {
-		c.showFilesToSync("Files to delete:", d.FilesToDelete, al)
-	}
-	if len(d.AlbumsToRemove) > 0 {
-		c.showAlbumsToSync("Albums to remove:", d.AlbumsToRemove)
-	}
+	return nil
+}
 
+func (c *Client) applyAlbumsToRename(albums []*stingle.Album, dryrun bool) error {
+	c.showAlbumsToSync("Albums to rename:", albums)
+	if dryrun {
+		return nil
+	}
+	for _, album := range albums {
+		if err := c.sendRenameAlbum(album); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *Client) applyAlbumPermsToChange(albums []*stingle.Album, dryrun bool) error {
+	c.showAlbumsToSync("Album permissions to change:", albums)
+	if dryrun {
+		return nil
+	}
+	for _, album := range albums {
+		if err := c.sendEditPerms(album); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *Client) applyFilesToAdd(files []FileLoc, al AlbumList, dryrun bool) error {
+	c.showFilesToSync("Files to add:", files, al)
+	if dryrun {
+		return nil
+	}
+	qCh := make(chan FileLoc)
+	eCh := make(chan error)
+	for i := 0; i < 5; i++ {
+		go c.uploadWorker(qCh, eCh)
+	}
+	go func() {
+		for _, f := range files {
+			qCh <- f
+		}
+		close(qCh)
+	}()
+	var errors []error
+	for range files {
+		if err := <-eCh; err != nil {
+			errors = append(errors, err)
+		}
+	}
+	if errors != nil {
+		return fmt.Errorf("%w %v", errors[0], errors[1:])
+	}
+	return nil
+}
+
+func (c *Client) applyFilesToMove(moves map[MoveKey][]*stingle.File, al AlbumList, dryrun bool) error {
+	c.Print("Files to move:")
+	for k, v := range moves {
+		src, err := c.translateSetAlbumIDToName(k.SetFrom, k.AlbumIDFrom, al)
+		if err != nil {
+			src = fmt.Sprintf("Set:%s Album:%s", k.SetFrom, k.AlbumIDFrom)
+		}
+		dst, err := c.translateSetAlbumIDToName(k.SetTo, k.AlbumIDTo, al)
+		if err != nil {
+			dst = fmt.Sprintf("Set:%s Album:%s", k.SetTo, k.AlbumIDTo)
+		}
+		op := "Moving"
+		if !k.Moving {
+			op = "Copying"
+		}
+		var files []string
+		for _, f := range v {
+			sk := c.SecretKey
+			if k.AlbumIDTo != "" {
+				sk, err = al.Albums[k.AlbumIDTo].SK(sk)
+				if err != nil {
+					c.Printf("SK: %v\n", err)
+				}
+			}
+			n, err := f.Name(sk)
+			if err != nil {
+				n = f.File
+			}
+			files = append(files, n)
+		}
+		c.Printf("* %s %s -> %s: %s\n", op, src, dst, strings.Join(files, ","))
+	}
+	if dryrun {
+		return nil
+	}
+	for k, files := range moves {
+		if err := c.sendMoveFiles(k, files); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *Client) applyFilesToDelete(toDelete []FileLoc, al AlbumList, dryrun bool) error {
+	c.showFilesToSync("Files to delete:", toDelete, al)
+	if dryrun {
+		return nil
+	}
+	var files []*stingle.File
+	for _, f := range toDelete {
+		files = append(files, f.File)
+	}
+	if err := c.sendDelete(files); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *Client) applyAlbumsToRemove(albums []*stingle.Album, dryrun bool) error {
+	c.showAlbumsToSync("Albums to remove:", albums)
+	if dryrun {
+		return nil
+	}
+	for _, album := range albums {
+		if err := c.sendDeleteAlbum(album.AlbumID); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -410,11 +467,11 @@ func (c *Client) diff() (*albumDiffs, error) {
 }
 
 // Pull downloads all the files matching pattern that are not already present
-// in the local storage.
-func (c *Client) Pull(patterns []string) error {
+// in the local storage. Returns the number of files downloaded.
+func (c *Client) Pull(patterns []string) (int, error) {
 	list, err := c.GlobFiles(patterns)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	files := make(map[string]ListItem)
 	for _, item := range list {
@@ -448,18 +505,19 @@ func (c *Client) Pull(patterns []string) error {
 	if len(files) == 0 {
 		fmt.Fprintln(c.writer, "No files to download.")
 	}
+	count := len(files) - len(errors)
 	if errors != nil {
-		return fmt.Errorf("%w %v", errors[0], errors[1:])
+		return count, fmt.Errorf("%w %v", errors[0], errors[1:])
 	}
-	return nil
+	return count, nil
 }
 
 // Free deletes all the files matching pattern that are already present in the
-// remote storage.
-func (c *Client) Free(patterns []string) error {
+// remote storage. Returns the number of files freed.
+func (c *Client) Free(patterns []string) (int, error) {
 	list, err := c.GlobFiles(patterns)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	count := 0
 	for _, item := range list {
@@ -472,14 +530,14 @@ func (c *Client) Free(patterns []string) error {
 		}
 		fmt.Fprintf(c.writer, "Freeing %s\n", item.Filename)
 		if err := os.Remove(fn); err != nil {
-			return err
+			return count, err
 		}
 		count++
 	}
 	if count == 0 {
 		fmt.Fprintln(c.writer, "There are no files to free.")
 	}
-	return nil
+	return count, nil
 }
 
 func (c *Client) blobPath(name string, thumb bool) string {
@@ -530,8 +588,6 @@ func (c *Client) downloadFile(li ListItem) error {
 }
 
 func (c *Client) uploadFile(item FileLoc) error {
-	hc := http.Client{}
-
 	pr, pw := io.Pipe()
 	w := multipart.NewWriter(pw)
 
@@ -584,7 +640,7 @@ func (c *Client) uploadFile(item FileLoc) error {
 
 	url := c.ServerBaseURL + "/v2/sync/upload"
 
-	resp, err := hc.Post(url, w.FormDataContentType(), pr)
+	resp, err := c.hc.Post(url, w.FormDataContentType(), pr)
 	if err != nil {
 		return err
 	}

@@ -233,6 +233,10 @@ func (c *Client) Move(patterns []string, dest string) error {
 	if len(di) != 1 || !di[0].IsDir {
 		return fmt.Errorf("destination must be a directory: %s", dest)
 	}
+	dst := di[0]
+	if dst.Album.IsShared.String() == "1" && dst.Album.IsOwner.String() != "1" && !stingle.Permissions(dst.Album.Permissions).AllowAdd() {
+		return fmt.Errorf("adding is not allowed: %s", dest)
+	}
 	for _, item := range si {
 		if item.IsDir {
 			return fmt.Errorf("cannot move a directory to another directory: %s", item.Filename)
@@ -247,7 +251,7 @@ func (c *Client) Move(patterns []string, dest string) error {
 		groups[key] = append(groups[key], item)
 	}
 	for _, li := range groups {
-		if err := c.moveFiles(li, di[0], true); err != nil {
+		if err := c.moveFiles(li, dst, true); err != nil {
 			return err
 		}
 	}

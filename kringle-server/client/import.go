@@ -28,27 +28,30 @@ import (
 	"kringle-server/stingle"
 )
 
-// ImportFiles encrypts and imports files.
-func (c *Client) ImportFiles(patterns []string, dir string) error {
+// ImportFiles encrypts and imports files. Returns the number of files imported.
+func (c *Client) ImportFiles(patterns []string, dir string) (int, error) {
 	dir = strings.TrimSuffix(dir, "/")
 	li, err := c.glob(dir)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	if len(li) != 1 || !li[0].IsDir {
-		return fmt.Errorf("%s is not a directory", dir)
+		return 0, fmt.Errorf("%s is not a directory", dir)
 	}
 	dst := li[0]
 	pk := c.SecretKey.PublicKey()
 	if dst.Album != nil {
+		if dst.Album.IsShared.String() == "1" && dst.Album.IsOwner.String() != "1" && !stingle.Permissions(dst.Album.Permissions).AllowAdd() {
+			return 0, fmt.Errorf("adding is not allowed: %s", dir)
+		}
 		if pk, err = dst.Album.PK(); err != nil {
-			return err
+			return 0, err
 		}
 	}
 
 	existingItems, err := c.glob(dir + "/*")
 	if err != nil {
-		return err
+		return 0, err
 	}
 	exist := make(map[string]bool)
 	for _, item := range existingItems {
@@ -60,10 +63,11 @@ func (c *Client) ImportFiles(patterns []string, dir string) error {
 	for _, p := range patterns {
 		m, err := filepath.Glob(p)
 		if err != nil {
-			return err
+			return 0, err
 		}
 		files = append(files, m...)
 	}
+	count := 0
 	for _, file := range files {
 		_, fn := filepath.Split(file)
 		if exist[fn] {
@@ -72,10 +76,11 @@ func (c *Client) ImportFiles(patterns []string, dir string) error {
 		}
 		fmt.Fprintf(c.writer, "Importing %s -> %s\n", file, dir)
 		if err := c.importFile(file, dst, pk); err != nil {
-			return err
+			return count, err
 		}
+		count++
 	}
-	return nil
+	return count, nil
 }
 
 func (c *Client) importFile(file string, dst ListItem, pk stingle.PublicKey) error {

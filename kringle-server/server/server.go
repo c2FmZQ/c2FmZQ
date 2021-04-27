@@ -163,6 +163,11 @@ func (s *Server) Shutdown() error {
 	return s.srv.Shutdown(context.Background())
 }
 
+// Handler returns the server's http.Handler. Used for testing.
+func (s *Server) Handler() http.Handler {
+	return s.wrapHandler()
+}
+
 // decodeParams decodes the params value that's parsed to most API endpoints.
 // It is an encrypted json object representing key:value pairs.
 // Returns the decrypted key:value pairs as a map.

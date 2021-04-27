@@ -11,13 +11,14 @@ import (
 	"kringle-server/stingle"
 )
 
-func (c *Client) ExportFiles(patterns []string, dir string) error {
+// ExportFiles decrypts and exports files to dir. Returns the number of files exported.
+func (c *Client) ExportFiles(patterns []string, dir string) (int, error) {
 	if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
-		return fmt.Errorf("%s is not a directory", dir)
+		return 0, fmt.Errorf("%s is not a directory", dir)
 	}
 	li, err := c.GlobFiles(patterns)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	qCh := make(chan ListItem)
 	eCh := make(chan error)
@@ -36,19 +37,17 @@ func (c *Client) ExportFiles(patterns []string, dir string) error {
 			errors = append(errors, err)
 		}
 	}
+	count := len(li) - len(errors)
 	if errors != nil {
-		fmt.Fprintf(c.writer, "Files exported successfully: %d, %d with errors.\n", len(li)-len(errors), len(errors))
-	} else {
-		fmt.Fprintf(c.writer, "Files exported successfully: %d\n", len(li))
+		return count, fmt.Errorf("%w %v", errors[0], errors[1:])
 	}
-	if errors != nil {
-		return fmt.Errorf("%w %v", errors[0], errors[1:])
-	}
-	return nil
+	return count, nil
 }
 
 func (c *Client) exportWorker(ch <-chan ListItem, out chan<- error, dir string) {
 	for i := range ch {
+		_, fn := filepath.Split(string(i.Header.Filename))
+		c.Printf("Exporting %s\n", filepath.Join(dir, fn))
 		out <- c.exportFile(i, dir)
 	}
 }

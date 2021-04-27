@@ -448,7 +448,8 @@ func (k *kringle) pullFiles(ctx *cli.Context) error {
 	if ctx.Args().Len() > 0 {
 		patterns = ctx.Args().Slice()
 	}
-	return k.client.Pull(patterns)
+	_, err := k.client.Pull(patterns)
+	return err
 }
 
 func (k *kringle) syncFiles(ctx *cli.Context) error {
@@ -466,7 +467,8 @@ func (k *kringle) freeFiles(ctx *cli.Context) error {
 	if ctx.Args().Len() > 0 {
 		patterns = ctx.Args().Slice()
 	}
-	return k.client.Free(patterns)
+	_, err := k.client.Free(patterns)
+	return err
 }
 
 func (k *kringle) createAlbum(ctx *cli.Context) error {
@@ -583,7 +585,8 @@ func (k *kringle) exportFiles(ctx *cli.Context) error {
 	}
 	patterns := args[:len(args)-1]
 	dir := args[len(args)-1]
-	return k.client.ExportFiles(patterns, dir)
+	_, err := k.client.ExportFiles(patterns, dir)
+	return err
 }
 
 func (k *kringle) importFiles(ctx *cli.Context) error {
@@ -597,5 +600,6 @@ func (k *kringle) importFiles(ctx *cli.Context) error {
 	}
 	patterns := args[:len(args)-1]
 	dir := args[len(args)-1]
-	return k.client.ImportFiles(patterns, dir)
+	_, err := k.client.ImportFiles(patterns, dir)
+	return err
 }
