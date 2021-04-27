@@ -25,6 +25,9 @@ func DecryptBase64Headers(hdrs string, sk SecretKey) ([]Header, error) {
 		}
 		out = append(out, h)
 	}
+	if len(out) != 2 {
+		return nil, errors.New("invalid headers")
+	}
 	return out, nil
 }
 

@@ -16,6 +16,9 @@ func DecryptAlbumMetadata(md string, sk SecretKey) (*AlbumMetadata, error) {
 	if err != nil {
 		return nil, err
 	}
+	if len(b) < 5 {
+		return nil, errors.New("invalid metadata")
+	}
 	if b[0] != 1 {
 		return nil, errors.New("unexpected version")
 	}
