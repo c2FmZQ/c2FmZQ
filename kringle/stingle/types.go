@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"reflect"
 
 	"kringle/log"
 )
@@ -88,6 +89,13 @@ func (a Album) Name(sk SecretKey) (string, error) {
 		return "", err
 	}
 	return md.Name, nil
+}
+
+func (a *Album) Equals(b *Album) bool {
+	if b == nil {
+		return false
+	}
+	return reflect.DeepEqual(*a, *b)
 }
 
 // Permissions that control what album members can do.

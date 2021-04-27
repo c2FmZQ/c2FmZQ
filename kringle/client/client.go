@@ -59,7 +59,6 @@ type Client struct {
 	Token           string            `json:"token"`
 
 	ServerBaseURL string `json:"serverBaseURL"`
-	HomeDir       string `json:"homeDir"`
 
 	hc *http.Client
 

@@ -19,33 +19,42 @@ import (
 	"kringle/server"
 )
 
+var (
+	hc  *http.Client
+	url string
+)
+
 func startServer(t *testing.T) (*client.Client, func()) {
 	testdir := t.TempDir()
 	log.Record = t.Log
-	log.Level = 3
+	log.Level = 2
 	db := database.New(filepath.Join(testdir, "data"), "")
 	s := server.New(db, "", "")
 	s.AllowCreateAccount = true
 
 	srv := httptest.NewServer(s.Handler())
-	c := newClient(t, srv.Client())
-	c.ServerBaseURL = srv.URL
+	hc = srv.Client()
+	url = srv.URL
+	c, err := newClient(t.TempDir())
+	if err != nil {
+		t.Fatalf("newClient: %v", err)
+	}
 	return c, srv.Close
 }
 
-func newClient(t *testing.T, hc *http.Client) *client.Client {
-	testdir := t.TempDir()
+func newClient(dir string) (*client.Client, error) {
 	masterKey, err := crypto.CreateMasterKey()
 	if err != nil {
-		t.Fatalf("Failed to create master key: %v", err)
+		return nil, err
 	}
-	storage := secure.NewStorage(testdir, &masterKey.EncryptionKey)
+	storage := secure.NewStorage(dir, &masterKey.EncryptionKey)
 	c, err := client.Create(storage)
 	if err != nil {
-		t.Fatalf("client.Create: %v", err)
+		return nil, err
 	}
 	c.SetHTTPClient(hc)
-	return c
+	c.ServerBaseURL = url
+	return c, nil
 }
 
 func login(c *client.Client, email, password string) error {

@@ -53,6 +53,11 @@ func (c *Client) Sync(dryrun bool) error {
 	if err != nil {
 		return err
 	}
+	if d.AlbumsToAdd == nil && d.AlbumsToRemove == nil && d.AlbumsToRename == nil && d.AlbumPermsToChange == nil &&
+		d.FilesToAdd == nil && d.FilesToMove == nil && d.FilesToDelete == nil {
+		c.Print("Already synced.")
+		return nil
+	}
 	if err := c.applyDiffs(d, dryrun); err != nil {
 		return err
 	}
@@ -98,7 +103,7 @@ func (c *Client) applyDiffs(d *albumDiffs, dryrun bool) error {
 		}
 	}
 	if len(d.AlbumsToRemove) > 0 {
-		if err := c.applyAlbumsToRemove(d.AlbumPermsToChange, dryrun); err != nil {
+		if err := c.applyAlbumsToRemove(d.AlbumsToRemove, dryrun); err != nil {
 			return err
 		}
 	}

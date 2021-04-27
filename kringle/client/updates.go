@@ -127,7 +127,6 @@ func (c *Client) processAlbumUpdates(updates []stingle.Album) (retErr error) {
 			al.LastUpdateTime = d
 		}
 	}
-	log.Debugf("AlbumList: [%d] %#v", len(al.RemoteAlbums), al)
 	return nil
 }
 
@@ -153,20 +152,22 @@ func (c *Client) processContactUpdates(updates []stingle.Contact) (retErr error)
 			cl.LastUpdateTime = d
 		}
 	}
-	log.Debugf("Contacts: [%d] %#v", len(cl.Contacts), cl)
 	return nil
 }
 
-func (c *Client) processFileUpdates(name string, updates []stingle.File) (retErr error) {
+func (c *Client) processFileUpdates(name string, updates []stingle.File) (n int, retErr error) {
 	if len(updates) == 0 {
-		return nil
+		return 0, nil
 	}
 	commit, fs, err := c.fileSetForUpdate(name)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer commit(true, &retErr)
 	for _, up := range updates {
+		if _, ok := fs.RemoteFiles[up.File]; !ok {
+			n++
+		}
 		nf := up
 		fs.RemoteFiles[up.File] = &nf
 		fs.Files[up.File] = &nf
@@ -175,11 +176,17 @@ func (c *Client) processFileUpdates(name string, updates []stingle.File) (retErr
 			fs.LastUpdateTime = d
 		}
 	}
-	log.Debugf("FileSet(%q): [%d] %#v", name, len(fs.RemoteFiles), fs)
-	return nil
+	return n, nil
 }
 
 func (c *Client) processAlbumFileUpdates(updates []stingle.File) (retErr error) {
+	var al AlbumList
+	commit, err := c.storage.OpenForUpdate(c.fileHash(albumList), &al)
+	if err != nil {
+		return err
+	}
+	defer commit(true, &retErr)
+
 	albums := make(map[string]struct{})
 	for _, f := range updates {
 		albums[f.AlbumID] = struct{}{}
@@ -191,8 +198,22 @@ func (c *Client) processAlbumFileUpdates(updates []stingle.File) (retErr error) 
 				u = append(u, f)
 			}
 		}
-		if err := c.processFileUpdates(albumPrefix+a, u); err != nil {
+
+		n, err := c.processFileUpdates(albumPrefix+a, u)
+		if err != nil {
 			return err
+		}
+		if n == 0 {
+			continue
+		}
+		// If the album was deleted locally, bring it back since there
+		// are new files.
+		if _, ok := al.Albums[a]; !ok {
+			al.Albums[a] = al.RemoteAlbums[a]
+			if album := al.Albums[a]; album != nil {
+				name, _ := album.Name(c.SecretKey)
+				log.Debugf("Album recovered %s (%s)", name, a)
+			}
 		}
 	}
 	return nil
@@ -222,8 +243,20 @@ func (c *Client) processDeleteFiles(name string, deletes []stingle.DeleteEvent) 
 			fs.LastDeleteTime = d
 		}
 	}
-	log.Debugf("FileSet(%q): [%d] %#v", name, len(fs.RemoteFiles), fs)
 	return nil
+}
+
+func (c *Client) albumHasLocalFileChanges(albumID string) (bool, error) {
+	var fs FileSet
+	if _, err := c.storage.ReadDataFile(c.fileHash(albumPrefix+albumID), &fs); err != nil {
+		return false, err
+	}
+	for f := range fs.Files {
+		if _, ok := fs.RemoteFiles[f]; !ok {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (c *Client) processDeleteAlbums(deletes []stingle.DeleteEvent) (retErr error) {
@@ -237,8 +270,16 @@ func (c *Client) processDeleteAlbums(deletes []stingle.DeleteEvent) (retErr erro
 		d, _ := del.Date.Int64()
 		if a, ok := al.Albums[del.AlbumID]; ok {
 			ad, _ := a.DateModified.Int64()
-			if d > ad {
+			name, _ := a.Name(c.SecretKey)
+			localChanges, err := c.albumHasLocalFileChanges(del.AlbumID)
+			if err != nil {
+				return err
+			}
+			if d > ad && a.Equals(al.RemoteAlbums[del.AlbumID]) && !localChanges {
+				log.Debugf("Album deleted: %s (%s)", name, a.AlbumID)
 				delete(al.Albums, del.AlbumID)
+			} else {
+				log.Debugf("Album NOT deleted: %s (%s)", name, a.AlbumID)
 			}
 		}
 		if a, ok := al.RemoteAlbums[del.AlbumID]; ok {
@@ -256,7 +297,6 @@ func (c *Client) processDeleteAlbums(deletes []stingle.DeleteEvent) (retErr erro
 			al.LastDeleteTime = d
 		}
 	}
-	log.Debugf("Albums: [%d] %#v", len(al.RemoteAlbums), al)
 	return nil
 }
 
@@ -423,7 +463,7 @@ func (c *Client) GetUpdates(quiet bool) error {
 	if err := copyJSON(sr.Parts["files"], &gallery); err != nil {
 		return err
 	}
-	if err := c.processFileUpdates(galleryFile, gallery); err != nil {
+	if _, err := c.processFileUpdates(galleryFile, gallery); err != nil {
 		return err
 	}
 
@@ -431,7 +471,7 @@ func (c *Client) GetUpdates(quiet bool) error {
 	if err := copyJSON(sr.Parts["trash"], &trash); err != nil {
 		return err
 	}
-	if err := c.processFileUpdates(trashFile, trash); err != nil {
+	if _, err := c.processFileUpdates(trashFile, trash); err != nil {
 		return err
 	}
 
