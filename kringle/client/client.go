@@ -29,12 +29,24 @@ const (
 // Create creates a new client configuration, if one doesn't exist already.
 func Create(s *secure.Storage) (*Client, error) {
 	var c Client
-	if err := s.CreateEmptyFile(s.HashString(configFile), &c); err != nil {
-		return nil, err
-	}
 	c.hc = &http.Client{}
 	c.storage = s
 	c.writer = os.Stdout
+	if err := s.CreateEmptyFile(s.HashString(configFile), &c); err != nil {
+		return nil, err
+	}
+	if err := c.storage.CreateEmptyFile(c.fileHash(galleryFile), &FileSet{}); err != nil {
+		return nil, err
+	}
+	if err := c.storage.CreateEmptyFile(c.fileHash(trashFile), &FileSet{}); err != nil {
+		return nil, err
+	}
+	if err := c.storage.CreateEmptyFile(c.fileHash(albumList), &AlbumList{}); err != nil {
+		return nil, err
+	}
+	if err := c.storage.CreateEmptyFile(c.fileHash(contactsFile), &ContactList{}); err != nil {
+		return nil, err
+	}
 	return &c, nil
 }
 
@@ -47,6 +59,10 @@ func Load(s *secure.Storage) (*Client, error) {
 	c.hc = &http.Client{}
 	c.storage = s
 	c.writer = os.Stdout
+	c.storage.CreateEmptyFile(c.fileHash(galleryFile), &FileSet{})
+	c.storage.CreateEmptyFile(c.fileHash(trashFile), &FileSet{})
+	c.storage.CreateEmptyFile(c.fileHash(albumList), &AlbumList{})
+	c.storage.CreateEmptyFile(c.fileHash(contactsFile), &ContactList{})
 	return &c, nil
 }
 
@@ -64,6 +80,11 @@ type Client struct {
 
 	storage *secure.Storage
 	writer  io.Writer
+}
+
+// Save saves the current client configuration.
+func (c *Client) Save() error {
+	return c.storage.SaveDataFile(nil, c.storage.HashString(configFile), c)
 }
 
 func (c *Client) SetWriter(w io.Writer) {
@@ -91,6 +112,9 @@ func nowJSON() json.Number {
 }
 
 func (c *Client) fileHash(fn string) string {
+	if c.Email == "" {
+		return c.storage.HashString("local/" + fn)
+	}
 	return c.storage.HashString(c.ServerBaseURL + "/" + c.Email + "/" + fn)
 }
 

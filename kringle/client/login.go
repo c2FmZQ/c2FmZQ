@@ -36,7 +36,7 @@ func (c *Client) CreateAccount(email, password string) error {
 	}
 	c.Email = email
 	c.SecretKey = sk
-	if err := c.storage.SaveDataFile(nil, c.storage.HashString(configFile), c); err != nil {
+	if err := c.Save(); err != nil {
 		return err
 	}
 	fmt.Fprintln(c.writer, "Account created successfully.")
@@ -84,13 +84,13 @@ func (c *Client) Login(email, password string) error {
 	if sk, err := stingle.DecodeSecretKeyBundle([]byte(password), sr.Parts["keyBundle"].(string)); err == nil {
 		c.SecretKey = sk
 	}
-	if err := c.storage.SaveDataFile(nil, c.storage.HashString(configFile), c); err != nil {
-		return err
-	}
 	c.storage.CreateEmptyFile(c.fileHash(galleryFile), &FileSet{})
 	c.storage.CreateEmptyFile(c.fileHash(trashFile), &FileSet{})
 	c.storage.CreateEmptyFile(c.fileHash(albumList), &AlbumList{})
 	c.storage.CreateEmptyFile(c.fileHash(contactsFile), &ContactList{})
+	if err := c.Save(); err != nil {
+		return err
+	}
 	fmt.Fprintln(c.writer, "Logged in successfully.")
 	return nil
 }
@@ -105,7 +105,11 @@ func (c *Client) Logout() error {
 	if sr.Status != "ok" {
 		return sr
 	}
+	c.Email = ""
 	c.Token = ""
+	if err := c.Save(); err != nil {
+		return err
+	}
 	fmt.Fprintln(c.writer, "Logged out successfully.")
 	return nil
 }

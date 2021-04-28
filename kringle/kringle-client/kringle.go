@@ -259,7 +259,7 @@ func (k *kringle) initClient(ctx *cli.Context, update bool) error {
 		}
 		k.client = c
 	}
-	if update {
+	if update && k.client.Token != "" {
 		if err := k.client.GetUpdates(true); err != nil {
 			return err
 		}
@@ -437,12 +437,20 @@ func (k *kringle) updates(ctx *cli.Context) error {
 	if err := k.initClient(ctx, false); err != nil {
 		return err
 	}
+	if k.client.Email == "" {
+		k.client.Print("Updates requires logging in to a remote server.")
+		return nil
+	}
 	return k.client.GetUpdates(false)
 }
 
 func (k *kringle) pullFiles(ctx *cli.Context) error {
 	if err := k.initClient(ctx, true); err != nil {
 		return err
+	}
+	if k.client.Email == "" {
+		k.client.Print("Pull requires logging in to a remote server.")
+		return nil
 	}
 	patterns := []string{"*/*"}
 	if ctx.Args().Len() > 0 {
@@ -455,6 +463,10 @@ func (k *kringle) pullFiles(ctx *cli.Context) error {
 func (k *kringle) syncFiles(ctx *cli.Context) error {
 	if err := k.initClient(ctx, true); err != nil {
 		return err
+	}
+	if k.client.Email == "" {
+		k.client.Print("Sync requires logging in to a remote server.")
+		return nil
 	}
 	return k.client.Sync(ctx.Bool("dryrun"))
 }
