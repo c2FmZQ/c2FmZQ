@@ -102,7 +102,7 @@ func (c *Client) glob(pattern string) ([]ListItem, error) {
 		// Only show directories.
 		if len(pathElems) == 1 {
 			li := ListItem{
-				Filename:  d.name + "/",
+				Filename:  d.name,
 				FileSet:   d.fileSet,
 				IsDir:     true,
 				DirSize:   len(fs.Files),
@@ -161,7 +161,7 @@ func (c *Client) ListFiles(patterns []string) error {
 	var out []string
 	for _, item := range li {
 		if item.IsDir {
-			s := fmt.Sprintf("%*s %6d file", -maxFilenameWidth, item.Filename, item.DirSize)
+			s := fmt.Sprintf("%*s %6d file", -maxFilenameWidth, item.Filename+"/", item.DirSize)
 			if item.DirSize != 1 {
 				s += "s"
 			}

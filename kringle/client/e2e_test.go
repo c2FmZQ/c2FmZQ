@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/go-test/deep"
+
+	"kringle/client"
 )
 
 func TestLoginLogout(t *testing.T) {
@@ -135,11 +137,11 @@ func TestCopyMoveDelete(t *testing.T) {
 	}
 
 	want := []string{
-		"alpha/ LOCAL",
-		"beta/ LOCAL",
-		"charlie/ LOCAL",
-		"gallery/",
-		"trash/",
+		"alpha LOCAL",
+		"beta LOCAL",
+		"charlie LOCAL",
+		"gallery",
+		"trash",
 		"alpha/image000.jpg LOCAL",
 		"alpha/image001.jpg LOCAL",
 		"beta/image002.jpg LOCAL",
@@ -162,11 +164,11 @@ func TestCopyMoveDelete(t *testing.T) {
 	}
 
 	want = []string{
-		"alpha/ LOCAL",
-		"beta/ LOCAL",
-		"charlie/ LOCAL",
-		"gallery/",
-		"trash/",
+		"alpha LOCAL",
+		"beta LOCAL",
+		"charlie LOCAL",
+		"gallery",
+		"trash",
 		"alpha/image001.jpg LOCAL",
 		"beta/image002.jpg LOCAL",
 		"beta/image003.jpg LOCAL",
@@ -188,11 +190,11 @@ func TestCopyMoveDelete(t *testing.T) {
 	}
 
 	want = []string{
-		"alpha/ LOCAL",
-		"beta/ LOCAL",
-		"charlie/ LOCAL",
-		"gallery/",
-		"trash/",
+		"alpha LOCAL",
+		"beta LOCAL",
+		"charlie LOCAL",
+		"gallery",
+		"trash",
 		"alpha/image001.jpg LOCAL",
 		"beta/image002.jpg LOCAL",
 		"beta/image003.jpg LOCAL",
@@ -223,10 +225,10 @@ func TestCopyMoveDelete(t *testing.T) {
 	}
 
 	want = []string{
-		"alpha/",
-		"beta/",
-		"gallery/",
-		"trash/",
+		"alpha",
+		"beta",
+		"gallery",
+		"trash",
 		"alpha/image001.jpg",
 		"beta/image002.jpg",
 		"beta/image003.jpg",
@@ -269,11 +271,11 @@ func TestConcurrentMutations(t *testing.T) {
 		t.Fatalf("c1.Sync: %v", err)
 	}
 	want := []string{
-		"alpha/",
-		"beta/",
-		"delta/",
-		"gallery/",
-		"trash/",
+		"alpha",
+		"beta",
+		"delta",
+		"gallery",
+		"trash",
 		"alpha/image000.jpg",
 		"alpha/image001.jpg",
 		"alpha/image002.jpg",
@@ -329,11 +331,11 @@ func TestConcurrentMutations(t *testing.T) {
 		t.Fatalf("c2.Move: %v", err)
 	}
 	want = []string{
-		"alpha/",
-		"beta/",
-		"charlie/ LOCAL",
-		"gallery/",
-		"trash/",
+		"alpha",
+		"beta",
+		"charlie LOCAL",
+		"gallery",
+		"trash",
 		"alpha/image001.jpg",
 		"alpha/image002.jpg",
 		"alpha/image003.jpg",
@@ -365,9 +367,9 @@ func TestConcurrentMutations(t *testing.T) {
 		t.Fatalf("c1.Sync: %v", err)
 	}
 	want = []string{
-		"delta/",
-		"gallery/",
-		"trash/",
+		"delta",
+		"gallery",
+		"trash",
 		"delta/image000.jpg",
 		"delta/image001.jpg",
 		"delta/image002.jpg",
@@ -386,11 +388,11 @@ func TestConcurrentMutations(t *testing.T) {
 		t.Fatalf("c2.Sync: %v", err)
 	}
 	want = []string{
-		"beta/",
-		"charlie/",
-		"delta/",
-		"gallery/",
-		"trash/",
+		"beta",
+		"charlie",
+		"delta",
+		"gallery",
+		"trash",
 		"beta/image000.jpg",
 		"beta/image100.jpg",
 		"charlie/image101.jpg",
@@ -419,6 +421,131 @@ func TestConcurrentMutations(t *testing.T) {
 		t.Fatalf("globAll: %v", err)
 	}
 	// Same state as client 2.
+	if diff := deep.Equal(want, got); diff != nil {
+		t.Fatalf("Unexpected file list. Diff: %v", diff)
+	}
+}
+
+func TestSharing(t *testing.T) {
+	_, done := startServer(t)
+	defer done()
+
+	c := make(map[string]*client.Client)
+	for _, n := range []string{"alice", "bob", "carol", "dave"} {
+		t.Logf("%s Login", n)
+		var err error
+		if c[n], err = newClient(t.TempDir()); err != nil {
+			t.Fatalf("newClient: %v", err)
+		}
+		if err := login(c[n], n+"@", n+"-pass"); err != nil {
+			t.Fatalf("login(%s): %v", n, err)
+		}
+	}
+
+	testdir := t.TempDir()
+	if err := makeImages(testdir, 0, 5); err != nil {
+		t.Fatalf("makeImages: %v", err)
+	}
+
+	t.Log("alice AddAlbum alpha")
+	if err := c["alice"].AddAlbums([]string{"alpha"}); err != nil {
+		t.Fatalf("alice.AddAlbums: %v", err)
+	}
+	t.Log("alice Import -> alpha")
+	if n, err := c["alice"].ImportFiles([]string{filepath.Join(testdir, "*")}, "alpha"); err != nil {
+		t.Errorf("alice.ImportFiles: %v", err)
+	} else if want, got := 5, n; want != got {
+		t.Errorf("Unexpected ImportFiles result. Want %d, got %d", want, got)
+	}
+	t.Log("alice Sync")
+	if err := c["alice"].Sync(false); err != nil {
+		t.Fatalf("alice.Sync: %v", err)
+	}
+	t.Log("alice Share")
+	if err := c["alice"].Share("alpha", []string{"bob@", "carol@", "dave@"}); err != nil {
+		t.Fatalf("alice.Share: %v", err)
+	}
+
+	for n, client := range c {
+		t.Logf("%s GetUpdates", n)
+		if err := client.GetUpdates(false); err != nil {
+			t.Fatalf("%s.GetUpdates: %v", n, err)
+		}
+		want := []string{
+			"alpha",
+			"gallery",
+			"trash",
+			"alpha/image000.jpg",
+			"alpha/image001.jpg",
+			"alpha/image002.jpg",
+			"alpha/image003.jpg",
+			"alpha/image004.jpg",
+		}
+		got, err := globAll(client)
+		if err != nil {
+			t.Fatalf("globAll: %v", err)
+		}
+		if diff := deep.Equal(want, got); diff != nil {
+			t.Fatalf("Unexpected file list. Diff: %v", diff)
+		}
+	}
+
+	t.Log("bob Leave")
+	if err := c["bob"].Leave([]string{"alpha"}); err != nil {
+		t.Fatalf("bob.Leave: %v", err)
+	}
+
+	t.Log("bob GetUpdates")
+	if err := c["bob"].GetUpdates(false); err != nil {
+		t.Fatalf("bob.GetUpdates: %v", err)
+	}
+	want := []string{
+		"gallery",
+		"trash",
+	}
+	got, err := globAll(c["bob"])
+	if err != nil {
+		t.Fatalf("globAll: %v", err)
+	}
+	if diff := deep.Equal(want, got); diff != nil {
+		t.Fatalf("Unexpected file list. Diff: %v", diff)
+	}
+
+	t.Log("alice RemoveMember carol")
+	if err := c["alice"].RemoveMembers("alpha", []string{"carol@"}); err != nil {
+		t.Fatalf("alice.RemoveMembers: %v", err)
+	}
+
+	t.Log("carol GetUpdates")
+	if err := c["carol"].GetUpdates(false); err != nil {
+		t.Fatalf("carol.GetUpdates: %v", err)
+	}
+	want = []string{
+		"gallery",
+		"trash",
+	}
+	if got, err = globAll(c["carol"]); err != nil {
+		t.Fatalf("globAll: %v", err)
+	}
+	if diff := deep.Equal(want, got); diff != nil {
+		t.Fatalf("Unexpected file list. Diff: %v", diff)
+	}
+
+	t.Log("alice Unshare")
+	if err := c["alice"].Unshare([]string{"alpha"}); err != nil {
+		t.Fatalf("alice.Unshare: %v", err)
+	}
+	t.Log("dave GetUpdates")
+	if err := c["dave"].GetUpdates(false); err != nil {
+		t.Fatalf("dave.GetUpdates: %v", err)
+	}
+	want = []string{
+		"gallery",
+		"trash",
+	}
+	if got, err = globAll(c["dave"]); err != nil {
+		t.Fatalf("globAll: %v", err)
+	}
 	if diff := deep.Equal(want, got); diff != nil {
 		t.Fatalf("Unexpected file list. Diff: %v", diff)
 	}

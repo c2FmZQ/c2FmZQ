@@ -275,7 +275,7 @@ func (c *Client) processDeleteAlbums(deletes []stingle.DeleteEvent) (retErr erro
 			if err != nil {
 				return err
 			}
-			if d > ad && a.Equals(al.RemoteAlbums[del.AlbumID]) && !localChanges {
+			if d > ad && (a.IsOwner != "1" || (a.Equals(al.RemoteAlbums[del.AlbumID]) && !localChanges)) {
 				log.Debugf("Album deleted: %s (%s)", name, a.AlbumID)
 				delete(al.Albums, del.AlbumID)
 			} else {

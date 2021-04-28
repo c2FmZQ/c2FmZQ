@@ -167,6 +167,10 @@ func (c *Client) Copy(patterns []string, dest string) error {
 	if len(di) != 1 || !di[0].IsDir {
 		return fmt.Errorf("destination must be a directory: %s", dest)
 	}
+	dst := di[0]
+	if dst.Album != nil && dst.Album.IsOwner != "1" && !stingle.Permissions(dst.Album.Permissions).AllowAdd() {
+		return fmt.Errorf("adding is not allowed: %s", dest)
+	}
 	for _, item := range si {
 		if item.IsDir {
 			return fmt.Errorf("cannot move a directory to another directory: %s", item.Filename)
@@ -181,7 +185,7 @@ func (c *Client) Copy(patterns []string, dest string) error {
 		groups[key] = append(groups[key], item)
 	}
 	for _, li := range groups {
-		if err := c.moveFiles(li, di[0], false); err != nil {
+		if err := c.moveFiles(li, dst, false); err != nil {
 			return err
 		}
 	}
@@ -234,7 +238,7 @@ func (c *Client) Move(patterns []string, dest string) error {
 		return fmt.Errorf("destination must be a directory: %s", dest)
 	}
 	dst := di[0]
-	if dst.Album.IsShared.String() == "1" && dst.Album.IsOwner.String() != "1" && !stingle.Permissions(dst.Album.Permissions).AllowAdd() {
+	if dst.Album != nil && dst.Album.IsOwner != "1" && !stingle.Permissions(dst.Album.Permissions).AllowAdd() {
 		return fmt.Errorf("adding is not allowed: %s", dest)
 	}
 	for _, item := range si {
@@ -311,6 +315,9 @@ func (c *Client) renameAlbum(li ListItem, name string) (retErr error) {
 	if name == "" || strings.Contains(name, "/") {
 		return fmt.Errorf("illegal name: %q", name)
 	}
+	if li.Album != nil && li.Album.IsOwner != "1" {
+		return fmt.Errorf("only the album owner can rename it: %s", li.Filename)
+	}
 	pk, err := li.Album.PK()
 	if err != nil {
 		return err
@@ -371,6 +378,9 @@ func (c *Client) moveFiles(fromItems []ListItem, toItem ListItem, moving bool) (
 	for _, item := range fromItems {
 		ff := item.FSFile
 		if moving {
+			if item.Album != nil && item.Album.IsOwner != "1" {
+				return fmt.Errorf("only the album owner can move files: %s", item.Filename)
+			}
 			fmt.Fprintf(c.writer, "Moving %s -> %s\n", item.Filename, toItem.Filename)
 			delete(fs[0].Files, ff.File)
 		} else {
@@ -403,6 +413,9 @@ func (c *Client) deleteFiles(li []ListItem) (retErr error) {
 	defer commit(false, &retErr)
 
 	for _, item := range li {
+		if item.Album != nil && item.Album.IsOwner != "1" {
+			return fmt.Errorf("only the album owner can delete files: %s", item.Filename)
+		}
 		if _, ok := fs.Files[item.FSFile.File]; ok {
 			fmt.Fprintf(c.writer, "Deleting %s\n", item.Filename)
 			delete(fs.Files, item.FSFile.File)

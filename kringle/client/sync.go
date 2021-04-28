@@ -241,7 +241,13 @@ func (c *Client) applyAlbumsToRemove(albums []*stingle.Album, dryrun bool) error
 		return nil
 	}
 	for _, album := range albums {
-		if err := c.sendDeleteAlbum(album.AlbumID); err != nil {
+		if album.IsOwner == "1" {
+			if err := c.sendDeleteAlbum(album.AlbumID); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := c.sendLeaveAlbum(album.AlbumID); err != nil {
 			return err
 		}
 	}

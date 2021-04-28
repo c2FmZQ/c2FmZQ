@@ -49,6 +49,16 @@ type Album struct {
 	SharingKeys   map[string]string `json:"sharingKeys,omitempty"`
 }
 
+// PK returns the contact's decoded PublicKey.
+func (c Contact) PK() (pk PublicKey, err error) {
+	b, err := base64.StdEncoding.DecodeString(c.PublicKey)
+	if err != nil {
+		return
+	}
+	pk = PublicKeyFromBytes(b)
+	return
+}
+
 // Name returns the decrypted file name.
 func (f File) Name(sk SecretKey) (string, error) {
 	hdrs, err := DecryptBase64Headers(f.Headers, sk)

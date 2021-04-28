@@ -221,6 +221,34 @@ func makeKringle() *kringle {
 				Action:    app.importFiles,
 				Category:  "Import/Export",
 			},
+			&cli.Command{
+				Name:      "share",
+				Usage:     "Share a directory (album) with other people.",
+				ArgsUsage: `"<glob>" <email> ...`,
+				Action:    app.shareAlbum,
+				Category:  "Share",
+			},
+			&cli.Command{
+				Name:      "unshare",
+				Usage:     "Stop sharing a directory (album).",
+				ArgsUsage: `"<glob>" ...`,
+				Action:    app.unshareAlbum,
+				Category:  "Share",
+			},
+			&cli.Command{
+				Name:      "leave",
+				Usage:     "Remove a directory that is shared with us.",
+				ArgsUsage: `"<glob>" ...`,
+				Action:    app.leaveAlbum,
+				Category:  "Share",
+			},
+			&cli.Command{
+				Name:      "remove-member",
+				Usage:     "Remove members from a directory (album).",
+				ArgsUsage: `"<glob>" <email> ...`,
+				Action:    app.removeMember,
+				Category:  "Share",
+			},
 		},
 	}
 	sort.Sort(cli.CommandsByName(app.cli.Commands))
@@ -614,4 +642,56 @@ func (k *kringle) importFiles(ctx *cli.Context) error {
 	dir := args[len(args)-1]
 	_, err := k.client.ImportFiles(patterns, dir)
 	return err
+}
+
+func (k *kringle) shareAlbum(ctx *cli.Context) error {
+	if err := k.initClient(ctx, true); err != nil {
+		return err
+	}
+	args := ctx.Args().Slice()
+	if len(args) < 2 {
+		cli.ShowSubcommandHelp(ctx)
+		return nil
+	}
+	pattern := args[0]
+	emails := args[1:]
+	return k.client.Share(pattern, emails)
+}
+
+func (k *kringle) unshareAlbum(ctx *cli.Context) error {
+	if err := k.initClient(ctx, true); err != nil {
+		return err
+	}
+	args := ctx.Args().Slice()
+	if len(args) == 0 {
+		cli.ShowSubcommandHelp(ctx)
+		return nil
+	}
+	return k.client.Unshare(args)
+}
+
+func (k *kringle) leaveAlbum(ctx *cli.Context) error {
+	if err := k.initClient(ctx, true); err != nil {
+		return err
+	}
+	args := ctx.Args().Slice()
+	if len(args) == 0 {
+		cli.ShowSubcommandHelp(ctx)
+		return nil
+	}
+	return k.client.Leave(args)
+}
+
+func (k *kringle) removeMember(ctx *cli.Context) error {
+	if err := k.initClient(ctx, true); err != nil {
+		return err
+	}
+	args := ctx.Args().Slice()
+	if len(args) < 2 {
+		cli.ShowSubcommandHelp(ctx)
+		return nil
+	}
+	pattern := args[0]
+	emails := args[1:]
+	return k.client.Share(pattern, emails)
 }
