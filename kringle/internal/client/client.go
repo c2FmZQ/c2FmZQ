@@ -91,6 +91,16 @@ func (c *Client) Save() error {
 	return c.storage.SaveDataFile(nil, c.storage.HashString(configFile), c)
 }
 
+// Status returns the client's current status.
+func (c *Client) Status() error {
+	if c.Email == "" {
+		c.Print("Not logged in.")
+		return nil
+	}
+	c.Printf("Logged in as %s on %s.\n", c.Email, c.ServerBaseURL)
+	return nil
+}
+
 func (c *Client) SetWriter(w io.Writer) {
 	c.writer = w
 }

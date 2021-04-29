@@ -109,6 +109,13 @@ func New() *kringle {
 				Category:  "Account",
 			},
 			&cli.Command{
+				Name:      "status",
+				Usage:     "Show the client's status.",
+				ArgsUsage: " ",
+				Action:    app.status,
+				Category:  "Account",
+			},
+			&cli.Command{
 				Name:      "updates",
 				Aliases:   []string{"update"},
 				Usage:     "Pull metadata updates from remote server.",
@@ -501,6 +508,13 @@ func (k *kringle) logout(ctx *cli.Context) error {
 		return err
 	}
 	return k.client.Logout()
+}
+
+func (k *kringle) status(ctx *cli.Context) error {
+	if err := k.init(ctx, false); err != nil {
+		return err
+	}
+	return k.client.Status()
 }
 
 func (k *kringle) updates(ctx *cli.Context) error {
