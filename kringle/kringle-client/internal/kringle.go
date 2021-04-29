@@ -726,6 +726,9 @@ func (k *kringle) shareAlbum(ctx *cli.Context) error {
 	pattern := args[0]
 	emails := args[1:]
 	perms := strings.Split(ctx.String("perm"), ",")
+	if len(perms) == 1 && perms[0] == "" {
+		perms = nil
+	}
 	return k.client.Share(pattern, emails, perms)
 }
 
