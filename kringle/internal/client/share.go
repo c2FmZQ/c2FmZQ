@@ -290,7 +290,7 @@ func (c *Client) sendGetContact(email string) (*stingle.Contact, error) {
 		return nil, sr
 	}
 	var contact stingle.Contact
-	if err := copyJSON(sr.Parts["contact"], &contact); err != nil {
+	if err := copyJSON(sr.Part("contact"), &contact); err != nil {
 		return nil, err
 	}
 	return &contact, nil

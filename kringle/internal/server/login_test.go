@@ -109,7 +109,7 @@ func (c *client) preLogin() error {
 	if sr.Status != "ok" {
 		return sr
 	}
-	if want, got := c.salt, sr.Parts["salt"]; want != got {
+	if want, got := c.salt, sr.Part("salt"); want != got {
 		return fmt.Errorf("preLogin: unexpected salt: want %q, got %q", want, got)
 	}
 	return nil
@@ -126,25 +126,25 @@ func (c *client) login() error {
 	if sr.Status != "ok" {
 		return sr
 	}
-	if want, got := c.keyBundle, sr.Parts["keyBundle"]; want != got {
+	if want, got := c.keyBundle, sr.Part("keyBundle"); want != got {
 		return fmt.Errorf("login: unexpected keyBundle: want %q, got %q", want, got)
 	}
-	if want, got := c.isBackup, sr.Parts["isKeyBackedUp"]; want != got {
+	if want, got := c.isBackup, sr.Part("isKeyBackedUp"); want != got {
 		return fmt.Errorf("login: unexpected isKeyBackedUp: want %q, got %q", want, got)
 	}
-	id, err := strconv.ParseInt(sr.Parts["userId"].(string), 10, 32)
+	id, err := strconv.ParseInt(sr.Part("userId").(string), 10, 32)
 	if err != nil {
 		return err
 	}
 	c.userID = id
-	pk, err := base64.StdEncoding.DecodeString(sr.Parts["serverPublicKey"].(string))
+	pk, err := base64.StdEncoding.DecodeString(sr.Part("serverPublicKey").(string))
 	if err != nil {
 		return err
 	}
 	c.serverPublicKey = stingle.PublicKeyFromBytes(pk)
-	token, ok := sr.Parts["token"].(string)
+	token, ok := sr.Part("token").(string)
 	if !ok || token == "" {
-		return fmt.Errorf("login: invalid token: %#v", sr.Parts["token"])
+		return fmt.Errorf("login: invalid token: %#v", sr.Part("token"))
 	}
 	c.token = token
 	return nil
@@ -160,10 +160,10 @@ func (c *client) getServerPK() error {
 	if sr.Status != "ok" {
 		return sr
 	}
-	if sr.Parts["serverPK"] == nil {
+	if sr.Part("serverPK") == nil {
 		return fmt.Errorf("server did not return serverPK")
 	}
-	pk, err := base64.StdEncoding.DecodeString(sr.Parts["serverPK"].(string))
+	pk, err := base64.StdEncoding.DecodeString(sr.Part("serverPK").(string))
 	if err != nil {
 		return err
 	}
@@ -183,17 +183,17 @@ func (c *client) checkKey() error {
 	if sr.Status != "ok" {
 		return sr
 	}
-	if want, got := c.isBackup, sr.Parts["isKeyBackedUp"]; want != got {
+	if want, got := c.isBackup, sr.Part("isKeyBackedUp"); want != got {
 		return fmt.Errorf("checkKey: unexpected isKeyBackedUp: want %q, got %q", want, got)
 	}
-	pk, err := base64.StdEncoding.DecodeString(sr.Parts["serverPK"].(string))
+	pk, err := base64.StdEncoding.DecodeString(sr.Part("serverPK").(string))
 	if err != nil {
 		return err
 	}
 	if want, got := []byte(c.serverPublicKey.ToBytes()), pk; !reflect.DeepEqual(want, got) {
 		return fmt.Errorf("checkKey: unexpected serverPK: want %#v, got %#v", want, got)
 	}
-	dec, err := c.secretKey.SealBoxOpenBase64(sr.Parts["challenge"].(string))
+	dec, err := c.secretKey.SealBoxOpenBase64(sr.Part("challenge").(string))
 	if err != nil {
 		return fmt.Errorf("checkKey challenge error: %v", err)
 	}
@@ -220,9 +220,9 @@ func (c *client) changePass() error {
 	if sr.Status != "ok" {
 		return sr
 	}
-	token, ok := sr.Parts["token"].(string)
+	token, ok := sr.Part("token").(string)
 	if !ok || token == "" {
-		return fmt.Errorf("login: invalid token: %#v", sr.Parts["token"])
+		return fmt.Errorf("login: invalid token: %#v", sr.Part("token"))
 	}
 	c.token = token
 	return nil
@@ -245,7 +245,7 @@ func (c *client) recoverAccount() error {
 	if sr.Status != "ok" {
 		return sr
 	}
-	if want, got := "OK", sr.Parts["result"]; want != got {
+	if want, got := "OK", sr.Part("result"); want != got {
 		return fmt.Errorf("recoverAccount: unexpected result: want %v, got %v", want, got)
 	}
 	return nil

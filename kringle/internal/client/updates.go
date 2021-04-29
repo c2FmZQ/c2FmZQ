@@ -2,6 +2,7 @@ package client
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -289,7 +290,7 @@ func (c *Client) processDeleteAlbums(deletes []stingle.DeleteEvent) (retErr erro
 			}
 		}
 		if al.Albums[del.AlbumID] == nil && al.RemoteAlbums[del.AlbumID] == nil {
-			if err := os.Remove(filepath.Join(c.storage.Dir(), c.fileHash(albumPrefix+del.AlbumID))); err != nil {
+			if err := os.Remove(filepath.Join(c.storage.Dir(), c.fileHash(albumPrefix+del.AlbumID))); err != nil && !errors.Is(err, os.ErrNotExist) {
 				return err
 			}
 		}
@@ -452,7 +453,7 @@ func (c *Client) GetUpdates(quiet bool) error {
 	}
 
 	var albums []stingle.Album
-	if err := copyJSON(sr.Parts["albums"], &albums); err != nil {
+	if err := copyJSON(sr.Part("albums"), &albums); err != nil {
 		return err
 	}
 	if err := c.processAlbumUpdates(albums); err != nil {
@@ -460,7 +461,7 @@ func (c *Client) GetUpdates(quiet bool) error {
 	}
 
 	var gallery []stingle.File
-	if err := copyJSON(sr.Parts["files"], &gallery); err != nil {
+	if err := copyJSON(sr.Part("files"), &gallery); err != nil {
 		return err
 	}
 	if _, err := c.processFileUpdates(galleryFile, gallery); err != nil {
@@ -468,7 +469,7 @@ func (c *Client) GetUpdates(quiet bool) error {
 	}
 
 	var trash []stingle.File
-	if err := copyJSON(sr.Parts["trash"], &trash); err != nil {
+	if err := copyJSON(sr.Part("trash"), &trash); err != nil {
 		return err
 	}
 	if _, err := c.processFileUpdates(trashFile, trash); err != nil {
@@ -476,7 +477,7 @@ func (c *Client) GetUpdates(quiet bool) error {
 	}
 
 	var albumFiles []stingle.File
-	if err := copyJSON(sr.Parts["albumFiles"], &albumFiles); err != nil {
+	if err := copyJSON(sr.Part("albumFiles"), &albumFiles); err != nil {
 		return err
 	}
 	if err := c.processAlbumFileUpdates(albumFiles); err != nil {
@@ -484,7 +485,7 @@ func (c *Client) GetUpdates(quiet bool) error {
 	}
 
 	var contacts []stingle.Contact
-	if err := copyJSON(sr.Parts["contacts"], &contacts); err != nil {
+	if err := copyJSON(sr.Part("contacts"), &contacts); err != nil {
 		return err
 	}
 	if err := c.processContactUpdates(contacts); err != nil {
@@ -492,7 +493,7 @@ func (c *Client) GetUpdates(quiet bool) error {
 	}
 
 	var deletes []stingle.DeleteEvent
-	if err := copyJSON(sr.Parts["deletes"], &deletes); err != nil {
+	if err := copyJSON(sr.Part("deletes"), &deletes); err != nil {
 		return err
 	}
 	if err := c.processDeleteUpdates(deletes); err != nil {

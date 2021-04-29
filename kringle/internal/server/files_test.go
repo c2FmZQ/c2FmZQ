@@ -326,9 +326,9 @@ func (c *client) getURL(file, set string) (string, error) {
 	if sr.Status != "ok" {
 		return "", sr
 	}
-	url, ok := sr.Parts["url"].(string)
+	url, ok := sr.Part("url").(string)
 	if !ok {
-		return "", fmt.Errorf("server did not return a url: %v", sr.Parts["url"])
+		return "", fmt.Errorf("server did not return a url: %v", sr.Part("url"))
 	}
 	return url, nil
 }
@@ -350,9 +350,9 @@ func (c *client) getDownloadURLs(files, sets []string, isThumb bool) (map[string
 	if sr.Status != "ok" {
 		return nil, sr
 	}
-	urls, ok := sr.Parts["urls"].(map[string]interface{})
+	urls, ok := sr.Part("urls").(map[string]interface{})
 	if !ok {
-		return nil, fmt.Errorf("server did not return a list of urls: %#v", sr.Parts["urls"])
+		return nil, fmt.Errorf("server did not return a list of urls: %#v", sr.Part("urls"))
 	}
 	out := make(map[string]string)
 	for k, v := range urls {

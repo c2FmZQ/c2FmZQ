@@ -25,6 +25,8 @@ const (
 	albumPrefix  = "album/"
 	contactsFile = "contacts"
 	blobsDir     = "blobs"
+
+	userAgent = "Dalvik/2.1.0 (Linux; U; Android 9; moto x4 Build/PPWS29.69-39-6-4)"
 )
 
 // Create creates a new client configuration, if one doesn't exist already.
@@ -71,6 +73,7 @@ func Load(s *secure.Storage) (*Client, error) {
 type Client struct {
 	UserID          int64             `json:"userID"`
 	Email           string            `json:"email"`
+	Salt            []byte            `json:"salt"`
 	SecretKey       stingle.SecretKey `json:"secretKey"`
 	ServerPublicKey stingle.PublicKey `json:"serverPublicKey"`
 	Token           string            `json:"token"`
@@ -131,9 +134,16 @@ func (c *Client) sendRequest(uri string, form url.Values) (*stingle.Response, er
 	}
 	url := c.ServerBaseURL + uri
 
-	log.Debugf("SEND POST %v", url)
+	log.Debugf("SEND POST %s", url)
 	log.Debugf(" %v", form)
-	resp, err := c.hc.PostForm(url, form)
+
+	req, err := http.NewRequest("POST", url, strings.NewReader(form.Encode()))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("User-Agent", userAgent)
+	resp, err := c.hc.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -166,7 +176,14 @@ func (c *Client) download(file, set, thumb string) (io.ReadCloser, error) {
 
 	log.Debugf("SEND POST %v", url)
 	log.Debugf(" %v", form)
-	resp, err := c.hc.PostForm(url, form)
+
+	req, err := http.NewRequest("POST", url, strings.NewReader(form.Encode()))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("User-Agent", userAgent)
+	resp, err := c.hc.Do(req)
 	if err != nil {
 		return nil, err
 	}

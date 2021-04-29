@@ -33,8 +33,8 @@ func addMissingFields(sr *stingle.Response) {
 		sr.Parts = make(map[string]interface{})
 	}
 	for _, t := range []string{"files", "trash", "albums", "albumFiles", "contacts", "deletes"} {
-		if sr.Parts[t] == nil {
-			sr.Parts[t] = []interface{}{}
+		if sr.Parts.(map[string]interface{})[t] == nil {
+			sr.Parts.(map[string]interface{})[t] = []interface{}{}
 		}
 	}
 }
@@ -70,7 +70,7 @@ func diffUpdates(u1, u2 *stingle.Response) string {
 		out = append(out, fmt.Sprintf("Status %q != %q", u1.Status, u2.Status))
 	}
 	for _, f := range []string{"files", "trash", "albums", "albumFiles", "contacts", "deletes"} {
-		if diff := compareLists(u1.Parts[f].([]interface{}), u2.Parts[f].([]interface{})); diff != nil {
+		if diff := compareLists(u1.Part(f).([]interface{}), u2.Part(f).([]interface{})); diff != nil {
 			out = append(out, fmt.Sprintf("In %s:", f))
 			out = append(out, diff...)
 		}

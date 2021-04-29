@@ -658,7 +658,13 @@ func (c *Client) uploadFile(item FileLoc) error {
 
 	url := c.ServerBaseURL + "/v2/sync/upload"
 
-	resp, err := c.hc.Post(url, w.FormDataContentType(), pr)
+	req, err := http.NewRequest("POST", url, pr)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", w.FormDataContentType())
+	req.Header.Set("User-Agent", userAgent)
+	resp, err := c.hc.Do(req)
 	if err != nil {
 		return err
 	}

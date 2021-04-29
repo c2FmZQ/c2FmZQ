@@ -194,8 +194,6 @@ type Header struct {
 func ResponseOK() *Response {
 	return &Response{
 		Status: "ok",
-		Parts:  map[string]interface{}{},
-		Infos:  []string{},
 		Errors: []string{},
 	}
 }
@@ -204,8 +202,6 @@ func ResponseOK() *Response {
 func ResponseNOK() *Response {
 	return &Response{
 		Status: "nok",
-		Parts:  map[string]interface{}{},
-		Infos:  []string{},
 		Errors: []string{},
 	}
 }
@@ -215,10 +211,10 @@ func ResponseNOK() *Response {
 // 'Parts' contains any data returned to the caller.
 // 'Infos' and 'Errors' are messages displayed to the user.
 type Response struct {
-	Status string                 `json:"status"`
-	Parts  map[string]interface{} `json:"parts"`
-	Infos  []string               `json:"infos"`
-	Errors []string               `json:"errors"`
+	Status string      `json:"status"`
+	Parts  interface{} `json:"parts"`
+	Infos  []string    `json:"infos"`
+	Errors []string    `json:"errors"`
 }
 
 // Error makes it so that Response can be returned as an error.
@@ -228,13 +224,29 @@ func (r Response) Error() string {
 
 // AddPart adds a value to Parts.
 func (r *Response) AddPart(name string, value interface{}) *Response {
-	r.Parts[name] = value
+	if r.Parts == nil {
+		r.Parts = make(map[string]interface{})
+	}
+	r.Parts.(map[string]interface{})[name] = value
 	return r
+}
+
+// Part returns the value of the named part of the response.
+func (r *Response) Part(name string) interface{} {
+	parts, ok := r.Parts.(map[string]interface{})
+	if !ok {
+		log.Errorf("Response.Parts has unexpected type: %T", r.Parts)
+		return ""
+	}
+	return parts[name]
 }
 
 // AddPartList adds a list of values to Parts.
 func (r *Response) AddPartList(name string, values ...interface{}) *Response {
-	r.Parts[name] = values
+	if r.Parts == nil {
+		r.Parts = make(map[string]interface{})
+	}
+	r.Parts.(map[string]interface{})[name] = values
 	return r
 }
 
@@ -254,6 +266,12 @@ func (r *Response) AddError(value string) *Response {
 func (r Response) Send(w io.Writer) error {
 	if r.Status == "" {
 		log.Panic("Response has empty status")
+	}
+	if r.Parts == nil {
+		r.Parts = []string{}
+	}
+	if r.Infos == nil {
+		r.Infos = []string{}
 	}
 	log.Debugf("Response: %#v", r)
 	return json.NewEncoder(w).Encode(r)

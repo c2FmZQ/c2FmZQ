@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"kringle/internal/log"
 	"kringle/internal/stingle"
 )
 
@@ -35,6 +36,7 @@ func (c *Client) CreateAccount(email, password string) error {
 	}
 	c.Email = email
 	c.SecretKey = sk
+	c.Salt = salt
 	if err := c.Save(); err != nil {
 		return err
 	}
@@ -52,9 +54,13 @@ func (c *Client) Login(email, password string) error {
 	if sr.Status != "ok" {
 		return sr
 	}
-	salt, err := hex.DecodeString(sr.Parts["salt"].(string))
+	salt, err := hex.DecodeString(sr.Part("salt").(string))
 	if err != nil {
 		return err
+	}
+	if len(salt) == 0 {
+		log.Debugf("PreLogin: salt is empty: %#v", sr)
+		salt = c.Salt
 	}
 
 	form.Set("password", stingle.PasswordHashForLogin([]byte(password), salt))
@@ -64,23 +70,23 @@ func (c *Client) Login(email, password string) error {
 	if sr.Status != "ok" {
 		return sr
 	}
-	id, err := strconv.ParseInt(sr.Parts["userId"].(string), 10, 32)
+	id, err := strconv.ParseInt(sr.Part("userId").(string), 10, 32)
 	if err != nil {
 		return err
 	}
 	c.UserID = id
 	c.Email = email
-	pk, err := base64.StdEncoding.DecodeString(sr.Parts["serverPublicKey"].(string))
+	pk, err := base64.StdEncoding.DecodeString(sr.Part("serverPublicKey").(string))
 	if err != nil {
 		return err
 	}
 	c.ServerPublicKey = stingle.PublicKeyFromBytes(pk)
-	token, ok := sr.Parts["token"].(string)
+	token, ok := sr.Part("token").(string)
 	if !ok || token == "" {
-		return fmt.Errorf("login: invalid token: %#v", sr.Parts["token"])
+		return fmt.Errorf("login: invalid token: %#v", sr.Part("token"))
 	}
 	c.Token = token
-	if sk, err := stingle.DecodeSecretKeyBundle([]byte(password), sr.Parts["keyBundle"].(string)); err == nil {
+	if sk, err := stingle.DecodeSecretKeyBundle([]byte(password), sr.Part("keyBundle").(string)); err == nil {
 		c.SecretKey = sk
 	}
 	c.storage.CreateEmptyFile(c.fileHash(galleryFile), &FileSet{})
