@@ -44,6 +44,33 @@ func (c *Client) ExportFiles(patterns []string, dir string) (int, error) {
 	return count, nil
 }
 
+// Cat decrypts and sends the plaintext to stdout.
+func (c *Client) Cat(patterns []string) error {
+	li, err := c.GlobFiles(patterns)
+	if err != nil {
+		return err
+	}
+	for _, item := range li {
+		if err := c.catFile(item); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *Client) catFile(item ListItem) error {
+	f, err := os.Open(item.FilePath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	if err := stingle.SkipHeader(f); err != nil {
+		return err
+	}
+	_, err = io.Copy(os.Stdout, stingle.DecryptFile(f, item.Header))
+	return err
+}
+
 func (c *Client) exportWorker(ch <-chan ListItem, out chan<- error, dir string) {
 	for i := range ch {
 		_, fn := filepath.Split(string(i.Header.Filename))

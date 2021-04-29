@@ -215,6 +215,14 @@ func New() *kringle {
 				Category:  "Files",
 			},
 			&cli.Command{
+				Name:      "cat",
+				Aliases:   []string{"show"},
+				Usage:     "Decrypt files and send their content to standard output.",
+				ArgsUsage: `<"glob"> ...`,
+				Action:    app.catFiles,
+				Category:  "Files",
+			},
+			&cli.Command{
 				Name:      "export",
 				Usage:     "Decrypt and export files.",
 				ArgsUsage: `"<glob>" ... <output directory>`,
@@ -648,6 +656,18 @@ func (k *kringle) deleteFiles(ctx *cli.Context) error {
 		return nil
 	}
 	return k.client.Delete(args)
+}
+
+func (k *kringle) catFiles(ctx *cli.Context) error {
+	if err := k.init(ctx, true); err != nil {
+		return err
+	}
+	args := ctx.Args().Slice()
+	if len(args) == 0 {
+		cli.ShowSubcommandHelp(ctx)
+		return nil
+	}
+	return k.client.Cat(args)
 }
 
 func (k *kringle) exportFiles(ctx *cli.Context) error {

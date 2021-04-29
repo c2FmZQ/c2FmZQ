@@ -168,6 +168,7 @@ COMMANDS:
      rename               Rename a directory (album).
      unhide               Unhide directory (album).
    Files:
+     cat, show           Decrypt files and send their content to standard output.
      copy, cp            Copy files to a different directory.
      delete, rm, remove  Delete files (move them to trash, or delete them from trash).
      list, ls            List files and directories.
