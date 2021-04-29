@@ -71,10 +71,10 @@ func (c *Client) ImportFiles(patterns []string, dir string) (int, error) {
 	for _, file := range files {
 		_, fn := filepath.Split(file)
 		if exist[fn] {
-			fmt.Fprintf(c.writer, "Skipping %s (already exists in %s)\n", file, dir)
+			c.Printf("Skipping %s (already exists in %s)\n", file, dir)
 			continue
 		}
-		fmt.Fprintf(c.writer, "Importing %s -> %s\n", file, dir)
+		c.Printf("Importing %s -> %s (not synced)\n", file, dir)
 		if err := c.importFile(file, dst, pk); err != nil {
 			return count, err
 		}

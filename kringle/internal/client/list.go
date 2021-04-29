@@ -145,8 +145,8 @@ func (c *Client) ListFiles(patterns []string) error {
 	}
 	maxFilenameWidth, maxSizeWidth := 0, 0
 	for _, item := range li {
-		if len(item.Filename) > maxFilenameWidth {
-			maxFilenameWidth = len(item.Filename)
+		if len(item.Filename)+1 > maxFilenameWidth {
+			maxFilenameWidth = len(item.Filename) + 1
 		}
 		w := len(fmt.Sprintf("%d", item.Header.DataSize))
 		if w > maxSizeWidth {
@@ -183,7 +183,8 @@ func (c *Client) ListFiles(patterns []string) error {
 					ml = append(ml, cl.Contacts[id].Email)
 				}
 				sort.Strings(ml)
-				s += strings.Join(ml, ", ")
+				s += strings.Join(ml, ",")
+				s += ", Permissions: " + stingle.Permissions(item.Album.Permissions).Human()
 			}
 			if item.LocalOnly {
 				s += ", Local"

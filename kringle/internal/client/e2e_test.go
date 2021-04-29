@@ -462,7 +462,7 @@ func TestSharing(t *testing.T) {
 		t.Fatalf("alice.Sync: %v", err)
 	}
 	t.Log("alice Share")
-	if err := c["alice"].Share("alpha", []string{"bob@", "carol@", "dave@"}); err != nil {
+	if err := c["alice"].Share("alpha", []string{"bob@", "carol@", "dave@"}, nil); err != nil {
 		t.Fatalf("alice.Share: %v", err)
 	}
 

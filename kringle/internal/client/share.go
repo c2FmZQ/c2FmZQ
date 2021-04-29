@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"path"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -11,7 +13,7 @@ import (
 )
 
 // Share sharing albums matching pattern with contacts.
-func (c *Client) Share(pattern string, shareWith []string) error {
+func (c *Client) Share(pattern string, shareWith []string, permissions []string) error {
 	li, err := c.GlobFiles([]string{pattern})
 	if err != nil {
 		return err
@@ -69,12 +71,14 @@ func (c *Client) Share(pattern string, shareWith []string) error {
 			ids = append(ids, id)
 		}
 		album.Members = strings.Join(ids, ",")
-		album.Permissions = "1111"
+		if album.Permissions, err = c.parsePermissions("1000", permissions); err != nil {
+			return err
+		}
 
 		if err := c.sendShare(album, sharingKeys); err != nil {
 			return err
 		}
-		c.Printf("Now sharing %s with %s.\n", item.Filename, strings.Join(shareWith, ", "))
+		c.Printf("Now sharing %s with %s. (synced)\n", item.Filename, strings.Join(shareWith, ", "))
 	}
 	return nil
 }
@@ -97,7 +101,7 @@ func (c *Client) Unshare(patterns []string) error {
 		if err := c.sendUnshareAlbum(item.Album.AlbumID); err != nil {
 			return err
 		}
-		c.Printf("Stopped sharing %s.\n", item.Filename)
+		c.Printf("Stopped sharing %s. (synced)\n", item.Filename)
 	}
 	return nil
 }
@@ -117,10 +121,10 @@ func (c *Client) Leave(patterns []string) error {
 		}
 	}
 	for _, item := range li {
-		c.Printf("Leaving %s.\n", item.Filename)
 		if err := c.sendLeaveAlbum(item.Album.AlbumID); err != nil {
 			return err
 		}
+		c.Printf("Left %s. (synced)\n", item.Filename)
 	}
 	return nil
 }
@@ -172,13 +176,102 @@ func (c *Client) RemoveMembers(pattern string, toRemove []string) error {
 				continue
 			}
 			id, _ := strconv.ParseInt(sid, 10, 64)
-			c.Printf("Removing %s from %s.\n", cl.Contacts[id].Email, item.Filename)
 			if err := c.sendRemoveAlbumMember(album, id); err != nil {
 				return err
 			}
+			c.Printf("Removed %s from %s. (synced)\n", cl.Contacts[id].Email, item.Filename)
 		}
 	}
 	return nil
+}
+
+// ChangePermissions changes the permissions on albums.
+func (c *Client) ChangePermissions(patterns, perms []string) (retErr error) {
+	li, err := c.GlobFiles(patterns)
+	if err != nil {
+		return err
+	}
+	for _, item := range li {
+		if item.Album == nil {
+			return fmt.Errorf("not an album: %s", item.Filename)
+		}
+		if item.Album.IsOwner != "1" {
+			return fmt.Errorf("not owner: %s", item.Filename)
+		}
+	}
+	var al AlbumList
+	commit, err := c.storage.OpenForUpdate(c.fileHash(albumList), &al)
+	if err != nil {
+		return err
+	}
+	defer commit(false, &retErr)
+	for _, item := range li {
+		p := item.Album.Permissions
+		if len(p) != 4 {
+			p = "1000"
+		}
+		if p, err = c.parsePermissions(p, perms); err != nil {
+			return err
+		}
+		al.Albums[item.Album.AlbumID].Permissions = p
+		al.Albums[item.Album.AlbumID].DateModified = nowJSON()
+		c.Printf("Set permissions on %s to %s (%s). (not synced)\n", item.Filename, stingle.Permissions(p).Human(), p)
+	}
+	return commit(true, nil)
+}
+
+// Contacts displays the contacts matching the patterns.
+func (c *Client) Contacts(patterns []string) error {
+	var cl ContactList
+	if _, err := c.storage.ReadDataFile(c.fileHash(contactsFile), &cl); err != nil {
+		return err
+	}
+	var out []string
+L:
+	for _, c := range cl.Contacts {
+		for _, p := range patterns {
+			if m, err := path.Match(p, c.Email); err == nil && m {
+				out = append(out, c.Email)
+				continue L
+			}
+		}
+	}
+	if out == nil {
+		c.Printf("No match.\n")
+		return nil
+	}
+	sort.Strings(out)
+	c.Printf("Contacts:\n")
+	for _, e := range out {
+		c.Printf("* %s\n", e)
+	}
+	return nil
+}
+
+func (c *Client) parsePermissions(p string, changes []string) (string, error) {
+	b := []byte(p)
+	if b[0] != '1' {
+		return "", fmt.Errorf("unknown version: %c", b[0])
+	}
+	for _, c := range changes {
+		switch c := strings.TrimSpace(strings.ToLower(c)); c {
+		case "add", "+add", "allowadd", "+allowadd":
+			b[1] = '1'
+		case "share", "+share", "allowshare", "+allowshare":
+			b[2] = '1'
+		case "copy", "+copy", "allowcopy", "+allowcopy":
+			b[3] = '1'
+		case "-add", "-allowadd":
+			b[1] = '0'
+		case "-share", "-allowshare":
+			b[2] = '0'
+		case "-copy", "-allowcopy":
+			b[3] = '0'
+		default:
+			return "", fmt.Errorf("invalid permission value: %s", c)
+		}
+	}
+	return string(b), nil
 }
 
 func (c *Client) sendGetContact(email string) (*stingle.Contact, error) {

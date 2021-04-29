@@ -198,7 +198,7 @@ func (c *Client) applyFilesToMove(moves map[MoveKey][]*stingle.File, al AlbumLis
 			if k.AlbumIDTo != "" {
 				sk, err = al.Albums[k.AlbumIDTo].SK(sk)
 				if err != nil {
-					c.Printf("SK: %v\n", err)
+					return err
 				}
 			}
 			n, err := f.Name(sk)
@@ -254,48 +254,49 @@ func (c *Client) applyAlbumsToRemove(albums []*stingle.Album, dryrun bool) error
 	return nil
 }
 
-func (c *Client) showAlbumsToSync(label string, albums []*stingle.Album) {
+func (c *Client) showAlbumsToSync(label string, albums []*stingle.Album) error {
 	c.Print(label)
 	for _, a := range albums {
 		name, err := a.Name(c.SecretKey)
 		if err != nil {
-			c.Printf("Name: %v\n", err)
-			name = a.AlbumID
+			return err
 		}
 		c.Printf("* %s\n", name)
 	}
+	return nil
 }
 
-func (c *Client) showFilesToSync(label string, files []FileLoc, al AlbumList) {
+func (c *Client) showFilesToSync(label string, files []FileLoc, al AlbumList) error {
 	c.Print(label)
 	for _, f := range files {
 		sk := c.SecretKey
 		if album, ok := al.Albums[f.AlbumID]; ok {
 			ask, err := album.SK(sk)
 			if err != nil {
-				c.Printf("sk: %v\n", err)
+				return err
 			} else {
 				sk = ask
 			}
 		} else if album, ok := al.RemoteAlbums[f.AlbumID]; ok {
 			ask, err := album.SK(sk)
 			if err != nil {
-				c.Printf("sk: %v\n", err)
+				return err
 			} else {
 				sk = ask
 			}
 		}
 		n, err := f.File.Name(sk)
 		if err != nil {
-			c.Printf("Name: %v\n", err)
+			return err
 			n = f.File.File
 		}
 		d, err := c.translateSetAlbumIDToName(f.Set, f.AlbumID, al)
 		if err != nil {
-			c.Printf("translate: %v\n", err)
+			return err
 		}
-		c.Printf("* %s / %s\n", d, n)
+		c.Printf("* %s/%s\n", d, n)
 	}
+	return nil
 }
 
 func (c *Client) translateSetAlbumIDToName(set, albumID string, al AlbumList) (string, error) {
@@ -545,10 +546,10 @@ func (c *Client) Free(patterns []string) (int, error) {
 		if _, err := os.Stat(fn); errors.Is(err, os.ErrNotExist) {
 			continue
 		}
-		fmt.Fprintf(c.writer, "Freeing %s\n", item.Filename)
 		if err := os.Remove(fn); err != nil {
 			return count, err
 		}
+		c.Printf("Freed %s.\n", item.Filename)
 		count++
 	}
 	if count == 0 {
@@ -567,7 +568,7 @@ func (c *Client) blobPath(name string, thumb bool) string {
 
 func (c *Client) downloadWorker(ch <-chan ListItem, out chan<- error) {
 	for i := range ch {
-		fmt.Fprintf(c.writer, "Downloading %s\n", i.Filename)
+		c.Printf("Downloading %s.\n", i.Filename)
 		out <- c.downloadFile(i)
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+	"strings"
 
 	"kringle/internal/log"
 )
@@ -114,6 +115,26 @@ type Permissions string
 func (p Permissions) AllowAdd() bool   { return len(p) == 4 && p[0] == '1' && p[1] == '1' }
 func (p Permissions) AllowShare() bool { return len(p) == 4 && p[0] == '1' && p[2] == '1' }
 func (p Permissions) AllowCopy() bool  { return len(p) == 4 && p[0] == '1' && p[3] == '1' }
+
+func (p Permissions) Human() string {
+	var out []string
+	if p.AllowAdd() {
+		out = append(out, "+Add")
+	} else {
+		out = append(out, "-Add")
+	}
+	if p.AllowCopy() {
+		out = append(out, "+Copy")
+	} else {
+		out = append(out, "-Copy")
+	}
+	if p.AllowShare() {
+		out = append(out, "+Share")
+	} else {
+		out = append(out, "-Share")
+	}
+	return strings.Join(out, ",")
+}
 
 const (
 	GallerySet = "0"

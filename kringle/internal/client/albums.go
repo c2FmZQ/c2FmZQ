@@ -66,7 +66,7 @@ func (c *Client) addAlbum(name string) error {
 	if err := commit(true, nil); err != nil {
 		return err
 	}
-	fmt.Fprintf(c.writer, "Created %s\n", name)
+	c.Printf("Created %s (not synced)\n", name)
 	return nil
 }
 
@@ -90,7 +90,7 @@ func (c *Client) RemoveAlbums(patterns []string) error {
 }
 
 func (c *Client) removeAlbum(item ListItem) (retErr error) {
-	c.Printf("Removing %s\n", item.Filename)
+	c.Printf("Removing %s (not synced)\n", item.Filename)
 	var al AlbumList
 	commit, err := c.storage.OpenForUpdate(c.fileHash(albumList), &al)
 	if err != nil {
@@ -137,10 +137,10 @@ func (c *Client) Hide(names []string, hidden bool) (retErr error) {
 		}
 		if hidden {
 			album.IsHidden = "1"
-			fmt.Fprintf(c.writer, "Hid %s\n", item.Filename)
+			c.Printf("Hid %s (not synced)\n", item.Filename)
 		} else {
 			album.IsHidden = "0"
-			fmt.Fprintf(c.writer, "Unhid %s\n", item.Filename)
+			c.Printf("Unhid %s (not synced)\n", item.Filename)
 		}
 	}
 	return commit(true, nil)
@@ -322,7 +322,7 @@ func (c *Client) renameAlbum(li ListItem, name string) (retErr error) {
 		return err
 	}
 
-	fmt.Fprintf(c.writer, "Renaming %s -> %s\n", strings.TrimSuffix(li.Filename, "/"), name)
+	c.Printf("Renaming %s -> %s (not synced)\n", strings.TrimSuffix(li.Filename, "/"), name)
 
 	var al AlbumList
 	commit, err := c.storage.OpenForUpdate(c.fileHash(albumList), &al)
@@ -380,10 +380,10 @@ func (c *Client) moveFiles(fromItems []ListItem, toItem ListItem, moving bool) (
 			if item.Album != nil && item.Album.IsOwner != "1" {
 				return fmt.Errorf("only the album owner can move files: %s", item.Filename)
 			}
-			fmt.Fprintf(c.writer, "Moving %s -> %s\n", item.Filename, toItem.Filename)
+			c.Printf("Moving %s -> %s (not synced)\n", item.Filename, toItem.Filename)
 			delete(fs[0].Files, ff.File)
 		} else {
-			fmt.Fprintf(c.writer, "Copying %s -> %s\n", item.Filename, toItem.Filename)
+			c.Printf("Copying %s -> %s (not synced)\n", item.Filename, toItem.Filename)
 		}
 		if needHeaders {
 			// Re-encrypt headers for destination.
@@ -416,7 +416,7 @@ func (c *Client) deleteFiles(li []ListItem) (retErr error) {
 			return fmt.Errorf("only the album owner can delete files: %s", item.Filename)
 		}
 		if _, ok := fs.Files[item.FSFile.File]; ok {
-			fmt.Fprintf(c.writer, "Deleting %s\n", item.Filename)
+			c.Printf("Deleting %s (not synced)\n", item.Filename)
 			delete(fs.Files, item.FSFile.File)
 		}
 	}

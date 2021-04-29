@@ -29,6 +29,7 @@ type kringle struct {
 	flagLogLevel       int
 	flagPassphraseFile string
 	flagAPIServer      string
+	flagAutoUpdate     bool
 }
 
 func New() *kringle {
@@ -71,6 +72,12 @@ func New() *kringle {
 				Value:       "",
 				Usage:       "The API server base URL.",
 				Destination: &app.flagAPIServer,
+			},
+			&cli.BoolFlag{
+				Name:        "auto-update",
+				Value:       true,
+				Usage:       "Automatically fetch metadata updates from the remote server before each command.",
+				Destination: &app.flagAutoUpdate,
 			},
 		},
 		Commands: []*cli.Command{
@@ -227,6 +234,14 @@ func New() *kringle {
 				ArgsUsage: `"<glob>" <email> ...`,
 				Action:    app.shareAlbum,
 				Category:  "Share",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:    "perm",
+						Aliases: []string{"p", "perms", "permissions"},
+						Value:   "",
+						Usage:   "Comma-separated list of album permissions: 'Add', 'Share', 'Copy', e.g. --perm=Add,Share .",
+					},
+				},
 			},
 			&cli.Command{
 				Name:      "unshare",
@@ -247,6 +262,21 @@ func New() *kringle {
 				Usage:     "Remove members from a directory (album).",
 				ArgsUsage: `"<glob>" <email> ...`,
 				Action:    app.removeMember,
+				Category:  "Share",
+			},
+			&cli.Command{
+				Name:      "change-permissions",
+				Aliases:   []string{"chmod"},
+				Usage:     "Change the permissions on a shared directory (album).",
+				ArgsUsage: `<comma-separated permissions> "<glob>" ...   e.g. +Add,-Share MyAlbum`,
+				Action:    app.changePermissions,
+				Category:  "Share",
+			},
+			&cli.Command{
+				Name:      "contacts",
+				Usage:     "List contacts.",
+				ArgsUsage: `"<glob>" ...`,
+				Action:    app.listContacts,
 				Category:  "Share",
 			},
 		},
@@ -291,7 +321,7 @@ func (k *kringle) init(ctx *cli.Context, update bool) error {
 		}
 		k.client = c
 	}
-	if update && k.client.Token != "" {
+	if update && k.flagAutoUpdate && k.client.Token != "" {
 		if err := k.client.GetUpdates(true); err != nil {
 			return err
 		}
@@ -521,6 +551,7 @@ func (k *kringle) createAlbum(ctx *cli.Context) error {
 	}
 	names := ctx.Args().Slice()
 	if len(names) == 0 {
+		cli.ShowSubcommandHelp(ctx)
 		return nil
 	}
 	return k.client.AddAlbums(names)
@@ -532,6 +563,7 @@ func (k *kringle) removeAlbum(ctx *cli.Context) error {
 	}
 	patterns := ctx.Args().Slice()
 	if len(patterns) == 0 {
+		cli.ShowSubcommandHelp(ctx)
 		return nil
 	}
 	return k.client.RemoveAlbums(patterns)
@@ -553,10 +585,10 @@ func (k *kringle) hideAlbums(ctx *cli.Context) error {
 	if err := k.init(ctx, true); err != nil {
 		return err
 	}
-	patterns := []string{"*"}
-	if ctx.Args().Len() > 0 {
-		patterns = ctx.Args().Slice()
+	if ctx.Args().Len() == 0 {
+		cli.ShowSubcommandHelp(ctx)
 	}
+	patterns := ctx.Args().Slice()
 	return k.client.Hide(patterns, true)
 }
 
@@ -564,10 +596,10 @@ func (k *kringle) unhideAlbums(ctx *cli.Context) error {
 	if err := k.init(ctx, true); err != nil {
 		return err
 	}
-	patterns := []string{"*"}
-	if ctx.Args().Len() > 0 {
-		patterns = ctx.Args().Slice()
+	if ctx.Args().Len() == 0 {
+		cli.ShowSubcommandHelp(ctx)
 	}
+	patterns := ctx.Args().Slice()
 	return k.client.Hide(patterns, false)
 }
 
@@ -659,7 +691,8 @@ func (k *kringle) shareAlbum(ctx *cli.Context) error {
 	}
 	pattern := args[0]
 	emails := args[1:]
-	return k.client.Share(pattern, emails)
+	perms := strings.Split(ctx.String("perm"), ",")
+	return k.client.Share(pattern, emails, perms)
 }
 
 func (k *kringle) unshareAlbum(ctx *cli.Context) error {
@@ -697,5 +730,30 @@ func (k *kringle) removeMember(ctx *cli.Context) error {
 	}
 	pattern := args[0]
 	emails := args[1:]
-	return k.client.Share(pattern, emails)
+	return k.client.RemoveMembers(pattern, emails)
+}
+
+func (k *kringle) changePermissions(ctx *cli.Context) error {
+	if err := k.init(ctx, true); err != nil {
+		return err
+	}
+	args := ctx.Args().Slice()
+	if len(args) < 2 {
+		cli.ShowSubcommandHelp(ctx)
+		return nil
+	}
+	perms := strings.Split(args[0], ",")
+	patterns := args[1:]
+	return k.client.ChangePermissions(patterns, perms)
+}
+
+func (k *kringle) listContacts(ctx *cli.Context) error {
+	if err := k.init(ctx, true); err != nil {
+		return err
+	}
+	patterns := ctx.Args().Slice()
+	if len(patterns) == 0 {
+		patterns = []string{"*"}
+	}
+	return k.client.Contacts(patterns)
 }
