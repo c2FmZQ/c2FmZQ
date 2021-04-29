@@ -198,7 +198,7 @@ func (c *Client) genericThumbnail(filename string) ([]byte, error) {
 		{filename, 10, 10, color.RGBA{200, 200, 200, 255}},
 		{ext, 10, 30, color.RGBA{200, 200, 200, 255}},
 	} {
-		point := fixed.Point26_6{fixed.Int26_6(label.x * 64), fixed.Int26_6(label.y * 64)}
+		point := fixed.Point26_6{X: fixed.Int26_6(label.x * 64), Y: fixed.Int26_6(label.y * 64)}
 		d := &font.Drawer{
 			Dst:  img,
 			Src:  image.NewUniform(label.col),

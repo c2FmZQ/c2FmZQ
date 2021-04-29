@@ -20,11 +20,11 @@ type SecretKey sodium.BoxSecretKey
 type PublicKey sodium.BoxPublicKey
 
 func SecretKeyFromBytes(b []byte) SecretKey {
-	return SecretKey(sodium.BoxSecretKey{sodium.Bytes(b)})
+	return SecretKey(sodium.BoxSecretKey{Bytes: sodium.Bytes(b)})
 }
 
 func PublicKeyFromBytes(b []byte) PublicKey {
-	return PublicKey(sodium.BoxPublicKey{sodium.Bytes(b)})
+	return PublicKey(sodium.BoxPublicKey{Bytes: sodium.Bytes(b)})
 }
 
 func (k SecretKey) ToBytes() []byte {
@@ -169,7 +169,7 @@ func (pk PublicKey) SealBox(msg []byte) []byte {
 
 // SealBoxOpen decrypts a message encrypted by SealBox.
 func (sk SecretKey) SealBoxOpen(msg []byte) ([]byte, error) {
-	kp := sodium.BoxKP{sodium.BoxPublicKey(sk.PublicKey()), sodium.BoxSecretKey(sk)}
+	kp := sodium.BoxKP{PublicKey: sodium.BoxPublicKey(sk.PublicKey()), SecretKey: sodium.BoxSecretKey(sk)}
 	d, err := sodium.Bytes(msg).SealedBoxOpen(kp)
 	if err != nil {
 		return nil, err
