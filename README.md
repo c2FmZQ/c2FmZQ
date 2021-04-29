@@ -8,7 +8,7 @@ There is a command-line client application, and a server application.
 The server is the central repository where all the encrypted data can be stored.
 It has no access to the plaintext data.
 
-The command-line client is used to import, export, and organize files.
+The command-line client is used to import, export, organize, and share files.
 
 They use an API that's compatible with the Stingle Photos app
 (https://github.com/stingle/stingle-photos-android) published by [stingle.org](https://stingle.org).
@@ -88,7 +88,26 @@ Simply build it, and run it.
 ```bash
 $ cd kringle/kringle-server
 $ go build
-$ ./kringle-server -h
+$ ./kringle-server help
+NAME:
+   kringle-server - Runs the kringle server
+
+USAGE:
+   kringle-server command [command options]  
+
+COMMANDS:
+
+OPTIONS:
+   --database DIR, --db DIR       Use the database in DIR [$KRINGLE_DATABASE]
+   --address value, --addr value  The local address to use. (default: "127.0.0.1:8080")
+   --base-url value               The base URL of the generated download links. If empty, the links will generated using the Host headers of the incoming requests, i.e. https://HOST/.
+   --tlscert FILE                 The name of the FILE containing the TLS cert to use. If neither -tlscert nor -tlskey is set, the server will not use TLS.
+   --tlskey FILE                  The name of the FILE containing the TLS private key to use.
+   --allow-new-accounts           Allow new account registrations. (default: true)
+   --verbose value, -v value      The level of logging verbosity: 1:Error 2:Info 3:Debug (default: 2 (info))
+   --encrypt-metadata             Encrypt the server metadata (strongly recommended). (default: true)
+   --passphrase-file FILE         Read the database passphrase from FILE. [$KRINGLE_PASSPHRASE_FILE]
+   --htdigest-file FILE           The name of the htdigest FILE to use for basic auth for some endpoints, e.g. /metrics [$KRINGLE_HTDIGEST_FILE]
 ```
 
 Or, build a docker image.
@@ -117,18 +136,65 @@ $ scp kringle-server-arm root@NAS:.
 
 ## Kringle Client
 
-The Kringle client connects to the server. The first time _create-account_ or
-_login_ is called, it will prompt the user for the URL of the API server.
+The Kringle client can be used by itself, or with a remote ("cloud") server very
+similarly.
 
-Like the server, the client needs to know where to store its data, and it needs
-a passphrase to encrypt the data.
+Sharing only works when content is synced with a remote server.
+
+To connect to a remote server, the user will need to provide the URL of the
+server the first time _create-account_ or _login_ is used.
 
 To run it:
 
 ```bash
 $ cd kringle/kringle-client
 $ go build
-$ ./kringle-client -h
-```
+$ ./kringle-client
+NAME:
+   kringle - kringle client.
 
+USAGE:
+   kringle-client [global options] command [command options] [arguments...]
+
+COMMANDS:
+   Account:
+     create-account  Create an account.
+     login           Login to an account.
+     logout          Logout.
+   Albums:
+     create-album, mkdir  Create new directory (album).
+     delete-album, rmdir  Remove a directory (album).
+     hide                 Hide directory (album).
+     rename               Rename a directory (album).
+     unhide               Unhide directory (album).
+   Files:
+     copy, cp            Copy files to a different directory.
+     delete, rm, remove  Delete files (move them to trash, or delete them from trash).
+     list, ls            List files and directories.
+     move, mv            Move files to a different directory, or rename a directory.
+   Import/Export:
+     export  Decrypt and export files.
+     import  Encrypt and import files.
+   Mode:
+     shell  Run in shell mode.
+   Share:
+     change-permissions, chmod  Change the permissions on a shared directory (album).
+     contacts                   List contacts.
+     leave                      Remove a directory that is shared with us.
+     remove-member              Remove members from a directory (album).
+     share                      Share a directory (album) with other people.
+     unshare                    Stop sharing a directory (album).
+   Sync:
+     download, pull   Download files that aren't already downloaded.
+     free             Remove local files that are backed up.
+     sync             Send changes to remote server.
+     updates, update  Pull metadata updates from remote server.
+
+GLOBAL OPTIONS:
+   --data-dir DIR, -d DIR     Save the data in DIR [$KRINGLE_DATADIR]
+   --verbose value, -v value  The level of logging verbosity: 1:Error 2:Info 3:Debug (default: 2 (info))
+   --passphrase-file FILE     Read the database passphrase from FILE. [$KRINGLE_PASSPHRASE_FILE]
+   --server value             The API server base URL.
+   --auto-update              Automatically fetch metadata updates from the remote server before each command. (default: true)
+```
 

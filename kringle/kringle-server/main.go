@@ -71,7 +71,7 @@ func main() {
 			&cli.StringFlag{
 				Name:        "tlscert",
 				Value:       "",
-				Usage:       "The name of the `FILE` containing the TLS cert to use. If neither -cert nor -key is set, the server will not use TLS.",
+				Usage:       "The name of the `FILE` containing the TLS cert to use. If neither -tlscert nor -tlskey is set, the server will not use TLS.",
 				TakesFile:   true,
 				Destination: &flagTLSCert,
 			},
@@ -84,21 +84,21 @@ func main() {
 			&cli.BoolFlag{
 				Name:        "allow-new-accounts",
 				Value:       true,
-				Usage:       "Whether new account registration is allowed.",
+				Usage:       "Allow new account registrations.",
 				Destination: &flagAllowNewAccounts,
 			},
 			&cli.IntFlag{
 				Name:        "verbose",
 				Aliases:     []string{"v"},
 				Value:       3,
-				DefaultText: "3 (debug)",
+				DefaultText: "2 (info)",
 				Usage:       "The level of logging verbosity: 1:Error 2:Info 3:Debug",
 				Destination: &flagLogLevel,
 			},
 			&cli.BoolFlag{
 				Name:        "encrypt-metadata",
 				Value:       true,
-				Usage:       "Whether the metadata is encrypted.",
+				Usage:       "Encrypt the server metadata (strongly recommended).",
 				Destination: &flagEncryptMetadata,
 			},
 			&cli.StringFlag{
@@ -124,6 +124,10 @@ func main() {
 }
 
 func startServer(c *cli.Context) error {
+	if c.Args().Len() > 0 {
+		cli.ShowSubcommandHelp(c)
+		return nil
+	}
 	log.Level = flagLogLevel
 	if (flagTLSCert == "") != (flagTLSKey == "") {
 		log.Fatal("--tlscert and --tlskey must either both be set or unset.")

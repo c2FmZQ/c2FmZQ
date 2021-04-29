@@ -170,14 +170,14 @@ func New() *kringle {
 			},
 			&cli.Command{
 				Name:      "hide",
-				Usage:     "Hide directory.",
+				Usage:     "Hide directory (album).",
 				ArgsUsage: `["glob"] ...`,
 				Action:    app.hideAlbums,
 				Category:  "Albums",
 			},
 			&cli.Command{
 				Name:      "unhide",
-				Usage:     "Unhide directory.",
+				Usage:     "Unhide directory (album).",
 				ArgsUsage: "[name] ...",
 				Action:    app.unhideAlbums,
 				Category:  "Albums",
