@@ -19,9 +19,9 @@ import (
 	"golang.org/x/sys/unix"
 	"golang.org/x/term"
 
-	"kringle/database"
-	"kringle/log"
-	"kringle/server"
+	"kringle/internal/database"
+	"kringle/internal/log"
+	"kringle/internal/server"
 )
 
 var (

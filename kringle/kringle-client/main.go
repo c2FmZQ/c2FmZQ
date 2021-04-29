@@ -3,12 +3,13 @@ package main
 import (
 	"os"
 
-	"kringle/log"
+	"kringle/internal/log"
+	"kringle/kringle-client/internal"
 )
 
 func main() {
-	app := makeKringle()
-	if err := app.cli.Run(os.Args); err != nil {
+	app := internal.New()
+	if err := app.Run(os.Args); err != nil {
 		log.Fatal(err)
 	}
 }
