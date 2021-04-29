@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
-	"io"
 	"net/url"
 	"strconv"
 	"strings"
@@ -15,7 +14,7 @@ import (
 
 func (c *Client) CreateAccount(email, password string) error {
 	salt := make([]byte, 16)
-	if _, err := io.ReadFull(rand.Reader, salt); err != nil {
+	if _, err := rand.Read(salt); err != nil {
 		return err
 	}
 	sk := stingle.MakeSecretKey()

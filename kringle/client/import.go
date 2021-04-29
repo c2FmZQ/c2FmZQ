@@ -169,7 +169,7 @@ func (c *Client) importFile(file string, dst ListItem, pk stingle.PublicKey) err
 
 func makeSPFilename() string {
 	b := make([]byte, 32)
-	if _, err := io.ReadFull(rand.Reader, b); err != nil {
+	if _, err := rand.Read(b); err != nil {
 		panic(err)
 	}
 	return base64.RawURLEncoding.EncodeToString(b) + ".sp"

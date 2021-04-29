@@ -92,7 +92,7 @@ func TestStream(t *testing.T) {
 	}
 	var buf bytes.Buffer
 	content := make([]byte, 10000)
-	if _, err := io.ReadFull(rand.Reader, content); err != nil {
+	if _, err := rand.Read(content); err != nil {
 		t.Fatalf("rand: %v", err)
 	}
 	w, err := mk.StartWriter(&buf)
@@ -137,7 +137,7 @@ func TestStreamInvalidMAC(t *testing.T) {
 	}
 	var buf bytes.Buffer
 	content := make([]byte, 10000)
-	if _, err := io.ReadFull(rand.Reader, content); err != nil {
+	if _, err := rand.Read(content); err != nil {
 		t.Fatalf("rand: %v", err)
 	}
 	w, err := mk.StartWriter(&buf)

@@ -50,7 +50,7 @@ type EncryptionKey struct {
 // CreateMasterKey creates a new master key.
 func CreateMasterKey() (*MasterKey, error) {
 	b := make([]byte, 64)
-	if _, err := io.ReadFull(rand.Reader, b); err != nil {
+	if _, err := rand.Read(b); err != nil {
 		return nil, err
 	}
 	return &MasterKey{encryptionKeyFromBytes(b)}, nil
@@ -93,7 +93,7 @@ func ReadMasterKey(passphrase, file string) (*MasterKey, error) {
 // Save encrypts the key with passphrase and saves it to file.
 func (mk MasterKey) Save(passphrase, file string) error {
 	salt := make([]byte, 16)
-	if _, err := io.ReadFull(rand.Reader, salt); err != nil {
+	if _, err := rand.Read(salt); err != nil {
 		return err
 	}
 	numIter := 200000
@@ -114,7 +114,7 @@ func (mk MasterKey) Save(passphrase, file string) error {
 		return ErrEncryptFailed
 	}
 	nonce := make([]byte, gcm.NonceSize())
-	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+	if _, err := rand.Read(nonce); err != nil {
 		log.Debugf("io.ReadFull: %v", err)
 		return ErrEncryptFailed
 	}
@@ -191,7 +191,7 @@ func (k EncryptionKey) Encrypt(data []byte) ([]byte, error) {
 	}
 	out := make([]byte, 1+gcm.NonceSize())
 	out[0] = 1 // version
-	if _, err := io.ReadFull(rand.Reader, out[1:]); err != nil {
+	if _, err := rand.Read(out[1:]); err != nil {
 		log.Debugf("io.ReadFull: %v", err)
 		return nil, ErrEncryptFailed
 	}
@@ -202,7 +202,7 @@ func (k EncryptionKey) Encrypt(data []byte) ([]byte, error) {
 // Internally, the key is masked with a ephemeral key in memory.
 func encryptionKeyFromBytes(b []byte) EncryptionKey {
 	mask := make([]byte, len(b))
-	if _, err := io.ReadFull(rand.Reader, mask); err != nil {
+	if _, err := rand.Read(mask); err != nil {
 		panic(err)
 	}
 	xor := func(in []byte) []byte {
@@ -222,7 +222,7 @@ func encryptionKeyFromBytes(b []byte) EncryptionKey {
 // NewEncryptionKey creates a new encryption key.
 func (k EncryptionKey) NewEncryptionKey() (*EncryptionKey, error) {
 	b := make([]byte, 64)
-	if _, err := io.ReadFull(rand.Reader, b); err != nil {
+	if _, err := rand.Read(b); err != nil {
 		log.Debugf("io.ReadFull: %v", err)
 		return nil, ErrEncryptFailed
 	}
@@ -339,7 +339,7 @@ func (w *StreamWriter) writeChunk(b []byte) (int, error) {
 	w.c++
 	out := make([]byte, 8+w.gcm.NonceSize())
 	binary.BigEndian.PutUint64(out[:8], w.c)
-	if _, err := io.ReadFull(rand.Reader, out[8:]); err != nil {
+	if _, err := rand.Read(out[8:]); err != nil {
 		log.Debugf("io.ReadFull: %v", err)
 		return 0, ErrEncryptFailed
 	}

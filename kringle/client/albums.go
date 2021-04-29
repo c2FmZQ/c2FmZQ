@@ -4,7 +4,6 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -27,7 +26,7 @@ func (c *Client) AddAlbums(names []string) error {
 
 func (c *Client) addAlbum(name string) error {
 	b := make([]byte, 32)
-	if _, err := io.ReadFull(rand.Reader, b); err != nil {
+	if _, err := rand.Read(b); err != nil {
 		return err
 	}
 	albumID := base64.RawURLEncoding.EncodeToString(b)

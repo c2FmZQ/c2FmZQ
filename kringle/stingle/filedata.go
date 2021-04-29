@@ -37,7 +37,7 @@ func (w *StreamWriter) writeChunk(b []byte) (int, error) {
 	ck := DeriveKey(w.hdr.SymmetricKey, chacha20poly1305.KeySize, w.c, context)
 
 	nonce := make([]byte, chacha20poly1305.NonceSizeX)
-	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+	if _, err := rand.Read(nonce); err != nil {
 		return 0, err
 	}
 	ae, err := chacha20poly1305.NewX(ck)

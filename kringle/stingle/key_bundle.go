@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"io"
 	"strings"
 
 	"kringle/stingle/pwhash"
@@ -102,12 +101,12 @@ func DecodeSecretKeyBundle(password []byte, bundle string) (sk SecretKey, err er
 // EncryptSecretKeyForExport encrypts the secret key with password.
 func EncryptSecretKeyForExport(password []byte, sk SecretKey) []byte {
 	salt := make([]byte, 16)
-	if _, err := io.ReadFull(rand.Reader, salt); err != nil {
+	if _, err := rand.Read(salt); err != nil {
 		panic(err)
 	}
 	key := pwhash.KeyFromPassword(password, salt, pwhash.Moderate, 32)
 	nonce := make([]byte, 24)
-	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+	if _, err := rand.Read(nonce); err != nil {
 		panic(err)
 	}
 	out := EncryptSymmetric(sk.ToBytes(), nonce, key)

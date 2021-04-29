@@ -20,7 +20,6 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"errors"
-	"io"
 	"time"
 
 	"golang.org/x/crypto/chacha20poly1305"
@@ -54,7 +53,7 @@ type Token struct {
 // MakeKey returns a new encryption key.
 func MakeKey() *Key {
 	var key Key
-	if _, err := io.ReadFull(rand.Reader, key[:]); err != nil {
+	if _, err := rand.Read(key[:]); err != nil {
 		panic(err)
 	}
 	return &key
@@ -75,7 +74,7 @@ func Mint(key *Key, tok Token, exp time.Duration) string {
 	binary.BigEndian.PutUint64(enc, uint64(tok.Subject))
 
 	nonce := make([]byte, cc.NonceSize())
-	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+	if _, err := rand.Read(nonce); err != nil {
 		panic(err)
 	}
 	enc = append(enc, nonce...)

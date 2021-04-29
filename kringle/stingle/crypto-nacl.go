@@ -19,7 +19,7 @@ import (
 // MakeSecretKey returns a new SecretKey.
 func MakeSecretKey() SecretKey {
 	sk := SecretKey{B: new([32]byte)}
-	if _, err := io.ReadFull(rand.Reader, sk.B[:]); err != nil {
+	if _, err := rand.Read(sk.B[:]); err != nil {
 		panic(err)
 	}
 	return sk
@@ -143,7 +143,7 @@ func (k SignSecretKey) PublicKey() SignPublicKey {
 // https://pkg.go.dev/github.com/jamesruan/sodium#hdr-Authenticated_Public_Key_Encryption
 func EncryptMessage(msg []byte, pk PublicKey, sk SecretKey) string {
 	nonce := new([24]byte)
-	if _, err := io.ReadFull(rand.Reader, nonce[:]); err != nil {
+	if _, err := rand.Read(nonce[:]); err != nil {
 		panic(err)
 	}
 	out := make([]byte, len(nonce))

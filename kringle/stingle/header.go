@@ -56,14 +56,14 @@ func NewHeaders(filename string) (hdrs [2]Header) {
 		hdrs[i].Filename = make([]byte, len(filename))
 		copy(hdrs[i].Filename, []byte(filename))
 	}
-	if _, err := io.ReadFull(rand.Reader, hdrs[0].FileID); err != nil {
+	if _, err := rand.Read(hdrs[0].FileID); err != nil {
 		panic(err)
 	}
-	if _, err := io.ReadFull(rand.Reader, hdrs[0].SymmetricKey); err != nil {
+	if _, err := rand.Read(hdrs[0].SymmetricKey); err != nil {
 		panic(err)
 	}
 	copy(hdrs[1].FileID, hdrs[0].FileID)
-	if _, err := io.ReadFull(rand.Reader, hdrs[1].SymmetricKey); err != nil {
+	if _, err := rand.Read(hdrs[1].SymmetricKey); err != nil {
 		panic(err)
 	}
 	return

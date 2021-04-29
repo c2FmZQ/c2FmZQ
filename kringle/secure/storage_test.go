@@ -3,7 +3,6 @@ package secure
 import (
 	"crypto/rand"
 	"errors"
-	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -202,10 +201,10 @@ func RunBenchmarkOpenForUpdate(b *testing.B, kb int, k *crypto.EncryptionKey, co
 	for i := 0; i < kb; i++ {
 		key := make([]byte, 32)
 		value := make([]byte, 1024)
-		if _, err := io.ReadFull(rand.Reader, key); err != nil {
+		if _, err := rand.Read(key); err != nil {
 			b.Fatalf("io.ReadFull: %v", err)
 		}
-		if _, err := io.ReadFull(rand.Reader, value); err != nil {
+		if _, err := rand.Read(value); err != nil {
 			b.Fatalf("io.ReadFull: %v", err)
 		}
 		obj.M[string(key)] = string(value)
