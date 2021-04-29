@@ -1,9 +1,8 @@
-// The kringle-server binary is an API server that's compatible with the
-// Stingle Photos app (https://github.com/stingle/stingle-photos-android)
-// published by stingle.org.
+// The kringle-server binary is an API server that can securely encrypt, store,
+// and share files, including but not limited to pictures and videos.
 //
-// For the app to connect to this server, it has to the recompiled with
-// api_server_url set to point to this server.
+// It is compatible with the Stingle Photos app (https://github.com/stingle/stingle-photos-android)
+// published by stingle.org.
 package main
 
 import (
