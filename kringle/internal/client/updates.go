@@ -212,7 +212,7 @@ func (c *Client) processAlbumFileUpdates(updates []stingle.File) (retErr error) 
 		if _, ok := al.Albums[a]; !ok {
 			al.Albums[a] = al.RemoteAlbums[a]
 			if album := al.Albums[a]; album != nil {
-				name, _ := album.Name(c.SecretKey)
+				name, _ := album.Name(c.SecretKey())
 				log.Debugf("Album recovered %s (%s)", name, a)
 			}
 		}
@@ -271,7 +271,7 @@ func (c *Client) processDeleteAlbums(deletes []stingle.DeleteEvent) (retErr erro
 		d, _ := del.Date.Int64()
 		if a, ok := al.Albums[del.AlbumID]; ok {
 			ad, _ := a.DateModified.Int64()
-			name, _ := a.Name(c.SecretKey)
+			name, _ := a.Name(c.SecretKey())
 			localChanges, err := c.albumHasLocalFileChanges(del.AlbumID)
 			if err != nil {
 				return err
@@ -414,6 +414,9 @@ func max(values ...int64) (m int64) {
 }
 
 func (c *Client) GetUpdates(quiet bool) error {
+	if c.Account == nil {
+		return ErrNotLoggedIn
+	}
 	galleryTS, err := c.getTimestamps(galleryFile)
 	if err != nil {
 		return err
@@ -437,14 +440,14 @@ func (c *Client) GetUpdates(quiet bool) error {
 	deleteTS := max(galleryTS.LastDeleteTime, trashTS.LastDeleteTime, albumsTS.LastDeleteTime, contactsTS.LastDeleteTime, albumFilesTS.LastDeleteTime)
 
 	form := url.Values{}
-	form.Set("token", c.Token)
+	form.Set("token", c.Account.Token)
 	form.Set("filesST", strconv.FormatInt(galleryTS.LastUpdateTime, 10))
 	form.Set("trashST", strconv.FormatInt(trashTS.LastUpdateTime, 10))
 	form.Set("albumsST", strconv.FormatInt(albumsTS.LastUpdateTime, 10))
 	form.Set("albumFilesST", strconv.FormatInt(albumFilesTS.LastUpdateTime, 10))
 	form.Set("cntST", strconv.FormatInt(contactsTS.LastUpdateTime, 10))
 	form.Set("delST", strconv.FormatInt(deleteTS, 10))
-	sr, err := c.sendRequest("/v2/sync/getUpdates", form)
+	sr, err := c.sendRequest("/v2/sync/getUpdates", form, "")
 	if err != nil {
 		return err
 	}

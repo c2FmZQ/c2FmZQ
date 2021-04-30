@@ -2,6 +2,8 @@
 package client
 
 import (
+	"bufio"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -24,9 +27,12 @@ const (
 	albumList    = "albums"
 	albumPrefix  = "album/"
 	contactsFile = "contacts"
-	blobsDir     = "blobs"
 
 	userAgent = "Dalvik/2.1.0 (Linux; U; Android 9; moto x4 Build/PPWS29.69-39-6-4)"
+)
+
+var (
+	ErrNotLoggedIn = errors.New("not logged in")
 )
 
 // Create creates a new client configuration, if one doesn't exist already.
@@ -35,19 +41,13 @@ func Create(s *secure.Storage) (*Client, error) {
 	c.hc = &http.Client{}
 	c.storage = s
 	c.writer = os.Stdout
-	if err := s.CreateEmptyFile(s.HashString(configFile), &c); err != nil {
+	c.prompt = prompt
+	c.LocalSecretKey = stingle.MakeSecretKey()
+
+	if err := s.CreateEmptyFile(c.cfgFile(), &c); err != nil {
 		return nil, err
 	}
-	if err := c.storage.CreateEmptyFile(c.fileHash(galleryFile), &FileSet{}); err != nil {
-		return nil, err
-	}
-	if err := c.storage.CreateEmptyFile(c.fileHash(trashFile), &FileSet{}); err != nil {
-		return nil, err
-	}
-	if err := c.storage.CreateEmptyFile(c.fileHash(albumList), &AlbumList{}); err != nil {
-		return nil, err
-	}
-	if err := c.storage.CreateEmptyFile(c.fileHash(contactsFile), &ContactList{}); err != nil {
+	if err := c.createEmptyFiles(); err != nil {
 		return nil, err
 	}
 	return &c, nil
@@ -56,53 +56,82 @@ func Create(s *secure.Storage) (*Client, error) {
 // Load loads the existing client configuration.
 func Load(s *secure.Storage) (*Client, error) {
 	var c Client
-	if _, err := s.ReadDataFile(s.HashString(configFile), &c); err != nil {
+	c.storage = s
+	if _, err := s.ReadDataFile(c.cfgFile(), &c); err != nil {
 		return nil, err
 	}
 	c.hc = &http.Client{}
-	c.storage = s
 	c.writer = os.Stdout
-	c.storage.CreateEmptyFile(c.fileHash(galleryFile), &FileSet{})
-	c.storage.CreateEmptyFile(c.fileHash(trashFile), &FileSet{})
-	c.storage.CreateEmptyFile(c.fileHash(albumList), &AlbumList{})
-	c.storage.CreateEmptyFile(c.fileHash(contactsFile), &ContactList{})
+	c.prompt = prompt
+	c.createEmptyFiles()
 	return &c, nil
 }
 
 // Client contains the metadata for a user account.
 type Client struct {
-	UserID          int64             `json:"userID"`
-	Email           string            `json:"email"`
-	Salt            []byte            `json:"salt"`
-	SecretKey       stingle.SecretKey `json:"secretKey"`
-	ServerPublicKey stingle.PublicKey `json:"serverPublicKey"`
-	Token           string            `json:"token"`
-
-	ServerBaseURL string `json:"serverBaseURL"`
+	Account        *AccountInfo      `json:"accountInfo"`
+	LocalSecretKey stingle.SecretKey `json:"localSecretKey"`
 
 	hc *http.Client
 
 	storage *secure.Storage
 	writer  io.Writer
+	prompt  func(msg string) (string, error)
+}
+
+// AccountInfo encapsulated the information for a logged in account.
+type AccountInfo struct {
+	Email           string            `json:"email"`
+	Salt            []byte            `json:"salt"`
+	HashedPassword  string            `json:"hashedPassword"`
+	SecretKey       stingle.SecretKey `json:"secretKey"`
+	IsBackedUp      bool              `json:"isBackedUp"`
+	ServerBaseURL   string            `json:"serverBaseURL"`
+	UserID          int64             `json:"userID"`
+	ServerPublicKey stingle.PublicKey `json:"serverPublicKey"`
+	Token           string            `json:"token"`
 }
 
 // Save saves the current client configuration.
 func (c *Client) Save() error {
-	return c.storage.SaveDataFile(nil, c.storage.HashString(configFile), c)
+	return c.storage.SaveDataFile(nil, c.cfgFile(), c)
+}
+
+func (c *Client) cfgFile() string {
+	cfg := c.storage.HashString(configFile)
+	return filepath.Join(cfg[:2], cfg)
+}
+
+// SecretKey returns the current secret key.
+func (c *Client) SecretKey() stingle.SecretKey {
+	if c.Account != nil {
+		return c.Account.SecretKey
+	}
+	return c.LocalSecretKey
 }
 
 // Status returns the client's current status.
 func (c *Client) Status() error {
-	if c.Email == "" {
+	if c.Account == nil {
 		c.Print("Not logged in.")
-		return nil
+	} else {
+		c.Printf("Logged in as %s on %s.\n", c.Account.Email, c.Account.ServerBaseURL)
+		if c.Account.IsBackedUp {
+			c.Printf("Secret key is backed up.\n")
+		} else {
+			c.Printf("Secret key is NOT backed up.\n")
+		}
 	}
-	c.Printf("Logged in as %s on %s.\n", c.Email, c.ServerBaseURL)
+	c.Printf("Public key: % X\n", c.SecretKey().PublicKey().ToBytes())
 	return nil
 }
 
 func (c *Client) SetWriter(w io.Writer) {
 	c.writer = w
+}
+
+func (c *Client) SetPrompt(f func(msg string) (string, error)) {
+	c.prompt = f
 }
 
 func (c *Client) SetHTTPClient(hc *http.Client) {
@@ -126,23 +155,23 @@ func nowJSON() json.Number {
 }
 
 func (c *Client) fileHash(fn string) string {
-	if c.Email == "" {
-		return c.storage.HashString("local/" + fn)
-	}
-	return c.storage.HashString(c.ServerBaseURL + "/" + c.Email + "/" + fn)
+	n := c.storage.HashString(hex.EncodeToString(c.SecretKey().ToBytes()) + "/" + fn)
+	return filepath.Join(n[:2], n)
 }
 
 func (c *Client) encodeParams(params map[string]string) string {
 	j, _ := json.Marshal(params)
-	return stingle.EncryptMessage(j, c.ServerPublicKey, c.SecretKey)
+	return stingle.EncryptMessage(j, c.Account.ServerPublicKey, c.Account.SecretKey)
 }
 
-func (c *Client) sendRequest(uri string, form url.Values) (*stingle.Response, error) {
-	c.ServerBaseURL = strings.TrimSuffix(c.ServerBaseURL, "/")
-	if c.ServerBaseURL == "" {
+func (c *Client) sendRequest(uri string, form url.Values, server string) (*stingle.Response, error) {
+	if server == "" && c.Account != nil {
+		server = c.Account.ServerBaseURL
+	}
+	if server == "" {
 		return nil, errors.New("ServerBaseURL is not set")
 	}
-	url := c.ServerBaseURL + uri
+	url := server + uri
 
 	log.Debugf("SEND POST %s", url)
 	log.Debugf(" %v", form)
@@ -172,17 +201,19 @@ func (c *Client) sendRequest(uri string, form url.Values) (*stingle.Response, er
 }
 
 func (c *Client) download(file, set, thumb string) (io.ReadCloser, error) {
-	c.ServerBaseURL = strings.TrimSuffix(c.ServerBaseURL, "/")
-	if c.ServerBaseURL == "" {
+	if c.Account == nil {
+		return nil, ErrNotLoggedIn
+	}
+	if c.Account.ServerBaseURL == "" {
 		return nil, errors.New("ServerBaseURL is not set")
 	}
 	form := url.Values{}
-	form.Set("token", c.Token)
+	form.Set("token", c.Account.Token)
 	form.Set("file", file)
 	form.Set("set", set)
 	form.Set("thumb", thumb)
 
-	url := c.ServerBaseURL + "/v2/sync/download"
+	url := c.Account.ServerBaseURL + "/v2/sync/download"
 
 	log.Debugf("SEND POST %v", url)
 	log.Debugf(" %v", form)
@@ -202,4 +233,27 @@ func (c *Client) download(file, set, thumb string) (io.ReadCloser, error) {
 		return nil, fmt.Errorf("request returned status code %d", resp.StatusCode)
 	}
 	return resp.Body, nil
+}
+
+func (c *Client) createEmptyFiles() (err error) {
+	if e := c.storage.CreateEmptyFile(c.fileHash(galleryFile), &FileSet{}); err == nil {
+		err = e
+	}
+	if e := c.storage.CreateEmptyFile(c.fileHash(trashFile), &FileSet{}); err == nil {
+		err = e
+	}
+	if e := c.storage.CreateEmptyFile(c.fileHash(albumList), &AlbumList{}); err == nil {
+		err = e
+	}
+	if e := c.storage.CreateEmptyFile(c.fileHash(contactsFile), &ContactList{}); err == nil {
+		err = e
+	}
+	return
+}
+
+func prompt(msg string) (reply string, err error) {
+	fmt.Print(msg)
+	reply, err = bufio.NewReader(os.Stdin).ReadString('\n')
+	reply = strings.TrimSpace(reply)
+	return
 }

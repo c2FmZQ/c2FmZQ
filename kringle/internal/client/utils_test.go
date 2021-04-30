@@ -11,20 +11,19 @@ import (
 	"sort"
 	"testing"
 
+	"kringle/internal/client"
 	"kringle/internal/crypto"
 	"kringle/internal/database"
 	"kringle/internal/log"
 	"kringle/internal/secure"
-	"kringle/internal/client"
 	"kringle/internal/server"
 )
 
 var (
-	hc  *http.Client
-	url string
+	hc *http.Client
 )
 
-func startServer(t *testing.T) (*client.Client, func()) {
+func startServer(t *testing.T) (*client.Client, string, func()) {
 	testdir := t.TempDir()
 	log.Record = t.Log
 	log.Level = 2
@@ -34,12 +33,11 @@ func startServer(t *testing.T) (*client.Client, func()) {
 
 	srv := httptest.NewServer(s.Handler())
 	hc = srv.Client()
-	url = srv.URL
 	c, err := newClient(t.TempDir())
 	if err != nil {
 		t.Fatalf("newClient: %v", err)
 	}
-	return c, srv.Close
+	return c, srv.URL, srv.Close
 }
 
 func newClient(dir string) (*client.Client, error) {
@@ -53,15 +51,7 @@ func newClient(dir string) (*client.Client, error) {
 		return nil, err
 	}
 	c.SetHTTPClient(hc)
-	c.ServerBaseURL = url
 	return c, nil
-}
-
-func login(c *client.Client, email, password string) error {
-	if err := c.CreateAccount(email, password); err != nil {
-		return err
-	}
-	return c.Login(email, password)
 }
 
 func makeImages(dir string, start, n int) error {

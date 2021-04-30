@@ -14,6 +14,9 @@ import (
 
 // Share sharing albums matching pattern with contacts.
 func (c *Client) Share(pattern string, shareWith []string, permissions []string) error {
+	if c.Account == nil {
+		return ErrNotLoggedIn
+	}
 	li, err := c.GlobFiles([]string{pattern})
 	if err != nil {
 		return err
@@ -32,7 +35,7 @@ func (c *Client) Share(pattern string, shareWith []string, permissions []string)
 	}
 	var members []*stingle.Contact
 	for _, email := range shareWith {
-		if email == c.Email {
+		if email == c.Account.Email {
 			continue
 		}
 		found := false
@@ -56,11 +59,11 @@ func (c *Client) Share(pattern string, shareWith []string, permissions []string)
 	for _, item := range li {
 		album := item.Album
 		sharingKeys := make(map[string]string)
-		sk, err := album.SK(c.SecretKey)
+		sk, err := album.SK(c.SecretKey())
 		if err != nil {
 			return err
 		}
-		ids := []string{fmt.Sprintf("%d", c.UserID)}
+		ids := []string{fmt.Sprintf("%d", c.Account.UserID)}
 		for _, m := range members {
 			id := m.UserID.String()
 			pk, err := m.PK()
@@ -85,6 +88,9 @@ func (c *Client) Share(pattern string, shareWith []string, permissions []string)
 
 // Unshare stops sharing albums.
 func (c *Client) Unshare(patterns []string) error {
+	if c.Account == nil {
+		return ErrNotLoggedIn
+	}
 	li, err := c.GlobFiles(patterns)
 	if err != nil {
 		return err
@@ -108,6 +114,9 @@ func (c *Client) Unshare(patterns []string) error {
 
 // Leave removes an album that was shared with us.
 func (c *Client) Leave(patterns []string) error {
+	if c.Account == nil {
+		return ErrNotLoggedIn
+	}
 	li, err := c.GlobFiles(patterns)
 	if err != nil {
 		return err
@@ -131,6 +140,9 @@ func (c *Client) Leave(patterns []string) error {
 
 // RemoveMember removes members of an album.
 func (c *Client) RemoveMembers(pattern string, toRemove []string) error {
+	if c.Account == nil {
+		return ErrNotLoggedIn
+	}
 	li, err := c.GlobFiles([]string{pattern})
 	if err != nil {
 		return err
@@ -149,7 +161,7 @@ func (c *Client) RemoveMembers(pattern string, toRemove []string) error {
 	}
 	var ids []string
 	for _, email := range toRemove {
-		if email == c.Email {
+		if email == c.Account.Email {
 			continue
 		}
 		found := false
@@ -187,6 +199,9 @@ func (c *Client) RemoveMembers(pattern string, toRemove []string) error {
 
 // ChangePermissions changes the permissions on albums.
 func (c *Client) ChangePermissions(patterns, perms []string) (retErr error) {
+	if c.Account == nil {
+		return ErrNotLoggedIn
+	}
 	li, err := c.GlobFiles(patterns)
 	if err != nil {
 		return err
@@ -231,7 +246,8 @@ L:
 	for _, c := range cl.Contacts {
 		for _, p := range patterns {
 			if m, err := path.Match(p, c.Email); err == nil && m {
-				out = append(out, c.Email)
+				pk, _ := c.PK()
+				out = append(out, fmt.Sprintf("%s (% X)", c.Email, pk.ToBytes()))
 				continue L
 			}
 		}
@@ -275,14 +291,17 @@ func (c *Client) parsePermissions(p string, changes []string) (string, error) {
 }
 
 func (c *Client) sendGetContact(email string) (*stingle.Contact, error) {
+	if c.Account == nil {
+		return nil, ErrNotLoggedIn
+	}
 	params := make(map[string]string)
 	params["email"] = email
 
 	form := url.Values{}
-	form.Set("token", c.Token)
+	form.Set("token", c.Account.Token)
 	form.Set("params", c.encodeParams(params))
 
-	sr, err := c.sendRequest("/v2/sync/getContact", form)
+	sr, err := c.sendRequest("/v2/sync/getContact", form, "")
 	if err != nil {
 		return nil, err
 	}
@@ -297,6 +316,9 @@ func (c *Client) sendGetContact(email string) (*stingle.Contact, error) {
 }
 
 func (c *Client) sendShare(album *stingle.Album, sharingKeys map[string]string) error {
+	if c.Account == nil {
+		return ErrNotLoggedIn
+	}
 	aj, err := json.Marshal(album)
 	if err != nil {
 		return err
@@ -310,10 +332,10 @@ func (c *Client) sendShare(album *stingle.Album, sharingKeys map[string]string) 
 	params["sharingKeys"] = string(kj)
 
 	form := url.Values{}
-	form.Set("token", c.Token)
+	form.Set("token", c.Account.Token)
 	form.Set("params", c.encodeParams(params))
 
-	sr, err := c.sendRequest("/v2/sync/share", form)
+	sr, err := c.sendRequest("/v2/sync/share", form, "")
 	if err != nil {
 		return err
 	}
@@ -324,14 +346,17 @@ func (c *Client) sendShare(album *stingle.Album, sharingKeys map[string]string) 
 }
 
 func (c *Client) sendUnshareAlbum(albumID string) error {
+	if c.Account == nil {
+		return ErrNotLoggedIn
+	}
 	params := make(map[string]string)
 	params["albumId"] = albumID
 
 	form := url.Values{}
-	form.Set("token", c.Token)
+	form.Set("token", c.Account.Token)
 	form.Set("params", c.encodeParams(params))
 
-	sr, err := c.sendRequest("/v2/sync/unshareAlbum", form)
+	sr, err := c.sendRequest("/v2/sync/unshareAlbum", form, "")
 	if err != nil {
 		return err
 	}
@@ -342,14 +367,17 @@ func (c *Client) sendUnshareAlbum(albumID string) error {
 }
 
 func (c *Client) sendLeaveAlbum(albumID string) error {
+	if c.Account == nil {
+		return ErrNotLoggedIn
+	}
 	params := make(map[string]string)
 	params["albumId"] = albumID
 
 	form := url.Values{}
-	form.Set("token", c.Token)
+	form.Set("token", c.Account.Token)
 	form.Set("params", c.encodeParams(params))
 
-	sr, err := c.sendRequest("/v2/sync/leaveAlbum", form)
+	sr, err := c.sendRequest("/v2/sync/leaveAlbum", form, "")
 	if err != nil {
 		return err
 	}
@@ -360,6 +388,9 @@ func (c *Client) sendLeaveAlbum(albumID string) error {
 }
 
 func (c *Client) sendRemoveAlbumMember(album *stingle.Album, id int64) error {
+	if c.Account == nil {
+		return ErrNotLoggedIn
+	}
 	aj, err := json.Marshal(album)
 	if err != nil {
 		return err
@@ -369,10 +400,10 @@ func (c *Client) sendRemoveAlbumMember(album *stingle.Album, id int64) error {
 	params["memberUserId"] = fmt.Sprintf("%d", id)
 
 	form := url.Values{}
-	form.Set("token", c.Token)
+	form.Set("token", c.Account.Token)
 	form.Set("params", c.encodeParams(params))
 
-	sr, err := c.sendRequest("/v2/sync/removeAlbumMember", form)
+	sr, err := c.sendRequest("/v2/sync/removeAlbumMember", form, "")
 	if err != nil {
 		return err
 	}

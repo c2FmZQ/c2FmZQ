@@ -194,7 +194,7 @@ func (c *Client) applyFilesToMove(moves map[MoveKey][]*stingle.File, al AlbumLis
 		}
 		var files []string
 		for _, f := range v {
-			sk := c.SecretKey
+			sk := c.SecretKey()
 			if k.AlbumIDTo != "" {
 				sk, err = al.Albums[k.AlbumIDTo].SK(sk)
 				if err != nil {
@@ -257,7 +257,7 @@ func (c *Client) applyAlbumsToRemove(albums []*stingle.Album, dryrun bool) error
 func (c *Client) showAlbumsToSync(label string, albums []*stingle.Album) error {
 	c.Print(label)
 	for _, a := range albums {
-		name, err := a.Name(c.SecretKey)
+		name, err := a.Name(c.SecretKey())
 		if err != nil {
 			return err
 		}
@@ -269,7 +269,7 @@ func (c *Client) showAlbumsToSync(label string, albums []*stingle.Album) error {
 func (c *Client) showFilesToSync(label string, files []FileLoc, al AlbumList) error {
 	c.Print(label)
 	for _, f := range files {
-		sk := c.SecretKey
+		sk := c.SecretKey()
 		if album, ok := al.Albums[f.AlbumID]; ok {
 			ask, err := album.SK(sk)
 			if err != nil {
@@ -307,10 +307,10 @@ func (c *Client) translateSetAlbumIDToName(set, albumID string, al AlbumList) (s
 		return "trash", nil
 	case stingle.AlbumSet:
 		if album, ok := al.Albums[albumID]; ok {
-			return album.Name(c.SecretKey)
+			return album.Name(c.SecretKey())
 		}
 		if album, ok := al.RemoteAlbums[albumID]; ok {
-			return album.Name(c.SecretKey)
+			return album.Name(c.SecretKey())
 		}
 		return "", fmt.Errorf("album not found: %s", albumID)
 	default:
@@ -562,8 +562,7 @@ func (c *Client) blobPath(name string, thumb bool) string {
 	if thumb {
 		name = name + "-thumb"
 	}
-	n := c.storage.HashString(name)
-	return filepath.Join(c.storage.Dir(), blobsDir, n[:2], n)
+	return filepath.Join(c.storage.Dir(), c.fileHash(name))
 }
 
 func (c *Client) downloadWorker(ch <-chan ListItem, out chan<- error) {
@@ -606,6 +605,9 @@ func (c *Client) downloadFile(li ListItem) error {
 }
 
 func (c *Client) uploadFile(item FileLoc) error {
+	if c.Account == nil {
+		return ErrNotLoggedIn
+	}
 	pr, pw := io.Pipe()
 	w := multipart.NewWriter(pw)
 
@@ -638,7 +640,7 @@ func (c *Client) uploadFile(item FileLoc) error {
 			{"dateCreated", item.File.DateCreated.String()},
 			{"dateModified", item.File.DateModified.String()},
 			{"version", item.File.Version},
-			{"token", c.Token},
+			{"token", c.Account.Token},
 		} {
 			pw, err := w.CreateFormField(f.name)
 			if err != nil {
@@ -656,7 +658,7 @@ func (c *Client) uploadFile(item FileLoc) error {
 		}
 	}()
 
-	url := c.ServerBaseURL + "/v2/sync/upload"
+	url := c.Account.ServerBaseURL + "/v2/sync/upload"
 
 	req, err := http.NewRequest("POST", url, pr)
 	if err != nil {
@@ -686,6 +688,9 @@ func (c *Client) uploadFile(item FileLoc) error {
 }
 
 func (c *Client) sendAddAlbum(album *stingle.Album) error {
+	if c.Account == nil {
+		return ErrNotLoggedIn
+	}
 	params := make(map[string]string)
 	params["albumId"] = album.AlbumID
 	params["dateCreated"] = album.DateCreated.String()
@@ -694,10 +699,10 @@ func (c *Client) sendAddAlbum(album *stingle.Album) error {
 	params["metadata"] = album.Metadata
 	params["publicKey"] = album.PublicKey
 	form := url.Values{}
-	form.Set("token", c.Token)
+	form.Set("token", c.Account.Token)
 	form.Set("params", c.encodeParams(params))
 
-	sr, err := c.sendRequest("/v2/sync/addAlbum", form)
+	sr, err := c.sendRequest("/v2/sync/addAlbum", form, "")
 	if err != nil {
 		return err
 	}
@@ -708,13 +713,16 @@ func (c *Client) sendAddAlbum(album *stingle.Album) error {
 }
 
 func (c *Client) sendDeleteAlbum(albumID string) error {
+	if c.Account == nil {
+		return ErrNotLoggedIn
+	}
 	params := make(map[string]string)
 	params["albumId"] = albumID
 	form := url.Values{}
-	form.Set("token", c.Token)
+	form.Set("token", c.Account.Token)
 	form.Set("params", c.encodeParams(params))
 
-	sr, err := c.sendRequest("/v2/sync/deleteAlbum", form)
+	sr, err := c.sendRequest("/v2/sync/deleteAlbum", form, "")
 	if err != nil {
 		return err
 	}
@@ -725,15 +733,18 @@ func (c *Client) sendDeleteAlbum(albumID string) error {
 }
 
 func (c *Client) sendRenameAlbum(album *stingle.Album) error {
+	if c.Account == nil {
+		return ErrNotLoggedIn
+	}
 	params := make(map[string]string)
 	params["albumId"] = album.AlbumID
 	params["metadata"] = album.Metadata
 
 	form := url.Values{}
-	form.Set("token", c.Token)
+	form.Set("token", c.Account.Token)
 	form.Set("params", c.encodeParams(params))
 
-	sr, err := c.sendRequest("/v2/sync/renameAlbum", form)
+	sr, err := c.sendRequest("/v2/sync/renameAlbum", form, "")
 	if err != nil {
 		return err
 	}
@@ -744,6 +755,9 @@ func (c *Client) sendRenameAlbum(album *stingle.Album) error {
 }
 
 func (c *Client) sendEditPerms(album *stingle.Album) error {
+	if c.Account == nil {
+		return ErrNotLoggedIn
+	}
 	ja, err := json.Marshal(album)
 	if err != nil {
 		return err
@@ -752,10 +766,10 @@ func (c *Client) sendEditPerms(album *stingle.Album) error {
 	params["album"] = string(ja)
 
 	form := url.Values{}
-	form.Set("token", c.Token)
+	form.Set("token", c.Account.Token)
 	form.Set("params", c.encodeParams(params))
 
-	sr, err := c.sendRequest("/v2/sync/editPerms", form)
+	sr, err := c.sendRequest("/v2/sync/editPerms", form, "")
 	if err != nil {
 		return err
 	}
@@ -766,6 +780,9 @@ func (c *Client) sendEditPerms(album *stingle.Album) error {
 }
 
 func (c *Client) sendMoveFiles(key MoveKey, files []*stingle.File) error {
+	if c.Account == nil {
+		return ErrNotLoggedIn
+	}
 	params := make(map[string]string)
 	params["setFrom"] = key.SetFrom
 	params["setTo"] = key.SetTo
@@ -782,10 +799,10 @@ func (c *Client) sendMoveFiles(key MoveKey, files []*stingle.File) error {
 	params["count"] = fmt.Sprintf("%d", len(files))
 
 	form := url.Values{}
-	form.Set("token", c.Token)
+	form.Set("token", c.Account.Token)
 	form.Set("params", c.encodeParams(params))
 
-	sr, err := c.sendRequest("/v2/sync/moveFile", form)
+	sr, err := c.sendRequest("/v2/sync/moveFile", form, "")
 	if err != nil {
 		return err
 	}
@@ -796,6 +813,9 @@ func (c *Client) sendMoveFiles(key MoveKey, files []*stingle.File) error {
 }
 
 func (c *Client) sendDelete(files []*stingle.File) error {
+	if c.Account == nil {
+		return ErrNotLoggedIn
+	}
 	params := make(map[string]string)
 	for i, f := range files {
 		params[fmt.Sprintf("filename%d", i)] = f.File
@@ -803,10 +823,10 @@ func (c *Client) sendDelete(files []*stingle.File) error {
 	params["count"] = fmt.Sprintf("%d", len(files))
 
 	form := url.Values{}
-	form.Set("token", c.Token)
+	form.Set("token", c.Account.Token)
 	form.Set("params", c.encodeParams(params))
 
-	sr, err := c.sendRequest("/v2/sync/delete", form)
+	sr, err := c.sendRequest("/v2/sync/delete", form, "")
 	if err != nil {
 		return err
 	}

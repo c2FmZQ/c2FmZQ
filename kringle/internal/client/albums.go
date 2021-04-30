@@ -31,7 +31,7 @@ func (c *Client) addAlbum(name string) error {
 	}
 	albumID := base64.RawURLEncoding.EncodeToString(b)
 	ask := stingle.MakeSecretKey()
-	encPrivateKey := c.SecretKey.PublicKey().SealBoxBase64(ask.ToBytes())
+	encPrivateKey := c.SecretKey().PublicKey().SealBoxBase64(ask.ToBytes())
 	metadata := stingle.EncryptAlbumMetadata(stingle.AlbumMetadata{Name: name}, ask.PublicKey())
 	publicKey := base64.StdEncoding.EncodeToString(ask.PublicKey().ToBytes())
 
@@ -353,7 +353,7 @@ func (c *Client) moveFiles(fromItems []ListItem, toItem ListItem, moving bool) (
 		return fmt.Errorf("source and destination are the same: %s", toItem.Filename)
 	}
 
-	sk, pk := c.SecretKey, c.SecretKey.PublicKey()
+	sk, pk := c.SecretKey(), c.SecretKey().PublicKey()
 	needHeaders := fromAlbum != nil || toAlbum != nil
 	if needHeaders {
 		var err error

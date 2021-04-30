@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
 	"io"
@@ -33,6 +34,12 @@ type kringle struct {
 }
 
 func New() *kringle {
+	dataDir, err := os.UserConfigDir()
+	if err != nil {
+		dataDir, _ = os.UserHomeDir()
+	}
+	dataDir = filepath.Join(dataDir, ".kringle")
+
 	var app kringle
 	app.cli = &cli.App{
 		Name:     "kringle",
@@ -45,9 +52,8 @@ func New() *kringle {
 			&cli.StringFlag{
 				Name:        "data-dir",
 				Aliases:     []string{"d"},
-				Value:       "",
+				Value:       dataDir,
 				Usage:       "Save the data in `DIR`",
-				Required:    true,
 				EnvVars:     []string{"KRINGLE_DATADIR"},
 				TakesFile:   true,
 				Destination: &app.flagDataDir,
@@ -71,6 +77,7 @@ func New() *kringle {
 				Name:        "server",
 				Value:       "",
 				Usage:       "The API server base URL.",
+				EnvVars:     []string{"KRINGLE_API_SERVER"},
 				Destination: &app.flagAPIServer,
 			},
 			&cli.BoolFlag{
@@ -93,6 +100,47 @@ func New() *kringle {
 				ArgsUsage: "<email>",
 				Action:    app.createAccount,
 				Category:  "Account",
+				Flags: []cli.Flag{
+					&cli.BoolFlag{
+						Name:  "backup",
+						Value: true,
+						Usage: "Backup encrypted secret key on remote server.",
+					},
+				},
+			},
+			&cli.Command{
+				Name:      "recover-account",
+				Usage:     "Recover an account with backup phrase.",
+				ArgsUsage: "<email>",
+				Action:    app.recoverAccount,
+				Category:  "Account",
+				Flags: []cli.Flag{
+					&cli.BoolFlag{
+						Name:  "backup",
+						Value: true,
+						Usage: "Backup encrypted secret key on remote server.",
+					},
+				},
+			},
+			&cli.Command{
+				Name:     "change-password",
+				Usage:    "Change the user's password.",
+				Action:   app.changePassword,
+				Category: "Account",
+				Flags: []cli.Flag{
+					&cli.BoolFlag{
+						Name:  "backup",
+						Value: true,
+						Usage: "Backup encrypted secret key on remote server.",
+					},
+				},
+			},
+			&cli.Command{
+				Name:      "set-key-backup",
+				Usage:     "Enable or disable secret key backup.",
+				ArgsUsage: "<on|off>",
+				Action:    app.setKeyBackup,
+				Category:  "Account",
 			},
 			&cli.Command{
 				Name:      "login",
@@ -113,6 +161,13 @@ func New() *kringle {
 				Usage:     "Show the client's status.",
 				ArgsUsage: " ",
 				Action:    app.status,
+				Category:  "Account",
+			},
+			&cli.Command{
+				Name:      "backup-phrase",
+				Usage:     "Show the backup phrase for the current account. The backup phrase must be kept secret.",
+				ArgsUsage: " ",
+				Action:    app.backupPhrase,
 				Category:  "Account",
 			},
 			&cli.Command{
@@ -331,12 +386,10 @@ func (k *kringle) init(ctx *cli.Context, update bool) error {
 		if err != nil {
 			c, err = client.Create(storage)
 		}
-		if k.flagAPIServer != "" {
-			c.ServerBaseURL = k.flagAPIServer
-		}
 		k.client = c
+		k.client.SetPrompt(k.prompt)
 	}
-	if update && k.flagAutoUpdate && k.client.Token != "" {
+	if update && k.flagAutoUpdate && k.client.Account != nil {
 		if err := k.client.GetUpdates(true); err != nil {
 			return err
 		}
@@ -344,18 +397,11 @@ func (k *kringle) init(ctx *cli.Context, update bool) error {
 	return nil
 }
 
-func (k *kringle) shell(ctx *cli.Context) error {
-	if err := k.init(ctx, false); err != nil {
-		return err
-	}
-	if !term.IsTerminal(int(os.Stdin.Fd())) {
-		return errors.New("not a terminal")
-	}
+func (k *kringle) setupTerminal() (*term.Terminal, func()) {
 	oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
 	if err != nil {
 		panic(err)
 	}
-	defer term.Restore(int(os.Stdin.Fd()), oldState)
 
 	screen := struct {
 		io.Reader
@@ -370,6 +416,19 @@ func (k *kringle) shell(ctx *cli.Context) error {
 			return
 		}
 	*/
+	return t, func() { term.Restore(int(os.Stdin.Fd()), oldState) }
+}
+
+func (k *kringle) shell(ctx *cli.Context) error {
+	if err := k.init(ctx, false); err != nil {
+		return err
+	}
+	if !term.IsTerminal(int(os.Stdin.Fd())) {
+		return errors.New("not a terminal")
+	}
+	t, reset := k.setupTerminal()
+	defer reset()
+
 	k.cli.Writer = t
 	k.client.SetWriter(t)
 	k.term = t
@@ -427,13 +486,13 @@ func (k *kringle) passphrase(ctx *cli.Context) (string, error) {
 }
 
 func (k *kringle) promptPass(msg string) (string, error) {
-	if k.term != nil {
-		return k.term.ReadPassword(string(k.term.Escape.Green) + msg + string(k.term.Escape.Reset))
+	t := k.term
+	if t == nil {
+		tt, reset := k.setupTerminal()
+		defer reset()
+		t = tt
 	}
-	fmt.Print(msg)
-	b, err := term.ReadPassword(int(os.Stdin.Fd()))
-	fmt.Println()
-	return string(b), err
+	return t.ReadPassword(string(t.Escape.Red) + msg + string(t.Escape.Reset))
 }
 
 func (k *kringle) prompt(msg string) (reply string, err error) {
@@ -442,7 +501,8 @@ func (k *kringle) prompt(msg string) (reply string, err error) {
 		return k.term.ReadLine()
 	}
 	fmt.Print(msg)
-	_, err = fmt.Scanln(&reply)
+	reply, err = bufio.NewReader(os.Stdin).ReadString('\n')
+	reply = strings.TrimSpace(reply)
 	return
 }
 
@@ -450,9 +510,10 @@ func (k *kringle) createAccount(ctx *cli.Context) error {
 	if err := k.init(ctx, false); err != nil {
 		return err
 	}
-	if k.client.ServerBaseURL == "" {
+	server := k.flagAPIServer
+	if server == "" {
 		var err error
-		if k.client.ServerBaseURL, err = k.prompt("Enter server URL: "); err != nil {
+		if server, err = k.prompt("Enter server URL: "); err != nil {
 			return err
 		}
 	}
@@ -470,16 +531,104 @@ func (k *kringle) createAccount(ctx *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	return k.client.CreateAccount(email, password)
+	return k.client.CreateAccount(server, email, password, ctx.Bool("backup"))
+}
+
+func (k *kringle) recoverAccount(ctx *cli.Context) error {
+	if err := k.init(ctx, false); err != nil {
+		return err
+	}
+	server := k.flagAPIServer
+	if server == "" {
+		var err error
+		if server, err = k.prompt("Enter server URL: "); err != nil {
+			return err
+		}
+	}
+	var email string
+	if ctx.Args().Len() != 1 {
+		var err error
+		if email, err = k.prompt("Enter email: "); err != nil {
+			return err
+		}
+	} else {
+		email = ctx.Args().Get(0)
+	}
+	phrase, err := k.prompt("Enter backup phrase: ")
+	if err != nil {
+		return err
+	}
+
+	password, err := k.promptPass("Enter new password: ")
+	if err != nil {
+		return err
+	}
+	return k.client.RecoverAccount(server, email, password, phrase, ctx.Bool("backup"))
+}
+
+func (k *kringle) changePassword(ctx *cli.Context) error {
+	if err := k.init(ctx, false); err != nil {
+		return err
+	}
+	if ctx.Args().Len() > 0 {
+		cli.ShowSubcommandHelp(ctx)
+		return nil
+	}
+	password, err := k.promptPass("Enter current password: ")
+	if err != nil {
+		return err
+	}
+	newPassword, err := k.promptPass("Enter new password: ")
+	if err != nil {
+		return err
+	}
+	newPassword2, err := k.promptPass("Re-enter new password: ")
+	if err != nil {
+		return err
+	}
+	if newPassword != newPassword2 {
+		return errors.New("passwords do not match")
+	}
+	return k.client.ChangePassword(password, newPassword, ctx.Bool("backup"))
+}
+
+func (k *kringle) setKeyBackup(ctx *cli.Context) error {
+	if err := k.init(ctx, false); err != nil {
+		return err
+	}
+	if ctx.Args().Len() != 1 {
+		cli.ShowSubcommandHelp(ctx)
+		return nil
+	}
+	var doBackup bool
+	switch arg := ctx.Args().Get(0); strings.ToLower(arg) {
+	case "on":
+		doBackup = true
+	case "off":
+		doBackup = false
+	default:
+		cli.ShowSubcommandHelp(ctx)
+		return nil
+	}
+	if k.client.Account == nil {
+		k.client.Print("Not logged in.")
+		return nil
+	}
+	password, err := k.promptPass("Enter password: ")
+	if err != nil {
+		return err
+	}
+	return k.client.UploadKeys(password, doBackup)
 }
 
 func (k *kringle) login(ctx *cli.Context) error {
 	if err := k.init(ctx, false); err != nil {
 		return err
 	}
-	if k.client.ServerBaseURL == "" {
+	server := k.flagAPIServer
+	if server == "" {
 		var err error
-		if k.client.ServerBaseURL, err = k.prompt("Enter server URL: "); err != nil {
+		if server, err = k.prompt("Enter server URL: "); err != nil {
 			return err
 		}
 	}
@@ -497,7 +646,7 @@ func (k *kringle) login(ctx *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := k.client.Login(email, password); err != nil {
+	if err := k.client.Login(server, email, password); err != nil {
 		return err
 	}
 	return k.client.GetUpdates(true)
@@ -517,11 +666,27 @@ func (k *kringle) status(ctx *cli.Context) error {
 	return k.client.Status()
 }
 
+func (k *kringle) backupPhrase(ctx *cli.Context) error {
+	if err := k.init(ctx, false); err != nil {
+		return err
+	}
+	if k.client.Account == nil {
+		k.client.Print("Not logged in.")
+		return nil
+	}
+	k.client.Print("\nWARNING: The backup phrase must be kept secret. It can be used to access all your data.\n")
+	password, err := k.promptPass("Enter password: ")
+	if err != nil {
+		return err
+	}
+	return k.client.BackupPhrase(password)
+}
+
 func (k *kringle) updates(ctx *cli.Context) error {
 	if err := k.init(ctx, false); err != nil {
 		return err
 	}
-	if k.client.Email == "" {
+	if k.client.Account == nil {
 		k.client.Print("Updates requires logging in to a remote server.")
 		return nil
 	}
@@ -532,7 +697,7 @@ func (k *kringle) pullFiles(ctx *cli.Context) error {
 	if err := k.init(ctx, true); err != nil {
 		return err
 	}
-	if k.client.Email == "" {
+	if k.client.Account == nil {
 		k.client.Print("Pull requires logging in to a remote server.")
 		return nil
 	}
@@ -548,7 +713,7 @@ func (k *kringle) syncFiles(ctx *cli.Context) error {
 	if err := k.init(ctx, true); err != nil {
 		return err
 	}
-	if k.client.Email == "" {
+	if k.client.Account == nil {
 		k.client.Print("Sync requires logging in to a remote server.")
 		return nil
 	}

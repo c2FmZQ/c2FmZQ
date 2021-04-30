@@ -142,7 +142,7 @@ similarly.
 Sharing only works when content is synced with a remote server.
 
 To connect to a remote server, the user will need to provide the URL of the
-server the first time _create-account_ or _login_ is used.
+server when _create-account_, _login_, or _recover-account_ is used.
 
 To run it:
 
@@ -158,9 +158,14 @@ USAGE:
 
 COMMANDS:
    Account:
-     create-account  Create an account.
-     login           Login to an account.
-     logout          Logout.
+     backup-phrase    Show the backup phrase for the current account. The backup phrase must be kept secret.
+     change-password  Change the user's password.
+     create-account   Create an account.
+     login            Login to an account.
+     logout           Logout.
+     recover-account  Recover an account with backup phrase.
+     set-key-backup   Enable or disable secret key backup.
+     status           Show the client's status.
    Albums:
      create-album, mkdir  Create new directory (album).
      delete-album, rmdir  Remove a directory (album).
@@ -195,7 +200,7 @@ GLOBAL OPTIONS:
    --data-dir DIR, -d DIR     Save the data in DIR [$KRINGLE_DATADIR]
    --verbose value, -v value  The level of logging verbosity: 1:Error 2:Info 3:Debug (default: 2 (info))
    --passphrase-file FILE     Read the database passphrase from FILE. [$KRINGLE_PASSPHRASE_FILE]
-   --server value             The API server base URL.
+   --server value             The API server base URL. [$KRINGLE_API_SERVER]
    --auto-update              Automatically fetch metadata updates from the remote server before each command. (default: true)
 ```
 

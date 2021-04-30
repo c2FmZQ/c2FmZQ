@@ -39,7 +39,7 @@ func (c *Client) ImportFiles(patterns []string, dir string) (int, error) {
 		return 0, fmt.Errorf("%s is not a directory", dir)
 	}
 	dst := li[0]
-	pk := c.SecretKey.PublicKey()
+	pk := c.SecretKey().PublicKey()
 	if dst.Album != nil {
 		if dst.Album.IsOwner != "1" && !stingle.Permissions(dst.Album.Permissions).AllowAdd() {
 			return 0, fmt.Errorf("adding is not allowed: %s", dir)

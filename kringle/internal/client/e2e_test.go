@@ -3,35 +3,87 @@
 package client_test
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/go-test/deep"
+	"github.com/tyler-smith/go-bip39"
 
 	"kringle/internal/client"
 )
 
 func TestLoginLogout(t *testing.T) {
-	c, done := startServer(t)
+	c, url, done := startServer(t)
 	defer done()
 
-	t.Log("CLIENT LOGIN")
-	if err := login(c, "alice@", "pass"); err != nil {
-		t.Fatalf("login: %v", err)
+	t.Log("CLIENT CreateAccount")
+	if err := c.CreateAccount(url, "alice@", "pass", true); err != nil {
+		t.Fatalf("CreateAccount: %v", err)
 	}
-	t.Log("CLIENT LOGOUT")
+	t.Log("CLIENT Login")
+	if err := c.Login(url, "alice@", "pass"); err != nil {
+		t.Fatalf("Login: %v", err)
+	}
+	t.Log("CLIENT Logout")
 	if err := c.Logout(); err != nil {
 		t.Fatalf("c.Logout: %v", err)
 	}
 }
 
+func TestRecovery(t *testing.T) {
+	c, url, done := startServer(t)
+	defer done()
+
+	t.Log("CLIENT CreateAccount")
+	if err := c.CreateAccount(url, "alice@", "pass", false); err != nil {
+		t.Fatalf("c.CreateAccount: %v", err)
+	}
+	phr, err := bip39.NewMnemonic(c.SecretKey().ToBytes())
+	if err != nil {
+		t.Fatalf("bip39.NewMnemonic: %v", err)
+	}
+	c.SetPrompt(func(string) (string, error) {
+		return phr, nil
+	})
+	if err := c.Login(url, "alice@", "pass"); err != nil {
+		t.Fatalf("c.Login: %v", err)
+	}
+
+	var buf bytes.Buffer
+	c.SetWriter(&buf)
+	if err := c.BackupPhrase("wrong-pass"); err == nil {
+		t.Fatal("c.BackupPhrase succeeded unexpectedly")
+	}
+	if err := c.BackupPhrase("pass"); err != nil {
+		t.Fatalf("c.BackupPhrase: %v", err)
+	}
+	if want, got := phr, buf.String(); !strings.Contains(got, want) {
+		t.Errorf("c.BackupPhrase returned unexpected output. Want %q, got %q", want, got)
+	}
+
+	if err := c.RecoverAccount(url, "alice@", "newpass", phr, true); err != nil {
+		t.Fatalf("c.RecoverAccount: %v", err)
+	}
+	if err := c.ChangePassword("newpass", "newnewpass", true); err != nil {
+		t.Fatalf("c.ChangePassword: %v", err)
+	}
+	if err := c.UploadKeys("newnewpass", false); err != nil {
+		t.Errorf("c.UploadKeys(false): %v", err)
+	}
+	if err := c.UploadKeys("newnewpass", true); err != nil {
+		t.Errorf("c.UploadKeys(true): %v", err)
+	}
+}
+
 func TestImportExportSync(t *testing.T) {
-	c, done := startServer(t)
+	c, url, done := startServer(t)
 	defer done()
 	t.Log("CLIENT LOGIN")
-	if err := login(c, "alice@", "pass"); err != nil {
-		t.Fatalf("login: %v", err)
+	if err := c.CreateAccount(url, "alice@", "pass", true); err != nil {
+		t.Fatalf("CreateAccount: %v", err)
 	}
 
 	testdir := t.TempDir()
@@ -103,11 +155,11 @@ func TestImportExportSync(t *testing.T) {
 }
 
 func TestCopyMoveDelete(t *testing.T) {
-	c, done := startServer(t)
+	c, url, done := startServer(t)
 	defer done()
 	t.Log("CLIENT LOGIN")
-	if err := login(c, "alice@", "pass"); err != nil {
-		t.Fatalf("login: %v", err)
+	if err := c.CreateAccount(url, "alice@", "pass", true); err != nil {
+		t.Fatalf("CreateAccount: %v", err)
 	}
 
 	testdir := t.TempDir()
@@ -244,11 +296,11 @@ func TestCopyMoveDelete(t *testing.T) {
 }
 
 func TestConcurrentMutations(t *testing.T) {
-	c1, done := startServer(t)
+	c1, url, done := startServer(t)
 	defer done()
-	t.Log("CLIENT 1 LOGIN")
-	if err := login(c1, "alice@", "pass"); err != nil {
-		t.Fatalf("login: %v", err)
+	t.Log("CLIENT 1 CreateAccount")
+	if err := c1.CreateAccount(url, "alice@", "pass", true); err != nil {
+		t.Fatalf("CreateAccount: %v", err)
 	}
 
 	testdir := t.TempDir()
@@ -256,17 +308,17 @@ func TestConcurrentMutations(t *testing.T) {
 		t.Fatalf("makeImages: %v", err)
 	}
 
-	t.Log("CLIENT 1 ADDALBUM alpha beta delta")
+	t.Log("CLIENT 1 AddAlbum alpha beta delta")
 	if err := c1.AddAlbums([]string{"alpha", "beta", "delta"}); err != nil {
 		t.Fatalf("c1.AddAlbums: %v", err)
 	}
-	t.Log("CLIENT 1 IMPORT -> alpha")
+	t.Log("CLIENT 1 Import -> alpha")
 	if n, err := c1.ImportFiles([]string{filepath.Join(testdir, "*")}, "alpha"); err != nil {
 		t.Errorf("c1.ImportFiles: %v", err)
 	} else if want, got := 5, n; want != got {
 		t.Errorf("Unexpected ImportFiles result. Want %d, got %d", want, got)
 	}
-	t.Log("CLIENT 1 SYNC")
+	t.Log("CLIENT 1 Sync")
 	if err := c1.Sync(false); err != nil {
 		t.Fatalf("c1.Sync: %v", err)
 	}
@@ -296,15 +348,15 @@ func TestConcurrentMutations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newClient: %v", err)
 	}
-	t.Log("CLIENT 2 LOGIN")
-	if err := c2.Login("alice@", "pass"); err != nil {
+	t.Log("CLIENT 2 Login")
+	if err := c2.Login(url, "alice@", "pass"); err != nil {
 		t.Fatalf("c2.Login: %v", err)
 	}
-	t.Log("CLIENT 2 GETUPDATES")
+	t.Log("CLIENT 2 GetUpdates")
 	if err := c2.GetUpdates(false); err != nil {
 		t.Fatalf("c2.GetUpdates: %v", err)
 	}
-	t.Log("CLIENT 2 PULL */*")
+	t.Log("CLIENT 2 Pull */*")
 	if _, err := c2.Pull([]string{"*/*"}); err != nil {
 		t.Fatalf("c2.Pull: %v", err)
 	}
@@ -312,21 +364,21 @@ func TestConcurrentMutations(t *testing.T) {
 	if err := makeImages(testdir, 100, 5); err != nil {
 		t.Fatalf("makeImages: %v", err)
 	}
-	t.Log("CLIENT 2 ADDALBUM charlie")
+	t.Log("CLIENT 2 AddAlbum charlie")
 	if err := c2.AddAlbums([]string{"charlie"}); err != nil {
 		t.Fatalf("c2.AddAlbums: %v", err)
 	}
-	t.Log("CLIENT 2 DELETE delta")
+	t.Log("CLIENT 2 Delete delta")
 	if err := c2.Delete([]string{"delta"}); err != nil {
 		t.Fatalf("c2.Delete: %v", err)
 	}
-	t.Log("CLIENT 2 IMPORT -> charlie")
+	t.Log("CLIENT 2 Import -> charlie")
 	if n, err := c2.ImportFiles([]string{filepath.Join(testdir, "*")}, "charlie"); err != nil {
 		t.Errorf("c2.ImportFiles: %v", err)
 	} else if want, got := 5, n; want != got {
 		t.Errorf("Unexpected ImportFiles result. Want %d, got %d", want, got)
 	}
-	t.Log("CLIENT 2 MOVE alpha/image000.jpg charlie/image100.jpg -> beta")
+	t.Log("CLIENT 2 Move alpha/image000.jpg charlie/image100.jpg -> beta")
 	if err := c2.Move([]string{"alpha/image000.jpg", "charlie/image100.jpg"}, "beta"); err != nil {
 		t.Fatalf("c2.Move: %v", err)
 	}
@@ -354,15 +406,15 @@ func TestConcurrentMutations(t *testing.T) {
 		t.Fatalf("Unexpected file list. Diff: %v", diff)
 	}
 
-	t.Log("CLIENT 1 MOVE alpha/* -> delta")
+	t.Log("CLIENT 1 Move alpha/* -> delta")
 	if err := c1.Move([]string{"alpha/*"}, "delta"); err != nil {
 		t.Fatalf("c1.Move: %v", err)
 	}
-	t.Log("CLIENT 1 DELETE alpha beta")
+	t.Log("CLIENT 1 Delete alpha beta")
 	if err := c1.Delete([]string{"alpha", "beta"}); err != nil {
 		t.Fatalf("c1.Delete: %v", err)
 	}
-	t.Log("CLIENT 1 SYNC")
+	t.Log("CLIENT 1 Sync")
 	if err := c1.Sync(false); err != nil {
 		t.Fatalf("c1.Sync: %v", err)
 	}
@@ -383,7 +435,7 @@ func TestConcurrentMutations(t *testing.T) {
 		t.Fatalf("Unexpected file list. Diff: %v", diff)
 	}
 
-	t.Log("CLIENT 2 SYNC")
+	t.Log("CLIENT 2 Sync")
 	if err := c2.Sync(false); err != nil {
 		t.Fatalf("c2.Sync: %v", err)
 	}
@@ -412,7 +464,7 @@ func TestConcurrentMutations(t *testing.T) {
 		t.Fatalf("Unexpected file list. Diff: %v", diff)
 	}
 
-	t.Log("CLIENT 1 SYNC")
+	t.Log("CLIENT 1 Sync")
 	if err := c1.Sync(false); err != nil {
 		t.Fatalf("c1.Sync: %v", err)
 	}
@@ -427,7 +479,7 @@ func TestConcurrentMutations(t *testing.T) {
 }
 
 func TestSharing(t *testing.T) {
-	_, done := startServer(t)
+	_, url, done := startServer(t)
 	defer done()
 
 	c := make(map[string]*client.Client)
@@ -437,8 +489,8 @@ func TestSharing(t *testing.T) {
 		if c[n], err = newClient(t.TempDir()); err != nil {
 			t.Fatalf("newClient: %v", err)
 		}
-		if err := login(c[n], n+"@", n+"-pass"); err != nil {
-			t.Fatalf("login(%s): %v", n, err)
+		if err := c[n].CreateAccount(url, n+"@", n+"-pass", true); err != nil {
+			t.Fatalf("CreateAccount(%s): %v", n, err)
 		}
 	}
 

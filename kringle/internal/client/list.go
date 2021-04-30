@@ -68,16 +68,16 @@ func (c *Client) glob(pattern string) ([]ListItem, error) {
 		local   bool
 	}
 	dirs := []dir{
-		{"gallery", galleryFile, stingle.GallerySet, c.SecretKey, nil, false},
-		{"trash", trashFile, stingle.TrashSet, c.SecretKey, nil, false},
+		{"gallery", galleryFile, stingle.GallerySet, c.SecretKey(), nil, false},
+		{"trash", trashFile, stingle.TrashSet, c.SecretKey(), nil, false},
 	}
 	var al AlbumList
 	if _, err := c.storage.ReadDataFile(c.fileHash(albumList), &al); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("albumList: %w", err)
 	}
 	for _, album := range al.Albums {
 		local := al.RemoteAlbums[album.AlbumID] == nil
-		ask, err := album.SK(c.SecretKey)
+		ask, err := album.SK(c.SecretKey())
 		if err != nil {
 			return nil, err
 		}
@@ -176,8 +176,8 @@ func (c *Client) ListFiles(patterns []string) error {
 				var ml []string
 				for _, m := range p {
 					id, _ := strconv.ParseInt(m, 10, 64)
-					if id == c.UserID {
-						ml = append(ml, c.Email)
+					if c.Account != nil && id == c.Account.UserID {
+						ml = append(ml, c.Account.Email)
 						continue
 					}
 					ml = append(ml, cl.Contacts[id].Email)
