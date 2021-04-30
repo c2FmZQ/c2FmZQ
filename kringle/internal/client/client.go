@@ -2,6 +2,7 @@
 package client
 
 import (
+	"bufio"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -35,6 +36,10 @@ func Create(s *secure.Storage) (*Client, error) {
 	c.hc = &http.Client{}
 	c.storage = s
 	c.writer = os.Stdout
+	c.prompt = prompt
+	c.LocalSecretKey = stingle.MakeSecretKey()
+	c.SecretKey = c.LocalSecretKey
+
 	if err := s.CreateEmptyFile(s.HashString(configFile), &c); err != nil {
 		return nil, err
 	}
@@ -62,6 +67,7 @@ func Load(s *secure.Storage) (*Client, error) {
 	c.hc = &http.Client{}
 	c.storage = s
 	c.writer = os.Stdout
+	c.prompt = prompt
 	c.storage.CreateEmptyFile(c.fileHash(galleryFile), &FileSet{})
 	c.storage.CreateEmptyFile(c.fileHash(trashFile), &FileSet{})
 	c.storage.CreateEmptyFile(c.fileHash(albumList), &AlbumList{})
@@ -74,16 +80,20 @@ type Client struct {
 	UserID          int64             `json:"userID"`
 	Email           string            `json:"email"`
 	Salt            []byte            `json:"salt"`
+	HashedPassword  string            `json:"hashedPassword"`
 	SecretKey       stingle.SecretKey `json:"secretKey"`
 	ServerPublicKey stingle.PublicKey `json:"serverPublicKey"`
+	IsBackedUp      bool              `json:"isBackedUp"`
 	Token           string            `json:"token"`
 
-	ServerBaseURL string `json:"serverBaseURL"`
+	ServerBaseURL  string            `json:"serverBaseURL"`
+	LocalSecretKey stingle.SecretKey `json:"localSecretKey"`
 
 	hc *http.Client
 
 	storage *secure.Storage
 	writer  io.Writer
+	prompt  func(msg string) (string, error)
 }
 
 // Save saves the current client configuration.
@@ -97,12 +107,21 @@ func (c *Client) Status() error {
 		c.Print("Not logged in.")
 		return nil
 	}
-	c.Printf("Logged in as %s on %s.\n", c.Email, c.ServerBaseURL)
+	c.Printf("Logged in as %s on %s. ", c.Email, c.ServerBaseURL)
+	if c.IsBackedUp {
+		c.Printf("Secret key is backed up.\n")
+	} else {
+		c.Printf("Secret key is NOT backed up.\n")
+	}
 	return nil
 }
 
 func (c *Client) SetWriter(w io.Writer) {
 	c.writer = w
+}
+
+func (c *Client) SetPrompt(f func(msg string) (string, error)) {
+	c.prompt = f
 }
 
 func (c *Client) SetHTTPClient(hc *http.Client) {
@@ -202,4 +221,11 @@ func (c *Client) download(file, set, thumb string) (io.ReadCloser, error) {
 		return nil, fmt.Errorf("request returned status code %d", resp.StatusCode)
 	}
 	return resp.Body, nil
+}
+
+func prompt(msg string) (reply string, err error) {
+	fmt.Print(msg)
+	reply, err = bufio.NewReader(os.Stdin).ReadString('\n')
+	reply = strings.TrimSpace(reply)
+	return
 }

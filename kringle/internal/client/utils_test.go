@@ -11,11 +11,11 @@ import (
 	"sort"
 	"testing"
 
+	"kringle/internal/client"
 	"kringle/internal/crypto"
 	"kringle/internal/database"
 	"kringle/internal/log"
 	"kringle/internal/secure"
-	"kringle/internal/client"
 	"kringle/internal/server"
 )
 
@@ -55,13 +55,6 @@ func newClient(dir string) (*client.Client, error) {
 	c.SetHTTPClient(hc)
 	c.ServerBaseURL = url
 	return c, nil
-}
-
-func login(c *client.Client, email, password string) error {
-	if err := c.CreateAccount(email, password); err != nil {
-		return err
-	}
-	return c.Login(email, password)
 }
 
 func makeImages(dir string, start, n int) error {

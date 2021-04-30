@@ -216,7 +216,7 @@ func (s *Server) handleGetServerPK(user database.User, req *http.Request) *sting
 // Returns:
 //  - stingle.Response(ok)
 //      Part(challenge, A message that can only be read with the right secret key)
-//      Part(isKeyBackedUp, Whether the encrypted secrey of the user in on the server)
+//      Part(isKeyBackedUp, Whether the encrypted secret of the user in on the server)
 //      Part(serverPK, The public key of the server associated with this account)
 func (s *Server) handleCheckKey(req *http.Request) *stingle.Response {
 	email := req.PostFormValue("email")

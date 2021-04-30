@@ -73,7 +73,7 @@ func (c *Client) glob(pattern string) ([]ListItem, error) {
 	}
 	var al AlbumList
 	if _, err := c.storage.ReadDataFile(c.fileHash(albumList), &al); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("albumList: %w", err)
 	}
 	for _, album := range al.Albums {
 		local := al.RemoteAlbums[album.AlbumID] == nil
