@@ -113,6 +113,16 @@ func (s *Server) handleMoveFile(user database.User, req *http.Request) *stingle.
 			p.Headers = append(p.Headers, hdr)
 		}
 	}
+	if p.SetFrom == stingle.TrashSet {
+		if p.SetTo != stingle.GallerySet || !p.IsMoving {
+			return stingle.ResponseNOK().AddError("Can only move from trash to gallery")
+		}
+	}
+	if p.SetTo == stingle.TrashSet {
+		if !p.IsMoving {
+			return stingle.ResponseNOK().AddError("Can only move to trash, not copy")
+		}
+	}
 	if p.AlbumIDFrom != "" {
 		albumSpec, err := s.db.Album(user, p.AlbumIDFrom)
 		if err != nil {

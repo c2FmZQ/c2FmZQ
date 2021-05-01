@@ -12,6 +12,13 @@ import (
 )
 
 func (c *Client) AddAlbums(names []string) error {
+	li, err := c.GlobFiles(names)
+	if err != nil {
+		return err
+	}
+	if len(li) > 0 {
+		return fmt.Errorf("already exists: %s", li[0].Filename)
+	}
 	for _, n := range names {
 		n := strings.TrimSuffix(n, "/")
 		if strings.Contains(n, "/") {
@@ -116,36 +123,6 @@ func (c *Client) removeAlbum(item ListItem) (retErr error) {
 	return commit(true, nil)
 }
 
-func (c *Client) Hide(names []string, hidden bool) (retErr error) {
-	li, err := c.GlobFiles(names)
-	if err != nil {
-		return err
-	}
-	var al AlbumList
-	commit, err := c.storage.OpenForUpdate(c.fileHash(albumList), &al)
-	if err != nil {
-		return err
-	}
-	defer commit(false, &retErr)
-	for _, item := range li {
-		if !item.IsDir || item.Album == nil {
-			continue
-		}
-		album, ok := al.Albums[item.Album.AlbumID]
-		if !ok {
-			continue
-		}
-		if hidden {
-			album.IsHidden = "1"
-			c.Printf("Hid %s (not synced)\n", item.Filename)
-		} else {
-			album.IsHidden = "0"
-			c.Printf("Unhid %s (not synced)\n", item.Filename)
-		}
-	}
-	return commit(true, nil)
-}
-
 // Copy copies files to an existing album.
 func (c *Client) Copy(patterns []string, dest string) error {
 	dest = strings.TrimSuffix(dest, "/")
@@ -170,9 +147,15 @@ func (c *Client) Copy(patterns []string, dest string) error {
 	if dst.Album != nil && dst.Album.IsOwner != "1" && !stingle.Permissions(dst.Album.Permissions).AllowAdd() {
 		return fmt.Errorf("adding is not allowed: %s", dest)
 	}
+	if dst.Set == stingle.TrashSet {
+		return fmt.Errorf("cannot copy to trash, only move: %s", dst.Filename)
+	}
 	for _, item := range si {
 		if item.IsDir {
 			return fmt.Errorf("cannot move a directory to another directory: %s", item.Filename)
+		}
+		if item.Set == stingle.TrashSet {
+			return fmt.Errorf("cannot copy from trash, only move: %s", item.Filename)
 		}
 	}
 	groups := make(map[string][]ListItem)

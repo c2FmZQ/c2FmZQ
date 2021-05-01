@@ -196,7 +196,20 @@ func (c *Client) sendRequest(uri string, form url.Values, server string) (*sting
 	if err := dec.Decode(&sr); err != nil {
 		return nil, err
 	}
-	log.Debugf("Response: %v", sr)
+	if log.Level >= log.DebugLevel {
+		var line []string
+		line = append(line, fmt.Sprintf("Response: %s", sr.Status))
+		if sr.Parts != nil {
+			line = append(line, fmt.Sprintf(" Parts:%v", sr.Parts))
+		}
+		if len(sr.Infos) > 0 {
+			line = append(line, fmt.Sprintf(" Infos:%v", sr.Infos))
+		}
+		if len(sr.Errors) > 0 {
+			line = append(line, fmt.Sprintf(" Errors:%v", sr.Errors))
+		}
+		log.Debug(strings.Join(line, ""))
+	}
 	return &sr, nil
 }
 

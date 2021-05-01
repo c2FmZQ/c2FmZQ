@@ -114,12 +114,6 @@ func (c *Client) Login(server, email, password string) error {
 	if err != nil {
 		return err
 	}
-	/*
-		if len(salt) == 0 {
-			log.Debugf("PreLogin: salt is empty: %#v", sr)
-			salt = c.Salt
-		}
-	*/
 	pw := stingle.PasswordHashForLogin([]byte(password), salt)
 
 	c.Account = &AccountInfo{

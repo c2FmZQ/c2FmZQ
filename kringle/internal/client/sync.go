@@ -25,8 +25,8 @@ type albumDiffs struct {
 	AlbumPermsToChange []*stingle.Album
 
 	FilesToAdd    []FileLoc
-	FilesToMove   map[MoveKey][]*stingle.File
-	FilesToDelete []FileLoc
+	FilesToMove   []MoveItem
+	FilesToDelete []string
 }
 
 type FileLoc struct {
@@ -41,6 +41,11 @@ type MoveKey struct {
 	SetTo       string
 	AlbumIDTo   string
 	Moving      bool
+}
+
+type MoveItem struct {
+	key   MoveKey
+	files []*stingle.File
 }
 
 // Sync synchronizes all metadata changes that have been made locally with the
@@ -177,26 +182,26 @@ func (c *Client) applyFilesToAdd(files []FileLoc, al AlbumList, dryrun bool) err
 	return nil
 }
 
-func (c *Client) applyFilesToMove(moves map[MoveKey][]*stingle.File, al AlbumList, dryrun bool) error {
+func (c *Client) applyFilesToMove(moves []MoveItem, al AlbumList, dryrun bool) error {
 	c.Print("Files to move:")
-	for k, v := range moves {
-		src, err := c.translateSetAlbumIDToName(k.SetFrom, k.AlbumIDFrom, al)
+	for _, i := range moves {
+		src, err := c.translateSetAlbumIDToName(i.key.SetFrom, i.key.AlbumIDFrom, al)
 		if err != nil {
-			src = fmt.Sprintf("Set:%s Album:%s", k.SetFrom, k.AlbumIDFrom)
+			src = fmt.Sprintf("Set:%s Album:%s", i.key.SetFrom, i.key.AlbumIDFrom)
 		}
-		dst, err := c.translateSetAlbumIDToName(k.SetTo, k.AlbumIDTo, al)
+		dst, err := c.translateSetAlbumIDToName(i.key.SetTo, i.key.AlbumIDTo, al)
 		if err != nil {
-			dst = fmt.Sprintf("Set:%s Album:%s", k.SetTo, k.AlbumIDTo)
+			dst = fmt.Sprintf("Set:%s Album:%s", i.key.SetTo, i.key.AlbumIDTo)
 		}
 		op := "Moving"
-		if !k.Moving {
+		if !i.key.Moving {
 			op = "Copying"
 		}
 		var files []string
-		for _, f := range v {
+		for _, f := range i.files {
 			sk := c.SecretKey()
-			if k.AlbumIDTo != "" {
-				sk, err = al.Albums[k.AlbumIDTo].SK(sk)
+			if i.key.AlbumIDTo != "" {
+				sk, err = al.Albums[i.key.AlbumIDTo].SK(sk)
 				if err != nil {
 					return err
 				}
@@ -212,22 +217,21 @@ func (c *Client) applyFilesToMove(moves map[MoveKey][]*stingle.File, al AlbumLis
 	if dryrun {
 		return nil
 	}
-	for k, files := range moves {
-		if err := c.sendMoveFiles(k, files); err != nil {
+	for _, i := range moves {
+		if err := c.sendMoveFiles(i.key, i.files); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (c *Client) applyFilesToDelete(toDelete []FileLoc, al AlbumList, dryrun bool) error {
-	c.showFilesToSync("Files to delete:", toDelete, al)
+func (c *Client) applyFilesToDelete(files []string, al AlbumList, dryrun bool) error {
+	c.Print("Files to delete:")
+	for _, f := range files {
+		c.Printf("* trash/%s\n", f)
+	}
 	if dryrun {
 		return nil
-	}
-	var files []*stingle.File
-	for _, f := range toDelete {
-		files = append(files, f.File)
 	}
 	if err := c.sendDelete(files); err != nil {
 		return err
@@ -287,7 +291,6 @@ func (c *Client) showFilesToSync(label string, files []FileLoc, al AlbumList) er
 		}
 		n, err := f.File.Name(sk)
 		if err != nil {
-			return err
 			n = f.File.File
 		}
 		d, err := c.translateSetAlbumIDToName(f.Set, f.AlbumID, al)
@@ -429,6 +432,9 @@ func (c *Client) diff() (*albumDiffs, error) {
 		}
 	}
 
+	moves := make(map[MoveKey][]*stingle.File)
+	deletes := make(map[string]struct{})
+
 	for fn, changes := range fileChanges {
 		var loc []setAlbum
 		for l, f := range remoteFileLocations[fn] {
@@ -443,7 +449,21 @@ func (c *Client) diff() (*albumDiffs, error) {
 		})
 		for _, add := range changes.add {
 			if loc == nil {
-				diffs.FilesToAdd = append(diffs.FilesToAdd, FileLoc{add.file, add.set, add.albumID})
+				// File is added to the gallery or an album.
+				if add.set != stingle.TrashSet {
+					diffs.FilesToAdd = append(diffs.FilesToAdd, FileLoc{add.file, add.set, add.albumID})
+					loc = []setAlbum{{set: add.set, albumID: add.albumID}}
+					continue
+				}
+				// File is added to trash. First add to gallery, then move it to trash.
+				diffs.FilesToAdd = append(diffs.FilesToAdd, FileLoc{add.file, stingle.GallerySet, ""})
+				mk := MoveKey{
+					SetFrom: stingle.GallerySet,
+					SetTo:   stingle.TrashSet,
+					Moving:  true,
+				}
+				moves[mk] = append(moves[mk], add.file)
+				loc = []setAlbum{{set: stingle.TrashSet}}
 				continue
 			}
 			from := loc[0]
@@ -453,34 +473,92 @@ func (c *Client) diff() (*albumDiffs, error) {
 				changes.remove = changes.remove[1:]
 				moving = true
 			}
+			// File is moving from the gallery or an album.
+			if from.set != stingle.TrashSet {
+				if add.set == stingle.TrashSet {
+					moving = true
+				}
+				mk := MoveKey{
+					SetFrom:     from.set,
+					AlbumIDFrom: from.albumID,
+					SetTo:       add.set,
+					AlbumIDTo:   add.albumID,
+					Moving:      moving,
+				}
+				moves[mk] = append(moves[mk], add.file)
+				continue
+			}
+			// File is moving from trash to gallery.
+			if add.set == stingle.GallerySet {
+				mk := MoveKey{
+					SetFrom: stingle.TrashSet,
+					SetTo:   stingle.GallerySet,
+					Moving:  true,
+				}
+				moves[mk] = append(moves[mk], add.file)
+				continue
+			}
+			// File is moving from trash to an album. First, move to gallery,
+			// then move to album.
 			mk := MoveKey{
-				SetFrom:     from.set,
-				AlbumIDFrom: from.albumID,
-				SetTo:       add.set,
-				AlbumIDTo:   add.albumID,
-				Moving:      moving,
+				SetFrom: stingle.TrashSet,
+				SetTo:   stingle.GallerySet,
+				Moving:  true,
 			}
-			if diffs.FilesToMove == nil {
-				diffs.FilesToMove = make(map[MoveKey][]*stingle.File)
+			moves[mk] = append(moves[mk], from.file)
+
+			loc = append([]setAlbum{setAlbum{set: stingle.GallerySet}}, loc...)
+
+			mk = MoveKey{
+				SetFrom:   stingle.GallerySet,
+				SetTo:     add.set,
+				AlbumIDTo: add.albumID,
+				Moving:    true,
 			}
-			diffs.FilesToMove[mk] = append(diffs.FilesToMove[mk], add.file)
+			moves[mk] = append(moves[mk], add.file)
 		}
 		for _, remove := range changes.remove {
-			mk := MoveKey{
-				SetFrom:     remove.set,
-				AlbumIDFrom: remove.albumID,
-				SetTo:       stingle.TrashSet,
-				AlbumIDTo:   "",
-				Moving:      true,
+			if remove.set != stingle.TrashSet {
+				// XXX: We should really update the headers when moving
+				// from album to trash. But the file will be deleted
+				// immediately after moving. So, it doesn't matter too
+				// much.
+				mk := MoveKey{
+					SetFrom:     remove.set,
+					AlbumIDFrom: remove.albumID,
+					SetTo:       stingle.TrashSet,
+					Moving:      true,
+				}
+				moves[mk] = append(moves[mk], remove.file)
 			}
-			if diffs.FilesToMove == nil {
-				diffs.FilesToMove = make(map[MoveKey][]*stingle.File)
-			}
-			diffs.FilesToMove[mk] = append(diffs.FilesToMove[mk], remove.file)
-
-			diffs.FilesToDelete = append(diffs.FilesToDelete, FileLoc{remove.file, stingle.TrashSet, ""})
+			deletes[remove.file.File] = struct{}{}
 		}
 	}
+
+	for k, v := range moves {
+		if k.SetFrom == stingle.TrashSet {
+			diffs.FilesToMove = append(diffs.FilesToMove, MoveItem{key: k, files: v})
+		}
+	}
+	for k, v := range moves {
+		if k.SetFrom != stingle.TrashSet && k.SetTo != stingle.TrashSet && !k.Moving {
+			diffs.FilesToMove = append(diffs.FilesToMove, MoveItem{key: k, files: v})
+		}
+	}
+	for k, v := range moves {
+		if k.SetFrom != stingle.TrashSet && k.SetTo != stingle.TrashSet && k.Moving {
+			diffs.FilesToMove = append(diffs.FilesToMove, MoveItem{key: k, files: v})
+		}
+	}
+	for k, v := range moves {
+		if k.SetTo == stingle.TrashSet {
+			diffs.FilesToMove = append(diffs.FilesToMove, MoveItem{key: k, files: v})
+		}
+	}
+	for k := range deletes {
+		diffs.FilesToDelete = append(diffs.FilesToDelete, k)
+	}
+
 	return &diffs, nil
 }
 
@@ -783,6 +861,16 @@ func (c *Client) sendMoveFiles(key MoveKey, files []*stingle.File) error {
 	if c.Account == nil {
 		return ErrNotLoggedIn
 	}
+	if key.SetFrom == stingle.TrashSet {
+		if key.SetTo != stingle.GallerySet || !key.Moving {
+			return fmt.Errorf("can only move from trash to gallery: %v", key)
+		}
+	}
+	if key.SetTo == stingle.TrashSet {
+		if !key.Moving {
+			return fmt.Errorf("can only move to trash: %v", key)
+		}
+	}
 	params := make(map[string]string)
 	params["setFrom"] = key.SetFrom
 	params["setTo"] = key.SetTo
@@ -812,13 +900,13 @@ func (c *Client) sendMoveFiles(key MoveKey, files []*stingle.File) error {
 	return nil
 }
 
-func (c *Client) sendDelete(files []*stingle.File) error {
+func (c *Client) sendDelete(files []string) error {
 	if c.Account == nil {
 		return ErrNotLoggedIn
 	}
 	params := make(map[string]string)
 	for i, f := range files {
-		params[fmt.Sprintf("filename%d", i)] = f.File
+		params[fmt.Sprintf("filename%d", i)] = f
 	}
 	params["count"] = fmt.Sprintf("%d", len(files))
 

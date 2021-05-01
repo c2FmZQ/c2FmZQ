@@ -169,9 +169,7 @@ COMMANDS:
    Albums:
      create-album, mkdir  Create new directory (album).
      delete-album, rmdir  Remove a directory (album).
-     hide                 Hide directory (album).
      rename               Rename a directory (album).
-     unhide               Unhide directory (album).
    Files:
      cat, show           Decrypt files and send their content to standard output.
      copy, cp            Copy files to a different directory.

@@ -231,20 +231,6 @@ func New() *kringle {
 				Category:  "Albums",
 			},
 			&cli.Command{
-				Name:      "hide",
-				Usage:     "Hide directory (album).",
-				ArgsUsage: `["glob"] ...`,
-				Action:    app.hideAlbums,
-				Category:  "Albums",
-			},
-			&cli.Command{
-				Name:      "unhide",
-				Usage:     "Unhide directory (album).",
-				ArgsUsage: "[name] ...",
-				Action:    app.unhideAlbums,
-				Category:  "Albums",
-			},
-			&cli.Command{
 				Name:      "list",
 				Aliases:   []string{"ls"},
 				Usage:     "List files and directories.",
@@ -766,28 +752,6 @@ func (k *kringle) renameAlbum(ctx *cli.Context) error {
 		return nil
 	}
 	return k.client.RenameAlbum(args[:len(args)-1], args[len(args)-1])
-}
-
-func (k *kringle) hideAlbums(ctx *cli.Context) error {
-	if err := k.init(ctx, true); err != nil {
-		return err
-	}
-	if ctx.Args().Len() == 0 {
-		cli.ShowSubcommandHelp(ctx)
-	}
-	patterns := ctx.Args().Slice()
-	return k.client.Hide(patterns, true)
-}
-
-func (k *kringle) unhideAlbums(ctx *cli.Context) error {
-	if err := k.init(ctx, true); err != nil {
-		return err
-	}
-	if ctx.Args().Len() == 0 {
-		cli.ShowSubcommandHelp(ctx)
-	}
-	patterns := ctx.Args().Slice()
-	return k.client.Hide(patterns, false)
 }
 
 func (k *kringle) listFiles(ctx *cli.Context) error {

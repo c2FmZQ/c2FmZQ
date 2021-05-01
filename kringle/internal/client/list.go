@@ -90,9 +90,7 @@ func (c *Client) glob(pattern string) ([]ListItem, error) {
 
 	var out []ListItem
 	for _, d := range dirs {
-		if d.album != nil && d.album.IsHidden == "1" && pathElems[0] != d.name {
-			continue
-		} else if matched, _ := path.Match(pathElems[0], d.name); !matched {
+		if matched, _ := path.Match(pathElems[0], d.name); !matched {
 			continue
 		}
 		var fs FileSet

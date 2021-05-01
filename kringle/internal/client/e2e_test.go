@@ -295,6 +295,92 @@ func TestCopyMoveDelete(t *testing.T) {
 	}
 }
 
+func TestSyncTrash(t *testing.T) {
+	c, url, done := startServer(t)
+	defer done()
+	t.Log("CLIENT CreateAccount")
+	if err := c.CreateAccount(url, "alice@", "pass", true); err != nil {
+		t.Fatalf("CreateAccount: %v", err)
+	}
+
+	testdir := t.TempDir()
+	if err := makeImages(testdir, 0, 5); err != nil {
+		t.Fatalf("makeImages: %v", err)
+	}
+	t.Log("CLIENT Import")
+	if n, err := c.ImportFiles([]string{filepath.Join(testdir, "*")}, "gallery"); err != nil {
+		t.Errorf("c.ImportFiles: %v", err)
+	} else if want, got := 5, n; want != got {
+		t.Errorf("Unexpected ImportFiles result. Want %d, got %d", want, got)
+	}
+	t.Log("CLIENT Copy gallery/* -> trash")
+	if err := c.Copy([]string{"gallery/*"}, "trash"); err == nil {
+		t.Fatalf("c.Copy to trash succeeded unexpectedly")
+	}
+	t.Log("CLIENT Move gallery/* -> trash")
+	if err := c.Move([]string{"gallery/*"}, "trash"); err != nil {
+		t.Fatalf("Move to trash: %v", err)
+	}
+	t.Log("CLIENT Sync")
+	if err := c.Sync(false); err != nil {
+		t.Fatalf("c.Sync: %v", err)
+	}
+	t.Log("CLIENT Copy trash/* -> gallery")
+	if err := c.Copy([]string{"trash/*"}, "gallery"); err == nil {
+		t.Fatalf("c.Copy from trash succeeded unexpectedly")
+	}
+	t.Log("CLIENT AddAlbums alpha beta")
+	if err := c.AddAlbums([]string{"alpha", "beta"}); err != nil {
+		t.Fatalf("AddAlbums: %v", err)
+	}
+	t.Log("CLIENT Move trash/* -> alpha")
+	if err := c.Move([]string{"trash/*"}, "alpha"); err != nil {
+		t.Fatalf("Move from trash to alpha: %v", err)
+	}
+	t.Log("CLIENT Copy alpha/* -> beta")
+	if err := c.Copy([]string{"alpha/*"}, "beta"); err != nil {
+		t.Fatalf("Copy from alpha to beta: %v", err)
+	}
+	t.Log("CLIENT Sync")
+	if err := c.Sync(false); err != nil {
+		t.Fatalf("c.Sync: %v", err)
+	}
+	t.Log("CLIENT Delete */image000.jpg")
+	if err := c.Delete([]string{"*/image000.jpg"}); err != nil {
+		t.Fatalf("c.Delete: %v", err)
+	}
+	t.Log("CLIENT Delete trash/image000.jpg")
+	if err := c.Delete([]string{"trash/image000.jpg"}); err != nil {
+		t.Fatalf("c.Delete: %v", err)
+	}
+	t.Log("CLIENT Sync")
+	if err := c.Sync(false); err != nil {
+		t.Fatalf("c.Sync: %v", err)
+	}
+
+	want := []string{
+		"alpha",
+		"beta",
+		"gallery",
+		"trash",
+		"alpha/image001.jpg",
+		"alpha/image002.jpg",
+		"alpha/image003.jpg",
+		"alpha/image004.jpg",
+		"beta/image001.jpg",
+		"beta/image002.jpg",
+		"beta/image003.jpg",
+		"beta/image004.jpg",
+	}
+	got, err := globAll(c)
+	if err != nil {
+		t.Fatalf("globAll: %v", err)
+	}
+	if diff := deep.Equal(want, got); diff != nil {
+		t.Fatalf("Unexpected file list. Diff: %v", diff)
+	}
+}
+
 func TestConcurrentMutations(t *testing.T) {
 	c1, url, done := startServer(t)
 	defer done()
