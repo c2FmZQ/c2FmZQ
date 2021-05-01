@@ -171,7 +171,7 @@ func (c *Client) sendRequest(uri string, form url.Values, server string) (*sting
 	if server == "" {
 		return nil, errors.New("ServerBaseURL is not set")
 	}
-	url := server + uri
+	url := strings.TrimSuffix(server, "/") + uri
 
 	log.Debugf("SEND POST %s", url)
 	log.Debugf(" %v", form)
@@ -213,7 +213,7 @@ func (c *Client) download(file, set, thumb string) (io.ReadCloser, error) {
 	form.Set("set", set)
 	form.Set("thumb", thumb)
 
-	url := c.Account.ServerBaseURL + "/v2/sync/download"
+	url := strings.TrimSuffix(c.Account.ServerBaseURL, "/") + "/v2/sync/download"
 
 	log.Debugf("SEND POST %v", url)
 	log.Debugf(" %v", form)

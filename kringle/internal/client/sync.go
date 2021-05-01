@@ -658,7 +658,7 @@ func (c *Client) uploadFile(item FileLoc) error {
 		}
 	}()
 
-	url := c.Account.ServerBaseURL + "/v2/sync/upload"
+	url := strings.TrimSuffix(c.Account.ServerBaseURL, "/") + "/v2/sync/upload"
 
 	req, err := http.NewRequest("POST", url, pr)
 	if err != nil {
