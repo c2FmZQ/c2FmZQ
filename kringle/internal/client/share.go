@@ -271,17 +271,17 @@ func (c *Client) parsePermissions(p string, changes []string) (string, error) {
 	}
 	for _, c := range changes {
 		switch c := strings.TrimSpace(strings.ToLower(c)); c {
-		case "add", "+add", "allowadd", "+allowadd":
+		case "add", "+add", "allowadd", "+allowadd", "a", "+a":
 			b[1] = '1'
-		case "share", "+share", "allowshare", "+allowshare":
+		case "share", "+share", "allowshare", "+allowshare", "s", "+s":
 			b[2] = '1'
-		case "copy", "+copy", "allowcopy", "+allowcopy":
+		case "copy", "+copy", "allowcopy", "+allowcopy", "c", "+c":
 			b[3] = '1'
-		case "-add", "-allowadd":
+		case "-add", "-allowadd", "-a":
 			b[1] = '0'
-		case "-share", "-allowshare":
+		case "-share", "-allowshare", "-s":
 			b[2] = '0'
-		case "-copy", "-allowcopy":
+		case "-copy", "-allowcopy", "-c":
 			b[3] = '0'
 		default:
 			return "", fmt.Errorf("invalid permission value: %s", c)
