@@ -336,6 +336,34 @@ func (c *Client) RecoverAccount(server, email, newPassword, backupPhrase string,
 	return nil
 }
 
+// DeleteAccount deletes the account on the remote server.
+func (c *Client) DeleteAccount(password string) error {
+	if err := c.checkPassword(password); err != nil {
+		return err
+	}
+	params := make(map[string]string)
+	params["password"] = stingle.PasswordHashForLogin([]byte(password), c.Account.Salt)
+
+	form := url.Values{}
+	form.Set("token", c.Account.Token)
+	form.Set("params", c.encodeParams(params))
+
+	sr, err := c.sendRequest("/v2/login/deleteUser", form, "")
+	if err != nil {
+		return err
+	}
+	if sr.Status != "ok" {
+		return sr
+	}
+
+	c.Account = nil
+	if err := c.Save(); err != nil {
+		return err
+	}
+	c.Print("Account deleted successfully.")
+	return nil
+}
+
 // UploadKeys uploads the users keybundle again.
 func (c *Client) UploadKeys(password string, doBackup bool) error {
 	if err := c.checkPassword(password); err != nil {

@@ -285,7 +285,7 @@ func (s *Server) handleRecoverAccount(req *http.Request) *stingle.Response {
 	return stingle.ResponseOK().AddPart("result", "OK")
 }
 
-// handleDeleteUser handles the /v2/keys/deleteUser endpoint. It is used
+// handleDeleteUser handles the /v2/login/deleteUser endpoint. It is used
 // to delete the user's account, but it is not currently implemented.
 //
 // Arguments:

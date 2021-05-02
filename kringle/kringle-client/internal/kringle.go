@@ -172,6 +172,13 @@ func New() *kringle {
 				Category:  "Account",
 			},
 			&cli.Command{
+				Name:      "delete-account",
+				Usage:     "Delete the account and wipe all data.",
+				ArgsUsage: " ",
+				Action:    app.deleteAccount,
+				Category:  "Account",
+			},
+			&cli.Command{
 				Name:      "updates",
 				Aliases:   []string{"update"},
 				Usage:     "Pull metadata updates from remote server.",
@@ -681,6 +688,27 @@ func (k *kringle) backupPhrase(ctx *cli.Context) error {
 		return err
 	}
 	return k.client.BackupPhrase(password)
+}
+
+func (k *kringle) deleteAccount(ctx *cli.Context) error {
+	if err := k.init(ctx, false); err != nil {
+		return err
+	}
+	if k.client.Account == nil {
+		k.client.Print("Not logged in.")
+		return nil
+	}
+	if err := k.client.Status(); err != nil {
+		return err
+	}
+	k.client.Print("\n*********************************************************************")
+	k.client.Print("WARNING: You are about to delete your account and wipe all your data.")
+	k.client.Print("*********************************************************************\n")
+	password, err := k.promptPass("Enter password: ")
+	if err != nil {
+		return err
+	}
+	return k.client.DeleteAccount(password)
 }
 
 func (k *kringle) updates(ctx *cli.Context) error {
