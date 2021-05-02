@@ -189,14 +189,14 @@ func New() *kringle {
 			&cli.Command{
 				Name:      "download",
 				Aliases:   []string{"pull"},
-				Usage:     "Download files that aren't already downloaded.",
+				Usage:     "Download a local copy of encrypted files.",
 				ArgsUsage: `["glob"] ... (default "*/*")`,
 				Action:    app.pullFiles,
 				Category:  "Sync",
 			},
 			&cli.Command{
 				Name:      "sync",
-				Usage:     "Send changes to remote server.",
+				Usage:     "Upload changes to remote server.",
 				ArgsUsage: " ",
 				Action:    app.syncFiles,
 				Category:  "Sync",
@@ -210,7 +210,7 @@ func New() *kringle {
 			},
 			&cli.Command{
 				Name:      "free",
-				Usage:     "Remove local files that are backed up.",
+				Usage:     "Remove the local copy of encrypted files that are backed up.",
 				ArgsUsage: `["glob"] ... (default "*/*")`,
 				Action:    app.freeFiles,
 				Category:  "Sync",
@@ -330,7 +330,7 @@ func New() *kringle {
 			},
 			&cli.Command{
 				Name:      "leave",
-				Usage:     "Remove a directory that is shared with us.",
+				Usage:     "Remove a directory (album) that is shared with us.",
 				ArgsUsage: `"<glob>" ...`,
 				Action:    app.leaveAlbum,
 				Category:  "Share",
