@@ -125,6 +125,9 @@ func (b *backup) backupFileName(f string) string {
 }
 
 func copyFile(dst, src string) error {
+	if err := os.Link(src, dst); err == nil {
+		return nil
+	}
 	in, err := os.Open(src)
 	if err != nil {
 		return err

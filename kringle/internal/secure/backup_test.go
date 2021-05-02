@@ -38,9 +38,12 @@ func TestBackupRestore(t *testing.T) {
 	}
 
 	for i := 1; i <= 10; i++ {
-		file := filepath.Join("data", fmt.Sprintf("file%d", i))
-		if err := os.WriteFile(filepath.Join(dir, file), []byte("XXXXXX"), 0600); err != nil {
+		file := filepath.Join(dir, "data", fmt.Sprintf("file%d", i))
+		if err := os.WriteFile(file+".tmp", []byte("XXXXXX"), 0600); err != nil {
 			t.Fatalf("os.WriteFile: %v", err)
+		}
+		if err := os.Rename(file+".tmp", file); err != nil {
+			t.Fatalf("os.Rename: %v", err)
 		}
 		files = append(files, file)
 	}
@@ -135,9 +138,12 @@ func TestRestorePendingOps(t *testing.T) {
 		t.Fatalf("s.createBackup: %v", err)
 	}
 	for i := 1; i <= 10; i++ {
-		file := filepath.Join("data", fmt.Sprintf("file%d", i))
-		if err := os.WriteFile(filepath.Join(dir, file), []byte("XXXXXX"), 0600); err != nil {
+		file := filepath.Join(dir, "data", fmt.Sprintf("file%d", i))
+		if err := os.WriteFile(file+".tmp", []byte("XXXXXX"), 0600); err != nil {
 			t.Fatalf("os.WriteFile: %v", err)
+		}
+		if err := os.Rename(file+".tmp", file); err != nil {
+			t.Fatalf("os.Rename: %v", err)
 		}
 		files = append(files, file)
 	}
