@@ -30,11 +30,19 @@ type ListItem struct {
 	LocalOnly bool           // Indicates that this item only exists locally.
 }
 
+// GlobOptions contains options for GlobFiles and ListFiles.
+type GlobOptions struct {
+	MatchDot bool // Wildcards match dot at the beginning of dir/file names.
+	Long     bool // Show long output.
+}
+
+var MatchAll = GlobOptions{MatchDot: true}
+
 // GlobFiles returns files that match the glob patterns.
-func (c *Client) GlobFiles(patterns []string) ([]ListItem, error) {
+func (c *Client) GlobFiles(patterns []string, opt GlobOptions) ([]ListItem, error) {
 	var li []ListItem
 	for _, p := range patterns {
-		items, err := c.glob(p)
+		items, err := c.glob(p, opt)
 		if err != nil {
 			return nil, err
 		}
@@ -47,7 +55,7 @@ func (c *Client) GlobFiles(patterns []string) ([]ListItem, error) {
 }
 
 // glob returns files that match the glob pattern.
-func (c *Client) glob(pattern string) ([]ListItem, error) {
+func (c *Client) glob(pattern string, opt GlobOptions) ([]ListItem, error) {
 	// Sanity check the pattern.
 	if _, err := path.Match(pattern, ""); err != nil {
 		return nil, err
@@ -69,7 +77,7 @@ func (c *Client) glob(pattern string) ([]ListItem, error) {
 	}
 	dirs := []dir{
 		{"gallery", galleryFile, stingle.GallerySet, c.SecretKey(), nil, false},
-		{"trash", trashFile, stingle.TrashSet, c.SecretKey(), nil, false},
+		{".trash", trashFile, stingle.TrashSet, c.SecretKey(), nil, false},
 	}
 	var al AlbumList
 	if _, err := c.storage.ReadDataFile(c.fileHash(albumList), &al); err != nil {
@@ -90,6 +98,9 @@ func (c *Client) glob(pattern string) ([]ListItem, error) {
 
 	var out []ListItem
 	for _, d := range dirs {
+		if !opt.MatchDot && !strings.HasPrefix(pathElems[0], ".") && strings.HasPrefix(d.name, ".") {
+			continue
+		}
 		if matched, _ := path.Match(pathElems[0], d.name); !matched {
 			continue
 		}
@@ -119,6 +130,9 @@ func (c *Client) glob(pattern string) ([]ListItem, error) {
 				return nil, err
 			}
 			fn := string(hdrs[0].Filename)
+			if !opt.MatchDot && !strings.HasPrefix(pathElems[1], ".") && strings.HasPrefix(fn, ".") {
+				continue
+			}
 			if matched, _ := path.Match(pathElems[1], fn); matched {
 				out = append(out, ListItem{
 					Filename:  d.name + "/" + fn,
@@ -136,8 +150,8 @@ func (c *Client) glob(pattern string) ([]ListItem, error) {
 	return out, nil
 }
 
-func (c *Client) ListFiles(patterns []string) error {
-	li, err := c.GlobFiles(patterns)
+func (c *Client) ListFiles(patterns []string, opt GlobOptions) error {
+	li, err := c.GlobFiles(patterns, opt)
 	if err != nil {
 		return err
 	}
@@ -159,6 +173,10 @@ func (c *Client) ListFiles(patterns []string) error {
 	var out []string
 	for _, item := range li {
 		if item.IsDir {
+			if !opt.Long {
+				out = append(out, item.Filename+"/\n")
+				continue
+			}
 			s := fmt.Sprintf("%*s %6d file", -maxFilenameWidth, item.Filename+"/", item.DirSize)
 			if item.DirSize != 1 {
 				s += "s"
@@ -189,6 +207,10 @@ func (c *Client) ListFiles(patterns []string) error {
 			}
 			s += "\n"
 			out = append(out, s)
+			continue
+		}
+		if !opt.Long {
+			out = append(out, item.Filename+"\n")
 			continue
 		}
 		duration := ""

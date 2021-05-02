@@ -16,7 +16,7 @@ func (c *Client) ExportFiles(patterns []string, dir string) (int, error) {
 	if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
 		return 0, fmt.Errorf("%s is not a directory", dir)
 	}
-	li, err := c.GlobFiles(patterns)
+	li, err := c.GlobFiles(patterns, GlobOptions{})
 	if err != nil {
 		return 0, err
 	}
@@ -46,7 +46,7 @@ func (c *Client) ExportFiles(patterns []string, dir string) (int, error) {
 
 // Cat decrypts and sends the plaintext to stdout.
 func (c *Client) Cat(patterns []string) error {
-	li, err := c.GlobFiles(patterns)
+	li, err := c.GlobFiles(patterns, GlobOptions{})
 	if err != nil {
 		return err
 	}

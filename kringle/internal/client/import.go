@@ -31,7 +31,7 @@ import (
 // ImportFiles encrypts and imports files. Returns the number of files imported.
 func (c *Client) ImportFiles(patterns []string, dir string) (int, error) {
 	dir = strings.TrimSuffix(dir, "/")
-	li, err := c.glob(dir)
+	li, err := c.glob(dir, GlobOptions{})
 	if err != nil {
 		return 0, err
 	}
@@ -52,7 +52,7 @@ func (c *Client) ImportFiles(patterns []string, dir string) (int, error) {
 		}
 	}
 
-	existingItems, err := c.glob(dir + "/*")
+	existingItems, err := c.glob(dir+"/*", MatchAll)
 	if err != nil {
 		return 0, err
 	}

@@ -12,7 +12,7 @@ import (
 )
 
 func (c *Client) AddAlbums(names []string) error {
-	li, err := c.GlobFiles(names)
+	li, err := c.GlobFiles(names, GlobOptions{})
 	if err != nil {
 		return err
 	}
@@ -79,7 +79,7 @@ func (c *Client) addAlbum(name string) error {
 
 // RemoveAlbums deletes albums.
 func (c *Client) RemoveAlbums(patterns []string) error {
-	li, err := c.GlobFiles(patterns)
+	li, err := c.GlobFiles(patterns, GlobOptions{})
 	if err != nil {
 		return err
 	}
@@ -126,11 +126,11 @@ func (c *Client) removeAlbum(item ListItem) (retErr error) {
 // Copy copies files to an existing album.
 func (c *Client) Copy(patterns []string, dest string) error {
 	dest = strings.TrimSuffix(dest, "/")
-	di, err := c.glob(dest)
+	di, err := c.glob(dest, GlobOptions{})
 	if err != nil {
 		return err
 	}
-	si, err := c.GlobFiles(patterns)
+	si, err := c.GlobFiles(patterns, GlobOptions{})
 	if err != nil {
 		return err
 	}
@@ -177,11 +177,11 @@ func (c *Client) Copy(patterns []string, dest string) error {
 // RenameAlbum renames an album.
 func (c *Client) RenameAlbum(patterns []string, dest string) error {
 	dest = strings.TrimSuffix(dest, "/")
-	di, err := c.glob(dest)
+	di, err := c.glob(dest, GlobOptions{})
 	if err != nil {
 		return err
 	}
-	si, err := c.GlobFiles(patterns)
+	si, err := c.GlobFiles(patterns, GlobOptions{})
 	if err != nil {
 		return err
 	}
@@ -200,11 +200,11 @@ func (c *Client) RenameAlbum(patterns []string, dest string) error {
 // Move moves files to an existing album, or renames an album.
 func (c *Client) Move(patterns []string, dest string) error {
 	dest = strings.TrimSuffix(dest, "/")
-	di, err := c.glob(dest)
+	di, err := c.glob(dest, GlobOptions{})
 	if err != nil {
 		return err
 	}
-	si, err := c.GlobFiles(patterns)
+	si, err := c.GlobFiles(patterns, GlobOptions{})
 	if err != nil {
 		return err
 	}
@@ -246,14 +246,14 @@ func (c *Client) Move(patterns []string, dest string) error {
 
 // Delete moves files trash, or deletes them from trash.
 func (c *Client) Delete(patterns []string) error {
-	si, err := c.GlobFiles(patterns)
+	si, err := c.GlobFiles(patterns, GlobOptions{})
 	if err != nil {
 		return err
 	}
 	if len(si) == 0 {
 		return nil
 	}
-	di, err := c.glob("trash")
+	di, err := c.glob(".trash", GlobOptions{})
 	if err != nil || len(di) != 1 {
 		return err
 	}

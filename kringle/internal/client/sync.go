@@ -307,7 +307,7 @@ func (c *Client) translateSetAlbumIDToName(set, albumID string, al AlbumList) (s
 	case stingle.GallerySet:
 		return "gallery", nil
 	case stingle.TrashSet:
-		return "trash", nil
+		return ".trash", nil
 	case stingle.AlbumSet:
 		if album, ok := al.Albums[albumID]; ok {
 			return album.Name(c.SecretKey())
@@ -565,7 +565,7 @@ func (c *Client) diff() (*albumDiffs, error) {
 // Pull downloads all the files matching pattern that are not already present
 // in the local storage. Returns the number of files downloaded.
 func (c *Client) Pull(patterns []string) (int, error) {
-	list, err := c.GlobFiles(patterns)
+	list, err := c.GlobFiles(patterns, GlobOptions{})
 	if err != nil {
 		return 0, err
 	}
@@ -611,7 +611,7 @@ func (c *Client) Pull(patterns []string) (int, error) {
 // Free deletes all the files matching pattern that are already present in the
 // remote storage. Returns the number of files freed.
 func (c *Client) Free(patterns []string) (int, error) {
-	list, err := c.GlobFiles(patterns)
+	list, err := c.GlobFiles(patterns, GlobOptions{})
 	if err != nil {
 		return 0, err
 	}

@@ -18,7 +18,7 @@ func (c *Client) Share(pattern string, shareWith []string, permissions []string)
 	if c.Account == nil {
 		return ErrNotLoggedIn
 	}
-	li, err := c.GlobFiles([]string{pattern})
+	li, err := c.GlobFiles([]string{pattern}, GlobOptions{})
 	if err != nil {
 		return err
 	}
@@ -113,7 +113,7 @@ func (c *Client) Unshare(patterns []string) error {
 	if c.Account == nil {
 		return ErrNotLoggedIn
 	}
-	li, err := c.GlobFiles(patterns)
+	li, err := c.GlobFiles(patterns, GlobOptions{})
 	if err != nil {
 		return err
 	}
@@ -139,7 +139,7 @@ func (c *Client) Leave(patterns []string) error {
 	if c.Account == nil {
 		return ErrNotLoggedIn
 	}
-	li, err := c.GlobFiles(patterns)
+	li, err := c.GlobFiles(patterns, GlobOptions{})
 	if err != nil {
 		return err
 	}
@@ -165,7 +165,7 @@ func (c *Client) RemoveMembers(pattern string, toRemove []string) error {
 	if c.Account == nil {
 		return ErrNotLoggedIn
 	}
-	li, err := c.GlobFiles([]string{pattern})
+	li, err := c.GlobFiles([]string{pattern}, GlobOptions{})
 	if err != nil {
 		return err
 	}
@@ -224,7 +224,7 @@ func (c *Client) ChangePermissions(patterns, perms []string) (retErr error) {
 	if c.Account == nil {
 		return ErrNotLoggedIn
 	}
-	li, err := c.GlobFiles(patterns)
+	li, err := c.GlobFiles(patterns, GlobOptions{})
 	if err != nil {
 		return err
 	}

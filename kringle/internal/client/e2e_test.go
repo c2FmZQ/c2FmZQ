@@ -104,7 +104,7 @@ func TestImportExportSync(t *testing.T) {
 	}
 
 	t.Log("CLIENT LIST gallery/*")
-	if err := c.ListFiles([]string{"gallery/*"}); err != nil {
+	if err := c.ListFiles([]string{"gallery/*"}, client.GlobOptions{}); err != nil {
 		t.Errorf("c.ListFiles: %v", err)
 	}
 
@@ -189,11 +189,11 @@ func TestCopyMoveDelete(t *testing.T) {
 	}
 
 	want := []string{
+		".trash",
 		"alpha LOCAL",
 		"beta LOCAL",
 		"charlie LOCAL",
 		"gallery",
-		"trash",
 		"alpha/image000.jpg LOCAL",
 		"alpha/image001.jpg LOCAL",
 		"beta/image002.jpg LOCAL",
@@ -216,18 +216,18 @@ func TestCopyMoveDelete(t *testing.T) {
 	}
 
 	want = []string{
+		".trash",
 		"alpha LOCAL",
 		"beta LOCAL",
 		"charlie LOCAL",
 		"gallery",
-		"trash",
+		".trash/image000.jpg LOCAL",
+		".trash/image004.jpg LOCAL",
 		"alpha/image001.jpg LOCAL",
 		"beta/image002.jpg LOCAL",
 		"beta/image003.jpg LOCAL",
 		"gallery/image000.jpg LOCAL",
 		"gallery/image001.jpg LOCAL",
-		"trash/image000.jpg LOCAL",
-		"trash/image004.jpg LOCAL",
 	}
 	if got, err = globAll(c); err != nil {
 		t.Fatalf("globAll: %v", err)
@@ -236,17 +236,17 @@ func TestCopyMoveDelete(t *testing.T) {
 		t.Fatalf("Unexpected file list. Diff: %v", diff)
 	}
 
-	t.Log("CLIENT DELETE trash/*")
-	if err := c.Delete([]string{"trash/*"}); err != nil {
+	t.Log("CLIENT DELETE .trash/*")
+	if err := c.Delete([]string{".trash/*"}); err != nil {
 		t.Fatalf("c.Delete: %v", err)
 	}
 
 	want = []string{
+		".trash",
 		"alpha LOCAL",
 		"beta LOCAL",
 		"charlie LOCAL",
 		"gallery",
-		"trash",
 		"alpha/image001.jpg LOCAL",
 		"beta/image002.jpg LOCAL",
 		"beta/image003.jpg LOCAL",
@@ -277,10 +277,10 @@ func TestCopyMoveDelete(t *testing.T) {
 	}
 
 	want = []string{
+		".trash",
 		"alpha",
 		"beta",
 		"gallery",
-		"trash",
 		"alpha/image001.jpg",
 		"beta/image002.jpg",
 		"beta/image003.jpg",
@@ -313,12 +313,12 @@ func TestSyncTrash(t *testing.T) {
 	} else if want, got := 5, n; want != got {
 		t.Errorf("Unexpected ImportFiles result. Want %d, got %d", want, got)
 	}
-	t.Log("CLIENT Copy gallery/* -> trash")
-	if err := c.Copy([]string{"gallery/*"}, "trash"); err == nil {
+	t.Log("CLIENT Copy gallery/* -> .trash")
+	if err := c.Copy([]string{"gallery/*"}, ".trash"); err == nil {
 		t.Fatalf("c.Copy to trash succeeded unexpectedly")
 	}
-	t.Log("CLIENT Move gallery/* -> trash")
-	if err := c.Move([]string{"gallery/*"}, "trash"); err != nil {
+	t.Log("CLIENT Move gallery/* -> .trash")
+	if err := c.Move([]string{"gallery/*"}, ".trash"); err != nil {
 		t.Fatalf("Move to trash: %v", err)
 	}
 	t.Log("CLIENT Sync")
@@ -326,7 +326,7 @@ func TestSyncTrash(t *testing.T) {
 		t.Fatalf("c.Sync: %v", err)
 	}
 	t.Log("CLIENT Copy trash/* -> gallery")
-	if err := c.Copy([]string{"trash/*"}, "gallery"); err == nil {
+	if err := c.Copy([]string{".trash/*"}, "gallery"); err == nil {
 		t.Fatalf("c.Copy from trash succeeded unexpectedly")
 	}
 	t.Log("CLIENT AddAlbums alpha beta")
@@ -334,7 +334,7 @@ func TestSyncTrash(t *testing.T) {
 		t.Fatalf("AddAlbums: %v", err)
 	}
 	t.Log("CLIENT Move trash/* -> alpha")
-	if err := c.Move([]string{"trash/*"}, "alpha"); err != nil {
+	if err := c.Move([]string{".trash/*"}, "alpha"); err != nil {
 		t.Fatalf("Move from trash to alpha: %v", err)
 	}
 	t.Log("CLIENT Copy alpha/* -> beta")
@@ -349,8 +349,8 @@ func TestSyncTrash(t *testing.T) {
 	if err := c.Delete([]string{"*/image000.jpg"}); err != nil {
 		t.Fatalf("c.Delete: %v", err)
 	}
-	t.Log("CLIENT Delete trash/image000.jpg")
-	if err := c.Delete([]string{"trash/image000.jpg"}); err != nil {
+	t.Log("CLIENT Delete .trash/image000.jpg")
+	if err := c.Delete([]string{".trash/image000.jpg"}); err != nil {
 		t.Fatalf("c.Delete: %v", err)
 	}
 	t.Log("CLIENT Sync")
@@ -359,10 +359,10 @@ func TestSyncTrash(t *testing.T) {
 	}
 
 	want := []string{
+		".trash",
 		"alpha",
 		"beta",
 		"gallery",
-		"trash",
 		"alpha/image001.jpg",
 		"alpha/image002.jpg",
 		"alpha/image003.jpg",
@@ -409,11 +409,11 @@ func TestConcurrentMutations(t *testing.T) {
 		t.Fatalf("c1.Sync: %v", err)
 	}
 	want := []string{
+		".trash",
 		"alpha",
 		"beta",
 		"delta",
 		"gallery",
-		"trash",
 		"alpha/image000.jpg",
 		"alpha/image001.jpg",
 		"alpha/image002.jpg",
@@ -469,11 +469,11 @@ func TestConcurrentMutations(t *testing.T) {
 		t.Fatalf("c2.Move: %v", err)
 	}
 	want = []string{
+		".trash",
 		"alpha",
 		"beta",
 		"charlie LOCAL",
 		"gallery",
-		"trash",
 		"alpha/image001.jpg",
 		"alpha/image002.jpg",
 		"alpha/image003.jpg",
@@ -505,9 +505,9 @@ func TestConcurrentMutations(t *testing.T) {
 		t.Fatalf("c1.Sync: %v", err)
 	}
 	want = []string{
+		".trash",
 		"delta",
 		"gallery",
-		"trash",
 		"delta/image000.jpg",
 		"delta/image001.jpg",
 		"delta/image002.jpg",
@@ -526,11 +526,11 @@ func TestConcurrentMutations(t *testing.T) {
 		t.Fatalf("c2.Sync: %v", err)
 	}
 	want = []string{
+		".trash",
 		"beta",
 		"charlie",
 		"delta",
 		"gallery",
-		"trash",
 		"beta/image000.jpg",
 		"beta/image100.jpg",
 		"charlie/image101.jpg",
@@ -611,9 +611,9 @@ func TestSharing(t *testing.T) {
 			t.Fatalf("%s.GetUpdates: %v", n, err)
 		}
 		want := []string{
+			".trash",
 			"alpha",
 			"gallery",
-			"trash",
 			"alpha/image000.jpg",
 			"alpha/image001.jpg",
 			"alpha/image002.jpg",
@@ -639,8 +639,8 @@ func TestSharing(t *testing.T) {
 		t.Fatalf("bob.GetUpdates: %v", err)
 	}
 	want := []string{
+		".trash",
 		"gallery",
-		"trash",
 	}
 	got, err := globAll(c["bob"])
 	if err != nil {
@@ -660,8 +660,8 @@ func TestSharing(t *testing.T) {
 		t.Fatalf("carol.GetUpdates: %v", err)
 	}
 	want = []string{
+		".trash",
 		"gallery",
-		"trash",
 	}
 	if got, err = globAll(c["carol"]); err != nil {
 		t.Fatalf("globAll: %v", err)
@@ -679,8 +679,8 @@ func TestSharing(t *testing.T) {
 		t.Fatalf("dave.GetUpdates: %v", err)
 	}
 	want = []string{
+		".trash",
 		"gallery",
-		"trash",
 	}
 	if got, err = globAll(c["dave"]); err != nil {
 		t.Fatalf("globAll: %v", err)

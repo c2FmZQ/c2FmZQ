@@ -75,7 +75,7 @@ func makeImages(dir string, start, n int) error {
 func globAll(c *client.Client) ([]string, error) {
 	var out []string
 	for _, p := range []string{"*", "*/*"} {
-		li, err := c.GlobFiles([]string{p})
+		li, err := c.GlobFiles([]string{p}, client.MatchAll)
 		if err != nil {
 			return nil, err
 		}

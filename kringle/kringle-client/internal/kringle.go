@@ -48,6 +48,7 @@ func New() *kringle {
 		CommandNotFound: func(ctx *cli.Context, cmd string) {
 			fmt.Fprintf(app.cli.Writer, "Unknown command %q. Try \"help\"\n", cmd)
 		},
+		UseShortOptionHandling: true,
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:        "data-dir",
@@ -237,6 +238,20 @@ func New() *kringle {
 				ArgsUsage: `["glob"] ... (default "*")`,
 				Action:    app.listFiles,
 				Category:  "Files",
+				Flags: []cli.Flag{
+					&cli.BoolFlag{
+						Name:    "all",
+						Aliases: []string{"a"},
+						Value:   false,
+						Usage:   "Show hidden files.",
+					},
+					&cli.BoolFlag{
+						Name:    "long",
+						Aliases: []string{"l"},
+						Value:   false,
+						Usage:   "Show long format.",
+					},
+				},
 			},
 			&cli.Command{
 				Name:      "copy",
@@ -762,7 +777,14 @@ func (k *kringle) listFiles(ctx *cli.Context) error {
 	if ctx.Args().Len() > 0 {
 		patterns = ctx.Args().Slice()
 	}
-	return k.client.ListFiles(patterns)
+	opt := client.GlobOptions{}
+	if ctx.Bool("all") {
+		opt.MatchDot = true
+	}
+	if ctx.Bool("long") {
+		opt.Long = true
+	}
+	return k.client.ListFiles(patterns, opt)
 }
 
 func (k *kringle) copyFiles(ctx *cli.Context) error {
