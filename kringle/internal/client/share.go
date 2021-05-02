@@ -2,6 +2,7 @@ package client
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"path"
@@ -34,9 +35,13 @@ func (c *Client) Share(pattern string, shareWith []string, permissions []string)
 		return err
 	}
 	var members []*stingle.Contact
+	maxSize := 5
 	for _, email := range shareWith {
 		if email == c.Account.Email {
 			continue
+		}
+		if len(email) > maxSize {
+			maxSize = len(email)
 		}
 		found := false
 		for _, c := range cl.Contacts {
@@ -55,7 +60,24 @@ func (c *Client) Share(pattern string, shareWith []string, permissions []string)
 		}
 		members = append(members, c)
 	}
-
+	if len(members) == 0 {
+		return fmt.Errorf("no match: %s", shareWith)
+	}
+	c.Print("Sharing with:\n")
+	c.Printf("%*s %s\n", -maxSize, "Email", "Public Key")
+	var list []string
+	for _, m := range members {
+		pk, _ := m.PK()
+		list = append(list, fmt.Sprintf("%*s % X", -maxSize, m.Email, pk.ToBytes()))
+	}
+	sort.Strings(list)
+	for _, l := range list {
+		c.Print(l)
+	}
+	c.Print("\nWARNING: Verify the public keys of your contacts, then confirm.\n")
+	if reply, err := c.prompt("Type YES to confirm: "); err != nil || reply != "YES" {
+		return errors.New("not confirmed")
+	}
 	for _, item := range li {
 		album := item.Album
 		sharingKeys := make(map[string]string)
