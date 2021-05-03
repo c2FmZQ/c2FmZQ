@@ -61,6 +61,15 @@ func (c *Client) GlobFiles(patterns []string, opt GlobOptions) ([]ListItem, erro
 		}
 		li = append(li, items...)
 	}
+	sort.Slice(li, func(i, j int) bool {
+		if li[i].Filename == li[j].Filename {
+			if li[i].IsDir {
+				return true
+			}
+			return false
+		}
+		return li[i].Filename < li[j].Filename
+	})
 	return li, nil
 }
 
@@ -187,15 +196,6 @@ func (c *Client) ListFiles(patterns []string, opt GlobOptions) error {
 		return err
 	}
 
-	sort.Slice(li, func(i, j int) bool {
-		if li[i].Filename == li[j].Filename {
-			if li[i].IsDir {
-				return true
-			}
-			return false
-		}
-		return li[i].Filename < li[j].Filename
-	})
 	for _, item := range li {
 		if item.IsDir {
 			if !opt.Directory {
