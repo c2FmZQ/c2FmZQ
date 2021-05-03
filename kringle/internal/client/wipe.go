@@ -1,6 +1,7 @@
 package client
 
 import (
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"os"
@@ -31,10 +32,10 @@ func (c *Client) WipeAccount(password string) error {
 			errList = append(errList, errs...)
 		}
 	}
-	if err := os.Remove(filepath.Join(c.storage.Dir(), c.fileHash(albumList))); err != nil {
+	if err := c.wipeFile(filepath.Join(c.storage.Dir(), c.fileHash(albumList))); err != nil {
 		errList = append(errList, err)
 	}
-	if err := os.Remove(filepath.Join(c.storage.Dir(), c.fileHash(contactsFile))); err != nil {
+	if err := c.wipeFile(filepath.Join(c.storage.Dir(), c.fileHash(contactsFile))); err != nil {
 		errList = append(errList, err)
 	}
 	if c.Account != nil {
@@ -43,7 +44,7 @@ func (c *Client) WipeAccount(password string) error {
 			errList = append(errList, err)
 		}
 	} else {
-		if err := os.Remove(filepath.Join(c.storage.Dir(), c.cfgFile())); err != nil {
+		if err := c.wipeFile(filepath.Join(c.storage.Dir(), c.cfgFile())); err != nil {
 			errList = append(errList, err)
 		}
 	}
@@ -64,16 +65,36 @@ func (c *Client) wipeFileSet(name string) (errList []error) {
 		errList = append(errList, err)
 	}
 	for _, f := range fs.Files {
-		if err := os.Remove(c.blobPath(f.File, false)); err != nil && !errors.Is(err, os.ErrNotExist) {
+		if err := c.wipeFile(c.blobPath(f.File, false)); err != nil && !errors.Is(err, os.ErrNotExist) {
 			errList = append(errList, err)
 		}
-		if err := os.Remove(c.blobPath(f.File, true)); err != nil && !errors.Is(err, os.ErrNotExist) {
+		if err := c.wipeFile(c.blobPath(f.File, true)); err != nil && !errors.Is(err, os.ErrNotExist) {
 			errList = append(errList, err)
 		}
 
 	}
-	if err := os.Remove(filepath.Join(c.storage.Dir(), fn)); err != nil {
+	if err := c.wipeFile(filepath.Join(c.storage.Dir(), fn)); err != nil {
 		errList = append(errList, err)
 	}
 	return errList
+}
+
+func (c *Client) wipeFile(name string) error {
+	f, err := os.OpenFile(name, os.O_WRONLY, 0600)
+	if err != nil {
+		return err
+	}
+	buf := make([]byte, 1024)
+	if _, err := rand.Read(buf); err != nil {
+		f.Close()
+		return err
+	}
+	if _, err := f.Write(buf); err != nil {
+		f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	return os.Remove(name)
 }
