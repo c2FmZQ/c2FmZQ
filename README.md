@@ -93,11 +93,9 @@ NAME:
    c2FmZQ-server - Runs the c2FmZQ server
 
 USAGE:
-   c2FmZQ-server command [command options]  
+   c2FmZQ-server [global options]  
 
-COMMANDS:
-
-OPTIONS:
+GLOBAL OPTIONS:
    --database DIR, --db DIR       Use the database in DIR [$C2FMZQ_DATABASE]
    --address value, --addr value  The local address to use. (default: "127.0.0.1:8080")
    --base-url value               The base URL of the generated download links. If empty, the links will generated using the Host headers of the incoming requests, i.e. https://HOST/.
@@ -113,8 +111,8 @@ OPTIONS:
 Or, build a docker image.
 
 ```bash
-$ docker build -t c2FmZQ-server .
-$ docker run -u ${USER} -v ${DATABASEDIR}:/data -v ${SECRETSDIR}:/secrets:ro c2FmZQ-server
+$ docker build -t c2fmzq-server .
+$ docker run -u ${USER} -v ${DATABASEDIR}:/data -v ${SECRETSDIR}:/secrets:ro c2fmzq-server
 ```
 ${DATABASEDIR} is where all the data will be stored, and ${SECRETSDIR} is where the
 database encryption passphrase, the TLS key, and TLS cert are stored.
@@ -151,7 +149,7 @@ $ cd c2FmZQ/c2FmZQ-client
 $ go build
 $ ./c2FmZQ-client
 NAME:
-   c2FmZQ - c2FmZQ client.
+   c2FmZQ - Keep your files away from prying eyes.
 
 USAGE:
    c2FmZQ-client [global options] command [command options] [arguments...]
@@ -186,18 +184,18 @@ COMMANDS:
    Share:
      change-permissions, chmod  Change the permissions on a shared directory (album).
      contacts                   List contacts.
-     leave                      Remove a directory that is shared with us.
+     leave                      Remove a directory (album) that is shared with us.
      remove-member              Remove members from a directory (album).
      share                      Share a directory (album) with other people.
      unshare                    Stop sharing a directory (album).
    Sync:
-     download, pull   Download files that aren't already downloaded.
-     free             Remove local files that are backed up.
-     sync             Send changes to remote server.
+     download, pull   Download a local copy of encrypted files.
+     free             Remove the local copy of encrypted files that are backed up.
+     sync             Upload changes to remote server.
      updates, update  Pull metadata updates from remote server.
 
 GLOBAL OPTIONS:
-   --data-dir DIR, -d DIR     Save the data in DIR [$C2FMZQ_DATADIR]
+   --data-dir DIR, -d DIR     Save the data in DIR (default: "$HOME/.config/.c2FmZQ") [$C2FMZQ_DATADIR]
    --verbose value, -v value  The level of logging verbosity: 1:Error 2:Info 3:Debug (default: 2 (info))
    --passphrase-file FILE     Read the database passphrase from FILE. [$C2FMZQ_PASSPHRASE_FILE]
    --server value             The API server base URL. [$C2FMZQ_API_SERVER]
