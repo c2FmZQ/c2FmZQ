@@ -1,4 +1,4 @@
-# Kringle
+# c2FmZQ
 
 This repo contains an application that can securely encrypt, store, and share
 files, including but not limited to pictures and videos.
@@ -46,9 +46,9 @@ permissions on the album can be changed, but it is impossible to control what
 happens to the files that were previously shared. They could have been
 downloaded, exported, published to the New York Times, etc.
 
-## Kringle Server
+## c2FmZQ Server
 
-Kringle-server is an API server with a relatively small footprint. It can run
+c2FmZQ-server is an API server with a relatively small footprint. It can run
 just about anywhere, as long as it has access to lots of disk space, a modern
 CPU. It must be reachable by the client(s) via HTTPS.
 
@@ -86,19 +86,19 @@ stores all its data on a local filesystem.
 Simply build it, and run it.
 
 ```bash
-$ cd kringle/kringle-server
+$ cd c2FmZQ/c2FmZQ-server
 $ go build
-$ ./kringle-server help
+$ ./c2FmZQ-server help
 NAME:
-   kringle-server - Runs the kringle server
+   c2FmZQ-server - Runs the c2FmZQ server
 
 USAGE:
-   kringle-server command [command options]  
+   c2FmZQ-server command [command options]  
 
 COMMANDS:
 
 OPTIONS:
-   --database DIR, --db DIR       Use the database in DIR [$KRINGLE_DATABASE]
+   --database DIR, --db DIR       Use the database in DIR [$C2FMZQ_DATABASE]
    --address value, --addr value  The local address to use. (default: "127.0.0.1:8080")
    --base-url value               The base URL of the generated download links. If empty, the links will generated using the Host headers of the incoming requests, i.e. https://HOST/.
    --tlscert FILE                 The name of the FILE containing the TLS cert to use. If neither -tlscert nor -tlskey is set, the server will not use TLS.
@@ -106,15 +106,15 @@ OPTIONS:
    --allow-new-accounts           Allow new account registrations. (default: true)
    --verbose value, -v value      The level of logging verbosity: 1:Error 2:Info 3:Debug (default: 2 (info))
    --encrypt-metadata             Encrypt the server metadata (strongly recommended). (default: true)
-   --passphrase-file FILE         Read the database passphrase from FILE. [$KRINGLE_PASSPHRASE_FILE]
-   --htdigest-file FILE           The name of the htdigest FILE to use for basic auth for some endpoints, e.g. /metrics [$KRINGLE_HTDIGEST_FILE]
+   --passphrase-file FILE         Read the database passphrase from FILE. [$C2FMZQ_PASSPHRASE_FILE]
+   --htdigest-file FILE           The name of the htdigest FILE to use for basic auth for some endpoints, e.g. /metrics [$C2FMZQ_HTDIGEST_FILE]
 ```
 
 Or, build a docker image.
 
 ```bash
-$ docker build -t kringle-server .
-$ docker run -u ${USER} -v ${DATABASEDIR}:/data -v ${SECRETSDIR}:/secrets:ro kringle-server
+$ docker build -t c2FmZQ-server .
+$ docker run -u ${USER} -v ${DATABASEDIR}:/data -v ${SECRETSDIR}:/secrets:ro c2FmZQ-server
 ```
 ${DATABASEDIR} is where all the data will be stored, and ${SECRETSDIR} is where the
 database encryption passphrase, the TLS key, and TLS cert are stored.
@@ -128,15 +128,15 @@ With the default Dockerfile, the server expects the following files in ${SECRETD
 Or, build a binary for arm and run the server on a NAS, raspberry pi, etc.
 
 ```bash
-$ cd kringle/kringle-server
-$ GOOS=linux GOARCH=arm go build -o kringle-server-arm
-$ scp kringle-server-arm root@NAS:.
+$ cd c2FmZQ/c2FmZQ-server
+$ GOOS=linux GOARCH=arm go build -o c2FmZQ-server-arm
+$ scp c2FmZQ-server-arm root@NAS:.
 ```
 
 
-## Kringle Client
+## c2FmZQ Client
 
-The Kringle client can be used by itself, or with a remote ("cloud") server very
+The c2FmZQ client can be used by itself, or with a remote ("cloud") server very
 similarly.
 
 Sharing only works when content is synced with a remote server.
@@ -147,14 +147,14 @@ server when _create-account_, _login_, or _recover-account_ is used.
 To run it:
 
 ```bash
-$ cd kringle/kringle-client
+$ cd c2FmZQ/c2FmZQ-client
 $ go build
-$ ./kringle-client
+$ ./c2FmZQ-client
 NAME:
-   kringle - kringle client.
+   c2FmZQ - c2FmZQ client.
 
 USAGE:
-   kringle-client [global options] command [command options] [arguments...]
+   c2FmZQ-client [global options] command [command options] [arguments...]
 
 COMMANDS:
    Account:
@@ -197,10 +197,10 @@ COMMANDS:
      updates, update  Pull metadata updates from remote server.
 
 GLOBAL OPTIONS:
-   --data-dir DIR, -d DIR     Save the data in DIR [$KRINGLE_DATADIR]
+   --data-dir DIR, -d DIR     Save the data in DIR [$C2FMZQ_DATADIR]
    --verbose value, -v value  The level of logging verbosity: 1:Error 2:Info 3:Debug (default: 2 (info))
-   --passphrase-file FILE     Read the database passphrase from FILE. [$KRINGLE_PASSPHRASE_FILE]
-   --server value             The API server base URL. [$KRINGLE_API_SERVER]
+   --passphrase-file FILE     Read the database passphrase from FILE. [$C2FMZQ_PASSPHRASE_FILE]
+   --server value             The API server base URL. [$C2FMZQ_API_SERVER]
    --auto-update              Automatically fetch metadata updates from the remote server before each command. (default: true)
 ```
 
