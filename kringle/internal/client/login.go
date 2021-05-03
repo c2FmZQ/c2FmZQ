@@ -110,7 +110,11 @@ func (c *Client) Login(server, email, password string) error {
 	if sr.Status != "ok" {
 		return sr
 	}
-	salt, err := hex.DecodeString(sr.Part("salt").(string))
+	eSalt, ok := sr.Part("salt").(string)
+	if !ok {
+		return fmt.Errorf("salt has unexpected type: %T", sr.Part("salt"))
+	}
+	salt, err := hex.DecodeString(eSalt)
 	if err != nil {
 		return err
 	}
@@ -126,7 +130,11 @@ func (c *Client) Login(server, email, password string) error {
 	if sr, err = c.sendLogin(email, pw); err != nil {
 		return err
 	}
-	sk, err := stingle.DecodeSecretKeyBundle([]byte(password), sr.Part("keyBundle").(string))
+	keyBundle, ok := sr.Part("keyBundle").(string)
+	if !ok {
+		return fmt.Errorf("keyBundle has unexpected type: %T", sr.Part("keyBundle"))
+	}
+	sk, err := stingle.DecodeSecretKeyBundle([]byte(password), keyBundle)
 	if err != nil {
 		c.Account.IsBackedUp = false
 		phr, err := c.prompt("Enter backup phrase: ")
@@ -164,11 +172,19 @@ func (c *Client) sendLogin(email, hashedPassword string) (*stingle.Response, err
 	if sr.Status != "ok" {
 		return nil, sr
 	}
-	id, err := strconv.ParseInt(sr.Part("userId").(string), 10, 32)
+	userID, ok := sr.Part("userId").(string)
+	if !ok {
+		fmt.Errorf("userId has unexpected type: %T", sr.Part("userId"))
+	}
+	id, err := strconv.ParseInt(userID, 10, 32)
 	if err != nil {
 		return nil, err
 	}
-	pk, err := base64.StdEncoding.DecodeString(sr.Part("serverPublicKey").(string))
+	serverPublicKey, ok := sr.Part("serverPublicKey").(string)
+	if !ok {
+		fmt.Errorf("serverPublicKey has unexpected type: %T", sr.Part("serverPublicKey"))
+	}
+	pk, err := base64.StdEncoding.DecodeString(serverPublicKey)
 	if err != nil {
 		return nil, err
 	}
