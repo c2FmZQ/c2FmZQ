@@ -33,10 +33,17 @@ type ListItem struct {
 
 // GlobOptions contains options for GlobFiles and ListFiles.
 type GlobOptions struct {
-	MatchDot  bool // Wildcards match dot at the beginning of dir/file names.
+	// Glob options
+	MatchDot bool // Wildcards match dot at the beginning of dir/file names.
+	Quiet    bool // Don't show errors.
+
+	// List options
 	Long      bool // Show long output.
+	Directory bool // Show directories themselves.
 	Recursive bool // Show content recursively.
-	Quiet     bool // Don't show errors.
+
+	trimPrefix string
+	indent     string
 }
 
 var MatchAll = GlobOptions{MatchDot: true}
@@ -69,7 +76,6 @@ func (c *Client) glob(pattern string, opt GlobOptions) ([]ListItem, error) {
 	if len(pathElems) > 2 {
 		return nil, nil
 	}
-
 	type dir struct {
 		name    string
 		fileSet string
@@ -154,14 +160,22 @@ func (c *Client) glob(pattern string, opt GlobOptions) ([]ListItem, error) {
 }
 
 func (c *Client) ListFiles(patterns []string, opt GlobOptions) error {
+	for i, p := range patterns {
+		if p == "" {
+			p = "*"
+			opt.Directory = true
+			patterns[i] = p
+		}
+	}
 	li, err := c.GlobFiles(patterns, opt)
 	if err != nil {
 		return err
 	}
 	maxFilenameWidth, maxSizeWidth := 0, 0
 	for _, item := range li {
-		if len(item.Filename)+1 > maxFilenameWidth {
-			maxFilenameWidth = len(item.Filename) + 1
+		fn := strings.TrimPrefix(item.Filename+"/", opt.trimPrefix)
+		if len(fn) > maxFilenameWidth {
+			maxFilenameWidth = len(fn)
 		}
 		w := len(fmt.Sprintf("%d", item.Header.DataSize))
 		if w > maxSizeWidth {
@@ -184,10 +198,19 @@ func (c *Client) ListFiles(patterns []string, opt GlobOptions) error {
 	})
 	for _, item := range li {
 		if item.IsDir {
-			if !opt.Long {
-				c.Print(item.Filename + "/")
+			if !opt.Directory {
+				opt2 := opt
+				opt2.Quiet = true
+				opt2.Directory = true
+				opt2.trimPrefix = item.Filename + "/"
+				opt2.indent = "  "
+				c.Printf("%s%s/\n", opt.indent, item.Filename)
+				c.ListFiles([]string{filepath.Join(item.Filename, "*")}, opt2)
+				c.Print()
+			} else if !opt.Long {
+				c.Print(opt.indent + strings.TrimPrefix(item.Filename+"/", opt.trimPrefix))
 			} else {
-				s := fmt.Sprintf("%*s %6d file", -maxFilenameWidth, item.Filename+"/", item.DirSize)
+				s := fmt.Sprintf("%*s %6d file", -maxFilenameWidth, strings.TrimPrefix(item.Filename+"/", opt.trimPrefix), item.DirSize)
 				if item.DirSize != 1 {
 					s += "s"
 				}
@@ -215,17 +238,20 @@ func (c *Client) ListFiles(patterns []string, opt GlobOptions) error {
 				if item.LocalOnly {
 					s += ", Local"
 				}
-				c.Print(s)
+				c.Print(opt.indent + s)
 			}
 			if opt.Recursive {
-				opt.Quiet = true
-				c.ListFiles([]string{filepath.Join(item.Filename, "*")}, opt)
+				opt2 := opt
+				opt2.Quiet = true
+				opt2.trimPrefix = item.Filename + "/"
+				opt2.indent = "  "
+				c.ListFiles([]string{filepath.Join(item.Filename, "*")}, opt2)
 				c.Print()
 			}
 			continue
 		}
 		if !opt.Long {
-			c.Print(item.Filename)
+			c.Print(opt.indent + strings.TrimPrefix(item.Filename, opt.trimPrefix))
 			continue
 		}
 		duration := ""
@@ -249,7 +275,8 @@ func (c *Client) ListFiles(patterns []string, opt GlobOptions) error {
 			local = " Local"
 		}
 		ms, _ := item.FSFile.DateCreated.Int64()
-		c.Printf("%*s %*d %s %s%s%s%s\n", -maxFilenameWidth, item.Filename, maxSizeWidth, item.Header.DataSize,
+		c.Printf("%s%*s %*d %s %s%s%s%s\n", opt.indent, -maxFilenameWidth,
+			strings.TrimPrefix(item.Filename, opt.trimPrefix), maxSizeWidth, item.Header.DataSize,
 			time.Unix(ms/1000, 0).Format("2006-01-02 15:04:05"), stingle.FileType(item.Header.FileType),
 			exifData, duration, local)
 	}

@@ -271,6 +271,12 @@ func New() *kringle {
 						Value:   false,
 						Usage:   "Show files recursively.",
 					},
+					&cli.BoolFlag{
+						Name:    "directory",
+						Aliases: []string{"d"},
+						Value:   false,
+						Usage:   "Show directories, not their content.",
+					},
 				},
 			},
 			&cli.Command{
@@ -837,7 +843,7 @@ func (k *kringle) listFiles(ctx *cli.Context) error {
 	if err := k.init(ctx, true); err != nil {
 		return err
 	}
-	patterns := []string{"*"}
+	patterns := []string{""}
 	if ctx.Args().Len() > 0 {
 		patterns = ctx.Args().Slice()
 	}
@@ -850,6 +856,9 @@ func (k *kringle) listFiles(ctx *cli.Context) error {
 	}
 	if ctx.Bool("recursive") {
 		opt.Recursive = true
+	}
+	if ctx.Bool("directory") {
+		opt.Directory = true
 	}
 	return k.client.ListFiles(patterns, opt)
 }
