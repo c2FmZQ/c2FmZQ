@@ -627,7 +627,7 @@ func (c *Client) Free(patterns []string) (int, error) {
 		if err := os.Remove(fn); err != nil {
 			return count, err
 		}
-		c.Printf("Freed %s.\n", item.Filename)
+		c.Printf("Freed %s\n", item.Filename)
 		count++
 	}
 	if count == 0 {
@@ -645,7 +645,7 @@ func (c *Client) blobPath(name string, thumb bool) string {
 
 func (c *Client) downloadWorker(ch <-chan ListItem, out chan<- error) {
 	for i := range ch {
-		c.Printf("Downloading %s.\n", i.Filename)
+		c.Printf("Downloading %s\n", i.Filename)
 		out <- c.downloadFile(i)
 	}
 }

@@ -434,7 +434,7 @@ func (k *kringle) setupTerminal() (*term.Terminal, func()) {
 		io.Reader
 		io.Writer
 	}{os.Stdin, os.Stdout}
-	t := term.NewTerminal(screen, "kringle> ")
+	t := term.NewTerminal(screen, "> ")
 	/*
 		t.AutoCompleteCallback = func(line string, pos int, key rune) (newLine string, newPos int, ok bool) {
 			if key == '\t' {
@@ -463,7 +463,11 @@ func (k *kringle) shell(ctx *cli.Context) error {
 	p := shellwords.NewParser()
 
 	for {
-		t.SetPrompt(string(t.Escape.Green) + "kringle> " + string(t.Escape.Reset))
+		prompt := "local> "
+		if k.client.Account != nil {
+			prompt = "[" + k.client.Account.ServerBaseURL + "] " + k.client.Account.Email + "> "
+		}
+		t.SetPrompt(string(t.Escape.Green) + prompt + string(t.Escape.Reset))
 		line, err := t.ReadLine()
 		if err == io.EOF {
 			return nil
