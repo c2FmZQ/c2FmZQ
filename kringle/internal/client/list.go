@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -32,8 +33,10 @@ type ListItem struct {
 
 // GlobOptions contains options for GlobFiles and ListFiles.
 type GlobOptions struct {
-	MatchDot bool // Wildcards match dot at the beginning of dir/file names.
-	Long     bool // Show long output.
+	MatchDot  bool // Wildcards match dot at the beginning of dir/file names.
+	Long      bool // Show long output.
+	Recursive bool // Show content recursively.
+	Quiet     bool // Don't show errors.
 }
 
 var MatchAll = GlobOptions{MatchDot: true}
@@ -46,7 +49,7 @@ func (c *Client) GlobFiles(patterns []string, opt GlobOptions) ([]ListItem, erro
 		if err != nil {
 			return nil, err
 		}
-		if len(items) == 0 {
+		if len(items) == 0 && !opt.Quiet {
 			fmt.Fprintf(c.writer, "no match for: %s\n", p)
 		}
 		li = append(li, items...)
@@ -170,47 +173,59 @@ func (c *Client) ListFiles(patterns []string, opt GlobOptions) error {
 		return err
 	}
 
-	var out []string
+	sort.Slice(li, func(i, j int) bool {
+		if li[i].Filename == li[j].Filename {
+			if li[i].IsDir {
+				return true
+			}
+			return false
+		}
+		return li[i].Filename < li[j].Filename
+	})
 	for _, item := range li {
 		if item.IsDir {
 			if !opt.Long {
-				out = append(out, item.Filename+"/\n")
-				continue
-			}
-			s := fmt.Sprintf("%*s %6d file", -maxFilenameWidth, item.Filename+"/", item.DirSize)
-			if item.DirSize != 1 {
-				s += "s"
-			}
-			if item.Album != nil && item.Album.IsShared == "1" {
-				if item.Album.IsOwner == "1" {
-					s += ", shared by me"
-				} else {
-					s += ", shared with me"
+				c.Print(item.Filename + "/")
+			} else {
+				s := fmt.Sprintf("%*s %6d file", -maxFilenameWidth, item.Filename+"/", item.DirSize)
+				if item.DirSize != 1 {
+					s += "s"
 				}
-				p := strings.Split(item.Album.Members, ",")
-				s += fmt.Sprintf(", %d members: ", len(p))
-				var ml []string
-				for _, m := range p {
-					id, _ := strconv.ParseInt(m, 10, 64)
-					if c.Account != nil && id == c.Account.UserID {
-						ml = append(ml, c.Account.Email)
-						continue
+				if item.Album != nil && item.Album.IsShared == "1" {
+					if item.Album.IsOwner == "1" {
+						s += ", shared by me"
+					} else {
+						s += ", shared with me"
 					}
-					ml = append(ml, cl.Contacts[id].Email)
+					p := strings.Split(item.Album.Members, ",")
+					s += fmt.Sprintf(", %d members: ", len(p))
+					var ml []string
+					for _, m := range p {
+						id, _ := strconv.ParseInt(m, 10, 64)
+						if c.Account != nil && id == c.Account.UserID {
+							ml = append(ml, c.Account.Email)
+							continue
+						}
+						ml = append(ml, cl.Contacts[id].Email)
+					}
+					sort.Strings(ml)
+					s += strings.Join(ml, ",")
+					s += ", Permissions: " + stingle.Permissions(item.Album.Permissions).Human()
 				}
-				sort.Strings(ml)
-				s += strings.Join(ml, ",")
-				s += ", Permissions: " + stingle.Permissions(item.Album.Permissions).Human()
+				if item.LocalOnly {
+					s += ", Local"
+				}
+				c.Print(s)
 			}
-			if item.LocalOnly {
-				s += ", Local"
+			if opt.Recursive {
+				opt.Quiet = true
+				c.ListFiles([]string{filepath.Join(item.Filename, "*")}, opt)
+				c.Print()
 			}
-			s += "\n"
-			out = append(out, s)
 			continue
 		}
 		if !opt.Long {
-			out = append(out, item.Filename+"\n")
+			c.Print(item.Filename)
 			continue
 		}
 		duration := ""
@@ -234,13 +249,9 @@ func (c *Client) ListFiles(patterns []string, opt GlobOptions) error {
 			local = " Local"
 		}
 		ms, _ := item.FSFile.DateCreated.Int64()
-		out = append(out, fmt.Sprintf("%*s %*d %s %s%s%s%s\n", -maxFilenameWidth, item.Filename, maxSizeWidth, item.Header.DataSize,
+		c.Printf("%*s %*d %s %s%s%s%s\n", -maxFilenameWidth, item.Filename, maxSizeWidth, item.Header.DataSize,
 			time.Unix(ms/1000, 0).Format("2006-01-02 15:04:05"), stingle.FileType(item.Header.FileType),
-			exifData, duration, local))
-	}
-	sort.Strings(out)
-	for _, l := range out {
-		fmt.Fprint(c.writer, l)
+			exifData, duration, local)
 	}
 	return nil
 }

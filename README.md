@@ -161,11 +161,13 @@ COMMANDS:
      backup-phrase    Show the backup phrase for the current account. The backup phrase must be kept secret.
      change-password  Change the user's password.
      create-account   Create an account.
+     delete-account   Delete the account and wipe all data.
      login            Login to an account.
      logout           Logout.
      recover-account  Recover an account with backup phrase.
      set-key-backup   Enable or disable secret key backup.
      status           Show the client's status.
+     wipe-account     Wipe all local files associated with the current account.
    Albums:
      create-album, mkdir  Create new directory (album).
      delete-album, rmdir  Remove a directory (album).

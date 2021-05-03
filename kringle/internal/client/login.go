@@ -355,7 +355,9 @@ func (c *Client) DeleteAccount(password string) error {
 	if sr.Status != "ok" {
 		return sr
 	}
-
+	if err := c.WipeAccount(password); err != nil {
+		return err
+	}
 	c.Account = nil
 	if err := c.Save(); err != nil {
 		return err

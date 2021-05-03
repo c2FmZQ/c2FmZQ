@@ -179,6 +179,13 @@ func New() *kringle {
 				Category:  "Account",
 			},
 			&cli.Command{
+				Name:      "wipe-account",
+				Usage:     "Wipe all local files associated with the current account.",
+				ArgsUsage: " ",
+				Action:    app.wipeAccount,
+				Category:  "Account",
+			},
+			&cli.Command{
 				Name:      "updates",
 				Aliases:   []string{"update"},
 				Usage:     "Pull metadata updates from remote server.",
@@ -257,6 +264,12 @@ func New() *kringle {
 						Aliases: []string{"l"},
 						Value:   false,
 						Usage:   "Show long format.",
+					},
+					&cli.BoolFlag{
+						Name:    "recursive",
+						Aliases: []string{"R"},
+						Value:   false,
+						Usage:   "Show files recursively.",
 					},
 				},
 			},
@@ -711,6 +724,29 @@ func (k *kringle) deleteAccount(ctx *cli.Context) error {
 	return k.client.DeleteAccount(password)
 }
 
+func (k *kringle) wipeAccount(ctx *cli.Context) error {
+	if err := k.init(ctx, false); err != nil {
+		return err
+	}
+	if err := k.client.Status(); err != nil {
+		return err
+	}
+	k.client.Print("\n*********************************************")
+	k.client.Print("WARNING: You are about to wipe all your data.")
+	k.client.Print("***********************************************\n")
+	if k.client.Account != nil {
+		password, err := k.promptPass("Enter password: ")
+		if err != nil {
+			return err
+		}
+		return k.client.WipeAccount(password)
+	}
+	if reply, err := k.prompt("Type WIPE to confirm: "); err != nil || reply != "WIPE" {
+		return errors.New("not confirmed")
+	}
+	return k.client.WipeAccount("")
+}
+
 func (k *kringle) updates(ctx *cli.Context) error {
 	if err := k.init(ctx, false); err != nil {
 		return err
@@ -811,6 +847,9 @@ func (k *kringle) listFiles(ctx *cli.Context) error {
 	}
 	if ctx.Bool("long") {
 		opt.Long = true
+	}
+	if ctx.Bool("recursive") {
+		opt.Recursive = true
 	}
 	return k.client.ListFiles(patterns, opt)
 }
