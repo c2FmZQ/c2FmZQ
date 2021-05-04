@@ -177,4 +177,24 @@ func TestAlbums(t *testing.T) {
 	if diff := deep.Equal(expBobUpdates, bobUpdates); diff != nil {
 		t.Errorf("Bob's updates have unexpected value: %v", diff)
 	}
+
+	if err := db.DeleteUser(user); err != nil {
+		t.Fatalf("DeleteUser(alice) failed: %v", err)
+	}
+	deleteUpdates, err := db.DeleteUpdates(bobUser, 0)
+	if err != nil {
+		t.Fatalf("db.DeleteUpdates(%q, 0) failed: %v", bobUser.Email, err)
+	}
+	expDeleteUpdates := []stingle.DeleteEvent{
+		stingle.DeleteEvent{
+			File: "", AlbumID: "my-album", Type: "4", Date: "10000",
+		},
+		stingle.DeleteEvent{
+			File: fmt.Sprintf("%d", user.UserID), AlbumID: "", Type: "6", Date: "10000",
+		},
+	}
+	if diff := deep.Equal(expDeleteUpdates, deleteUpdates); diff != nil {
+		t.Errorf("Bob's delete updates have unexpected value: %v", diff)
+
+	}
 }

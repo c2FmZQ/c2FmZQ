@@ -1,6 +1,7 @@
 package database_test
 
 import (
+	"fmt"
 	"github.com/go-test/deep"
 	"testing"
 
@@ -81,5 +82,19 @@ func TestUsers(t *testing.T) {
 	}
 	if want, got := 2, len(cu); want != got {
 		t.Errorf("Unexpected number of contacts: want %d, got %d", want, got)
+	}
+
+	if err := db.DeleteUser(users["bob@"]); err != nil {
+		t.Fatalf("DeleteUser(%q) failed: %v", users["bob@"].Email, err)
+	}
+	du, err := db.DeleteUpdates(alice, 0)
+	if err != nil {
+		t.Fatalf("DeleteUpdates(%q) failed: %v", alice.Email, err)
+	}
+	if want, got := 1, len(du); want != got {
+		t.Fatalf("Unexpected number of deleted contacts: want %d, got %d", want, got)
+	}
+	if want, got := fmt.Sprintf("%d", users["bob@"].UserID), du[0].File; want != got {
+		t.Fatalf("Unexpected deleted contact id: want %s, got %s", want, got)
 	}
 }

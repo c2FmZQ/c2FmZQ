@@ -123,6 +123,20 @@ func (d *Database) DeleteUpdates(user User, ts int64) ([]stingle.DeleteEvent, er
 			})
 		}
 	}
+	var contactList ContactList
+	if err := d.storage.ReadDataFile(d.filePath(user.home(contactListFile)), &contactList); err != nil {
+		return nil, err
+	}
+	for _, d := range contactList.Deletes {
+		if d.Date > ts {
+			out = append(out, stingle.DeleteEvent{
+				File:    d.File,
+				AlbumID: d.AlbumID,
+				Type:    number(int64(d.Type)),
+				Date:    number(d.Date),
+			})
+		}
+	}
 
 	ch := make(chan stingle.DeleteEvent)
 	var wg sync.WaitGroup

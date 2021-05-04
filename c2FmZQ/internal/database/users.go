@@ -86,7 +86,11 @@ func (u User) ServerPublicKeyForExport() string {
 }
 
 func (u User) home(elems ...string) string {
-	e := []string{"home", fmt.Sprintf("%d", u.UserID)}
+	return homeByUserID(u.UserID, elems...)
+}
+
+func homeByUserID(userID int64, elems ...string) string {
+	e := []string{"home", fmt.Sprintf("%d", userID)}
 	e = append(e, elems...)
 	return filepath.Join(e...)
 }
@@ -194,6 +198,77 @@ func (d *Database) TokenKeyForUser(email string) *token.Key {
 	return nil
 }
 
+// DeleteUser deletes a user object and all resources attached to it.
+func (d *Database) DeleteUser(u User) error {
+	defer recordLatency("DeleteUser")()
+
+	var ul []userList
+	commit, err := d.storage.OpenForUpdate(d.filePath(userListFile), &ul)
+	if err != nil {
+		log.Errorf("d.storage.OpenForUpdate: %v", err)
+		return err
+	}
+	for i := range ul {
+		if ul[i].UserID == u.UserID {
+			ul[i] = ul[len(ul)-1]
+			ul = ul[:len(ul)-1]
+			break
+		}
+	}
+	if err := commit(true, nil); err != nil {
+		return err
+	}
+	if err := d.removeAllContacts(u); err != nil {
+		return err
+	}
+
+	albumRefs, err := d.AlbumRefs(u)
+	if err != nil {
+		return err
+	}
+
+	for albumID := range albumRefs {
+		album, err := d.Album(u, albumID)
+		if err != nil {
+			return err
+		}
+		if album.OwnerID == u.UserID {
+			if err := d.DeleteAlbum(u, albumID); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := d.RemoveAlbumMember(u, albumID, u.UserID); err != nil {
+			return err
+		}
+	}
+	commit, filesets, err := d.fileSetsForUpdate(u, []string{stingle.GallerySet, stingle.TrashSet}, []string{"", ""})
+	if err != nil {
+		return err
+	}
+	for _, fs := range filesets {
+		for _, f := range fs.Files {
+			d.incRefCount(f.StoreFile, -1)
+			d.incRefCount(f.StoreThumb, -1)
+		}
+	}
+	if err := commit(true, nil); err != nil {
+		return err
+	}
+	for _, f := range []string{
+		d.filePath(u.home(userFile)),
+		d.fileSetPath(u, stingle.TrashSet),
+		d.fileSetPath(u, stingle.GallerySet),
+		d.filePath(u.home(albumManifest)),
+		d.filePath(u.home(contactListFile)),
+	} {
+		if err := os.Remove(filepath.Join(d.Dir(), f)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // Export converts a Contact to stingle.Contact.
 func (c Contact) Export() stingle.Contact {
 	return stingle.Contact{
@@ -252,6 +327,59 @@ func (d *Database) AddContact(user User, contactEmail string) (*Contact, error) 
 		return nil, err
 	}
 	return d.addContactToUser(user, c)
+}
+
+// removeAllContacts removes all contacts.
+func (d *Database) removeAllContacts(user User) (retErr error) {
+	var contacts ContactList
+	if err := d.storage.ReadDataFile(d.filePath(user.home(contactListFile)), &contacts); err != nil {
+		return err
+	}
+	uids := make(map[int64]struct{})
+	uids[user.UserID] = struct{}{}
+	for uid := range contacts.Contacts {
+		uids[uid] = struct{}{}
+	}
+	for uid := range contacts.In {
+		uids[uid] = struct{}{}
+	}
+	uidSlice := make([]int64, 0, len(uids))
+	fileSlice := make([]string, 0, len(uids))
+	contactListSlice := make([]*ContactList, 0, len(uids))
+	for uid := range uids {
+		uidSlice = append(uidSlice, uid)
+		fileSlice = append(fileSlice, d.filePath(homeByUserID(uid, contactListFile)))
+		contactListSlice = append(contactListSlice, new(ContactList))
+	}
+	commit, err := d.storage.OpenManyForUpdate(fileSlice, contactListSlice)
+	if err != nil {
+		log.Errorf("d.storage.OpenManyForUpdate: %v", err)
+		return err
+	}
+	defer commit(false, &retErr)
+	uc := make(map[int64]*ContactList)
+	for i, uid := range uidSlice {
+		uc[uid] = contactListSlice[i]
+	}
+	for uid, cl := range uc {
+		// Remove user from contact's list.
+		delete(uc[user.UserID].In, uid)
+		delete(cl.Contacts, user.UserID)
+		cl.Deletes = append(cl.Deletes, DeleteEvent{
+			File: fmt.Sprintf("%d", user.UserID),
+			Date: nowInMS(),
+			Type: stingle.DeleteEventContact,
+		})
+		// Remove contact from user's list.
+		delete(uc[uid].In, user.UserID)
+		delete(uc[uid].Contacts, uid)
+		uc[user.UserID].Deletes = append(uc[user.UserID].Deletes, DeleteEvent{
+			File: fmt.Sprintf("%d", uid),
+			Date: nowInMS(),
+			Type: stingle.DeleteEventContact,
+		})
+	}
+	return commit(true, nil)
 }
 
 // lookupContacts returns a Contact for each UserIDs in the list.

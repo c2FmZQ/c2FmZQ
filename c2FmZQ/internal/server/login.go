@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
+
 	"c2FmZQ/internal/database"
 	"c2FmZQ/internal/log"
 	"c2FmZQ/internal/stingle"
@@ -300,11 +301,25 @@ func (s *Server) handleRecoverAccount(req *http.Request) *stingle.Response {
 // Returns:
 //  - stingle.Response(ok)
 func (s *Server) handleDeleteUser(user database.User, req *http.Request) *stingle.Response {
-	if _, err := s.decodeParams(req.PostFormValue("params"), user); err != nil {
+	params, err := s.decodeParams(req.PostFormValue("params"), user)
+	if err != nil {
 		log.Errorf("decodeParams: %v", err)
 		return stingle.ResponseNOK()
 	}
-	return stingle.ResponseNOK().AddError("Account deletion is not implemented")
+	pass := params["password"]
+	hashed, err := base64.StdEncoding.DecodeString(user.HashedPassword)
+	if err != nil {
+		log.Errorf("base64.StdEncoding.DecodeString: %v", err)
+		return stingle.ResponseNOK().AddError("Invalid credentials")
+	}
+	if err != nil || bcrypt.CompareHashAndPassword(hashed, []byte(pass)) != nil {
+		return stingle.ResponseNOK().AddError("Invalid credentials")
+	}
+	if err := s.db.DeleteUser(user); err != nil {
+		log.Errorf("DeleteUser: %v", err)
+		return stingle.ResponseNOK()
+	}
+	return stingle.ResponseOK()
 }
 
 // handleReuploadKeys handles the /v2/keys/reuploadKeys endpoint. It is used

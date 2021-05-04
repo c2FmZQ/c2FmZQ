@@ -31,6 +31,14 @@ func TestLoginLogout(t *testing.T) {
 	if err := c.Logout(); err != nil {
 		t.Fatalf("c.Logout: %v", err)
 	}
+	t.Log("CLIENT Login")
+	if err := c.Login(url, "alice@", "pass"); err != nil {
+		t.Fatalf("Login: %v", err)
+	}
+	t.Log("CLIENT DeleteAccount")
+	if err := c.DeleteAccount("pass"); err != nil {
+		t.Fatalf("c.DeleteAccount: %v", err)
+	}
 }
 
 func TestRecovery(t *testing.T) {
