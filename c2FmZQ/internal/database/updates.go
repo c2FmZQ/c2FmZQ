@@ -110,7 +110,7 @@ func (d *Database) DeleteUpdates(user User, ts int64) ([]stingle.DeleteEvent, er
 	out := []stingle.DeleteEvent{}
 
 	var manifest AlbumManifest
-	if _, err := d.storage.ReadDataFile(d.filePath(user.home(albumManifest)), &manifest); err != nil {
+	if err := d.storage.ReadDataFile(d.filePath(user.home(albumManifest)), &manifest); err != nil {
 		return nil, err
 	}
 	for _, d := range manifest.Deletes {
@@ -176,7 +176,7 @@ func (d *Database) SpaceUsed(user User) (int64, error) {
 	defer recordLatency("SpaceUsed")()
 
 	var manifest AlbumManifest
-	if _, err := d.storage.ReadDataFile(d.filePath(user.home(albumManifest)), &manifest); err != nil {
+	if err := d.storage.ReadDataFile(d.filePath(user.home(albumManifest)), &manifest); err != nil {
 		return 0, err
 	}
 

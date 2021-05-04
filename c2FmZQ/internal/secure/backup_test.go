@@ -30,7 +30,7 @@ func TestBackupRestore(t *testing.T) {
 	}
 
 	var got backup
-	if _, err := s.ReadDataFile(filepath.Join("pending", fmt.Sprintf("%d", bck.TS.UnixNano())), &got); err != nil {
+	if err := s.ReadDataFile(filepath.Join("pending", fmt.Sprintf("%d", bck.TS.UnixNano())), &got); err != nil {
 		t.Fatalf("s.ReadDataFile: %v", err)
 	}
 	if want := files; !reflect.DeepEqual(want, got.Files) {
@@ -48,7 +48,7 @@ func TestBackupRestore(t *testing.T) {
 		files = append(files, file)
 	}
 	bck.restore()
-	if _, err := s.ReadDataFile(filepath.Join("pending", fmt.Sprintf("%d", bck.TS.UnixNano())), &got); !errors.Is(err, os.ErrNotExist) {
+	if err := s.ReadDataFile(filepath.Join("pending", fmt.Sprintf("%d", bck.TS.UnixNano())), &got); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("pending ops file should have been deleted: %v", err)
 	}
 
@@ -86,7 +86,7 @@ func TestBackupDelete(t *testing.T) {
 	}
 
 	var got backup
-	if _, err := s.ReadDataFile(filepath.Join("pending", fmt.Sprintf("%d", bck.TS.UnixNano())), &got); err != nil {
+	if err := s.ReadDataFile(filepath.Join("pending", fmt.Sprintf("%d", bck.TS.UnixNano())), &got); err != nil {
 		t.Fatalf("s.ReadDataFile: %v", err)
 	}
 	if want := files; !reflect.DeepEqual(want, got.Files) {
@@ -101,7 +101,7 @@ func TestBackupDelete(t *testing.T) {
 		files = append(files, file)
 	}
 	bck.delete()
-	if _, err := s.ReadDataFile(filepath.Join("pending", fmt.Sprintf("%d", bck.TS.UnixNano())), &got); !errors.Is(err, os.ErrNotExist) {
+	if err := s.ReadDataFile(filepath.Join("pending", fmt.Sprintf("%d", bck.TS.UnixNano())), &got); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("pending ops file should have been deleted: %v", err)
 	}
 

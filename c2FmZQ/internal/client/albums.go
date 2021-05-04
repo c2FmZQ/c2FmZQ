@@ -109,7 +109,7 @@ func (c *Client) removeAlbum(item ListItem) (retErr error) {
 	}
 	delete(al.Albums, item.Album.AlbumID)
 	var fs FileSet
-	if _, err := c.storage.ReadDataFile(c.fileHash(albumPrefix+item.Album.AlbumID), &fs); err != nil {
+	if err := c.storage.ReadDataFile(c.fileHash(albumPrefix+item.Album.AlbumID), &fs); err != nil {
 		return err
 	}
 	if len(fs.Files) > 0 {

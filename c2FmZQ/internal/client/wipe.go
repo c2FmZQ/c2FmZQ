@@ -24,7 +24,7 @@ func (c *Client) WipeAccount(password string) error {
 		errList = append(errList, errs...)
 	}
 	var al AlbumList
-	if _, err := c.storage.ReadDataFile(c.fileHash(albumList), &al); err != nil {
+	if err := c.storage.ReadDataFile(c.fileHash(albumList), &al); err != nil {
 		return err
 	}
 	for _, album := range al.Albums {
@@ -61,7 +61,7 @@ func (c *Client) WipeAccount(password string) error {
 func (c *Client) wipeFileSet(name string) (errList []error) {
 	fn := c.fileHash(name)
 	var fs FileSet
-	if _, err := c.storage.ReadDataFile(fn, &fs); err != nil {
+	if err := c.storage.ReadDataFile(fn, &fs); err != nil {
 		errList = append(errList, err)
 	}
 	for _, f := range fs.Files {

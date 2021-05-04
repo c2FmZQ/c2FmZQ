@@ -195,7 +195,7 @@ func (d *Database) AlbumRefs(user User) (map[string]*AlbumRef, error) {
 	defer recordLatency("AlbumRefs")()
 
 	var manifest AlbumManifest
-	if _, err := d.storage.ReadDataFile(d.filePath(user.home(albumManifest)), &manifest); err != nil {
+	if err := d.storage.ReadDataFile(d.filePath(user.home(albumManifest)), &manifest); err != nil {
 		return nil, err
 	}
 	if manifest.Albums == nil {
@@ -350,7 +350,7 @@ func (d *Database) UnshareAlbum(owner User, albumID string) (retErr error) {
 // albumRef returns a reference to an album file, i.e. where it is stored.
 func (d *Database) albumRef(user User, albumID string) (*AlbumRef, error) {
 	var manifest AlbumManifest
-	if _, err := d.storage.ReadDataFile(d.filePath(user.home(albumManifest)), &manifest); err != nil {
+	if err := d.storage.ReadDataFile(d.filePath(user.home(albumManifest)), &manifest); err != nil {
 		return nil, err
 	}
 	a := manifest.Albums[albumID]

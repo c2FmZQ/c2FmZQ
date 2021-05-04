@@ -17,7 +17,7 @@ func (s *Storage) createBackup(files []string) (*backup, error) {
 		return nil, err
 	}
 	b.pending = filepath.Join("pending", fmt.Sprintf("%d", b.TS.UnixNano()))
-	if err := s.SaveDataFile(nil, b.pending, b); err != nil {
+	if err := s.SaveDataFile(b.pending, b); err != nil {
 		return nil, err
 	}
 	return b, nil
@@ -34,7 +34,7 @@ func (s *Storage) rollbackPendingOps() error {
 			return err
 		}
 		var b backup
-		if _, err := s.ReadDataFile(rel, &b); err != nil {
+		if err := s.ReadDataFile(rel, &b); err != nil {
 			return err
 		}
 		b.dir = s.dir

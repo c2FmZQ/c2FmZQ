@@ -185,7 +185,7 @@ func (d *Database) FileSet(user User, set, albumID string) (*FileSet, error) {
 		fileName = d.fileSetPath(user, set)
 	}
 	var fileSet FileSet
-	if _, err := d.storage.ReadDataFile(fileName, &fileSet); err != nil {
+	if err := d.storage.ReadDataFile(fileName, &fileSet); err != nil {
 		return nil, err
 	}
 	if fileSet.Files == nil {

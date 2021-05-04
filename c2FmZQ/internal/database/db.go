@@ -182,22 +182,22 @@ func (d Database) DumpFile(filename string) error {
 		return enc.Encode(obj)
 	}
 
-	if _, err := d.storage.ReadDataFile(filename, &user); err == nil && user.UserID != 0 {
+	if err := d.storage.ReadDataFile(filename, &user); err == nil && user.UserID != 0 {
 		return out(user)
 	}
-	if _, err := d.storage.ReadDataFile(filename, &blob); err == nil && blob.RefCount > 0 {
+	if err := d.storage.ReadDataFile(filename, &blob); err == nil && blob.RefCount > 0 {
 		return out(blob)
 	}
-	if _, err := d.storage.ReadDataFile(filename, &userList); err == nil && userList != nil {
+	if err := d.storage.ReadDataFile(filename, &userList); err == nil && userList != nil {
 		return out(userList)
 	}
-	if _, err := d.storage.ReadDataFile(filename, &albumManifest); err == nil && albumManifest.Albums != nil {
+	if err := d.storage.ReadDataFile(filename, &albumManifest); err == nil && albumManifest.Albums != nil {
 		return out(albumManifest)
 	}
-	if _, err := d.storage.ReadDataFile(filename, &contactList); err == nil && contactList.Contacts != nil {
+	if err := d.storage.ReadDataFile(filename, &contactList); err == nil && contactList.Contacts != nil {
 		return out(contactList)
 	}
-	if _, err := d.storage.ReadDataFile(filename, &fileSet); err == nil && fileSet.Files != nil {
+	if err := d.storage.ReadDataFile(filename, &fileSet); err == nil && fileSet.Files != nil {
 		return out(fileSet)
 	} else {
 		return err
@@ -207,7 +207,7 @@ func (d Database) DumpFile(filename string) error {
 // DumpUsers shows information about all the users to stdout.
 func (d Database) DumpUsers() {
 	var ul []userList
-	if _, err := d.storage.ReadDataFile(d.filePath(userListFile), &ul); err != nil {
+	if err := d.storage.ReadDataFile(d.filePath(userListFile), &ul); err != nil {
 		log.Errorf("ReadDataFile: %v", err)
 	}
 	for _, u := range ul {

@@ -127,7 +127,7 @@ func (d *Database) AddUser(u User) (retErr error) {
 	u.HomeFolder = hex.EncodeToString(d.Hash([]byte(u.Email)))
 	u.ServerKey = stingle.MakeSecretKey()
 	u.TokenKey = token.MakeKey()
-	if err := d.storage.SaveDataFile(nil, d.filePath(u.home(userFile)), u); err != nil {
+	if err := d.storage.SaveDataFile(d.filePath(u.home(userFile)), u); err != nil {
 		return err
 	}
 
@@ -164,7 +164,7 @@ func (d *Database) UserByID(id int64) (User, error) {
 	defer recordLatency("UserByID")()
 
 	var u User
-	_, err := d.storage.ReadDataFile(d.filePath("home", fmt.Sprintf("%d", id), userFile), &u)
+	err := d.storage.ReadDataFile(d.filePath("home", fmt.Sprintf("%d", id), userFile), &u)
 	return u, err
 }
 
@@ -173,7 +173,7 @@ func (d *Database) User(email string) (User, error) {
 	defer recordLatency("User")()
 
 	var ul []userList
-	if _, err := d.storage.ReadDataFile(d.filePath(userListFile), &ul); err != nil {
+	if err := d.storage.ReadDataFile(d.filePath(userListFile), &ul); err != nil {
 		return User{}, err
 	}
 	for _, u := range ul {
@@ -257,7 +257,7 @@ func (d *Database) AddContact(user User, contactEmail string) (*Contact, error) 
 // lookupContacts returns a Contact for each UserIDs in the list.
 func (d *Database) lookupContacts(uids map[int64]bool) []Contact {
 	var ul []userList
-	if _, err := d.storage.ReadDataFile(d.filePath(userListFile), &ul); err != nil {
+	if err := d.storage.ReadDataFile(d.filePath(userListFile), &ul); err != nil {
 		return nil
 	}
 	var out []Contact
@@ -326,7 +326,7 @@ func (d *Database) ContactUpdates(user User, ts int64) ([]stingle.Contact, error
 	defer recordLatency("ContactUpdates")()
 
 	var contactList ContactList
-	if _, err := d.storage.ReadDataFile(d.filePath(user.home(contactListFile)), &contactList); err != nil {
+	if err := d.storage.ReadDataFile(d.filePath(user.home(contactListFile)), &contactList); err != nil {
 		return nil, err
 	}
 	if contactList.Contacts == nil {

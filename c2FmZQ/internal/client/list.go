@@ -98,7 +98,7 @@ func (c *Client) glob(pattern string, opt GlobOptions) ([]ListItem, error) {
 		{".trash", trashFile, stingle.TrashSet, c.SecretKey(), nil, false},
 	}
 	var al AlbumList
-	if _, err := c.storage.ReadDataFile(c.fileHash(albumList), &al); err != nil {
+	if err := c.storage.ReadDataFile(c.fileHash(albumList), &al); err != nil {
 		return nil, fmt.Errorf("albumList: %w", err)
 	}
 	for _, album := range al.Albums {
@@ -123,7 +123,7 @@ func (c *Client) glob(pattern string, opt GlobOptions) ([]ListItem, error) {
 			continue
 		}
 		var fs FileSet
-		if _, err := c.storage.ReadDataFile(c.fileHash(d.fileSet), &fs); err != nil {
+		if err := c.storage.ReadDataFile(c.fileHash(d.fileSet), &fs); err != nil {
 			return nil, err
 		}
 		// Only show directories.
@@ -192,7 +192,7 @@ func (c *Client) ListFiles(patterns []string, opt GlobOptions) error {
 		}
 	}
 	var cl ContactList
-	if _, err := c.storage.ReadDataFile(c.fileHash(contactsFile), &cl); err != nil {
+	if err := c.storage.ReadDataFile(c.fileHash(contactsFile), &cl); err != nil {
 		return err
 	}
 

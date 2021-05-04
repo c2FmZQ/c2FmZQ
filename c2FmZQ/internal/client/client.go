@@ -57,7 +57,7 @@ func Create(s *secure.Storage) (*Client, error) {
 func Load(s *secure.Storage) (*Client, error) {
 	var c Client
 	c.storage = s
-	if _, err := s.ReadDataFile(c.cfgFile(), &c); err != nil {
+	if err := s.ReadDataFile(c.cfgFile(), &c); err != nil {
 		return nil, err
 	}
 	c.hc = &http.Client{}
@@ -94,7 +94,7 @@ type AccountInfo struct {
 
 // Save saves the current client configuration.
 func (c *Client) Save() error {
-	return c.storage.SaveDataFile(nil, c.cfgFile(), c)
+	return c.storage.SaveDataFile(c.cfgFile(), c)
 }
 
 func (c *Client) cfgFile() string {

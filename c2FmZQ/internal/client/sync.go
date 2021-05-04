@@ -74,7 +74,7 @@ func (c *Client) Sync(dryrun bool) error {
 
 func (c *Client) applyDiffs(d *albumDiffs, dryrun bool) error {
 	var al AlbumList
-	if _, err := c.storage.ReadDataFile(c.fileHash(albumList), &al); err != nil {
+	if err := c.storage.ReadDataFile(c.fileHash(albumList), &al); err != nil {
 		return err
 	}
 	if len(d.AlbumsToAdd) > 0 {
@@ -326,7 +326,7 @@ func (c *Client) diff() (*albumDiffs, error) {
 
 	// Diff album metadata.
 	var al AlbumList
-	if _, err := c.storage.ReadDataFile(c.fileHash(albumList), &al); err != nil {
+	if err := c.storage.ReadDataFile(c.fileHash(albumList), &al); err != nil {
 		return nil, err
 	}
 	for albumID, album := range al.Albums {
@@ -376,7 +376,7 @@ func (c *Client) diff() (*albumDiffs, error) {
 
 	for _, d := range dirs {
 		var fs FileSet
-		if _, err := c.storage.ReadDataFile(c.fileHash(d.fileSet), &fs); err != nil {
+		if err := c.storage.ReadDataFile(c.fileHash(d.fileSet), &fs); err != nil {
 			return nil, err
 		}
 		for fn, f := range fs.Files {

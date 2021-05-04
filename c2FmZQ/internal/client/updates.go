@@ -249,7 +249,7 @@ func (c *Client) processDeleteFiles(name string, deletes []stingle.DeleteEvent) 
 
 func (c *Client) albumHasLocalFileChanges(albumID string) (bool, error) {
 	var fs FileSet
-	if _, err := c.storage.ReadDataFile(c.fileHash(albumPrefix+albumID), &fs); err != nil {
+	if err := c.storage.ReadDataFile(c.fileHash(albumPrefix+albumID), &fs); err != nil {
 		return false, err
 	}
 	for f := range fs.Files {
@@ -381,14 +381,14 @@ func (c *Client) processDeleteUpdates(updates []stingle.DeleteEvent) (retErr err
 
 func (c *Client) getTimestamps(name string) (ts UpdateTimestamps, err error) {
 	foo := struct{ UpdateTimestamps }{}
-	_, err = c.storage.ReadDataFile(c.fileHash(name), &foo)
+	err = c.storage.ReadDataFile(c.fileHash(name), &foo)
 	ts = foo.UpdateTimestamps
 	return
 }
 
 func (c *Client) getAlbumTimestamps() (ts UpdateTimestamps, err error) {
 	var al AlbumList
-	_, err = c.storage.ReadDataFile(c.fileHash(albumList), &al)
+	err = c.storage.ReadDataFile(c.fileHash(albumList), &al)
 	for album := range al.Albums {
 		t, err := c.getTimestamps(albumPrefix + album)
 		if err != nil {

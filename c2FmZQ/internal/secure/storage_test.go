@@ -54,7 +54,7 @@ func TestOpenForUpdate(t *testing.T) {
 		Foo string `json:"foo"`
 	}
 	foo := Foo{"foo"}
-	if err := s.SaveDataFile(nil, fn, foo); err != nil {
+	if err := s.SaveDataFile(fn, foo); err != nil {
 		t.Fatalf("s.SaveDataFile failed: %v", err)
 	}
 	var bar Foo
@@ -73,7 +73,7 @@ func TestOpenForUpdate(t *testing.T) {
 		t.Errorf("unexpected error. Want %v, got %v", ErrAlreadyCommitted, err)
 	}
 
-	if _, err := s.ReadDataFile(fn, &foo); err != nil {
+	if err := s.ReadDataFile(fn, &foo); err != nil {
 		t.Fatalf("s.ReadDataFile() failed: %v", err)
 	}
 	if !reflect.DeepEqual(foo, bar) {
@@ -90,7 +90,7 @@ func TestRollback(t *testing.T) {
 		Foo string `json:"foo"`
 	}
 	foo := Foo{"foo"}
-	if err := s.SaveDataFile(nil, fn, foo); err != nil {
+	if err := s.SaveDataFile(fn, foo); err != nil {
 		t.Fatalf("s.SaveDataFile failed: %v", err)
 	}
 	var bar Foo
@@ -110,7 +110,7 @@ func TestRollback(t *testing.T) {
 	}
 
 	var foo2 Foo
-	if _, err := s.ReadDataFile(fn, &foo2); err != nil {
+	if err := s.ReadDataFile(fn, &foo2); err != nil {
 		t.Fatalf("s.ReadDataFile() failed: %v", err)
 	}
 	if !reflect.DeepEqual(foo, foo2) {
@@ -156,11 +156,11 @@ func TestEncodeByteSlice(t *testing.T) {
 	if err := s.CreateEmptyFile("file", (*[]byte)(nil)); err != nil {
 		t.Fatalf("s.CreateEmptyFile failed: %v", err)
 	}
-	if err := s.SaveDataFile(nil, "file", &want); err != nil {
+	if err := s.SaveDataFile("file", &want); err != nil {
 		t.Fatalf("s.WriteDataFile() failed: %v", err)
 	}
 	var got []byte
-	if _, err := s.ReadDataFile("file", &got); err != nil {
+	if err := s.ReadDataFile("file", &got); err != nil {
 		t.Fatalf("s.ReadDataFile() failed: %v", err)
 	}
 	if !reflect.DeepEqual(want, got) {
@@ -175,11 +175,11 @@ func TestEncodeBinary(t *testing.T) {
 	if err := s.CreateEmptyFile("file", &time.Time{}); err != nil {
 		t.Fatalf("s.CreateEmptyFile failed: %v", err)
 	}
-	if err := s.SaveDataFile(nil, "file", &want); err != nil {
+	if err := s.SaveDataFile("file", &want); err != nil {
 		t.Fatalf("s.WriteDataFile() failed: %v", err)
 	}
 	var got time.Time
-	if _, err := s.ReadDataFile("file", &got); err != nil {
+	if err := s.ReadDataFile("file", &got); err != nil {
 		t.Fatalf("s.ReadDataFile() failed: %v", err)
 	}
 	if got.UnixNano() != want.UnixNano() {
@@ -209,7 +209,7 @@ func RunBenchmarkOpenForUpdate(b *testing.B, kb int, k *crypto.EncryptionKey, co
 		}
 		obj.M[string(key)] = string(value)
 	}
-	if err := s.writeFile(nil, "testfile", &obj); err != nil {
+	if err := s.writeFile("testfile", &obj); err != nil {
 		b.Fatalf("s.writeFile: %v", err)
 	}
 	fi, err := os.Stat(file)

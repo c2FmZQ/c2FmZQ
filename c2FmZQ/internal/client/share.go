@@ -31,7 +31,7 @@ func (c *Client) Share(pattern string, shareWith []string, permissions []string)
 		}
 	}
 	var cl ContactList
-	if _, err := c.storage.ReadDataFile(c.fileHash(contactsFile), &cl); err != nil {
+	if err := c.storage.ReadDataFile(c.fileHash(contactsFile), &cl); err != nil {
 		return err
 	}
 	var members []*stingle.Contact
@@ -178,7 +178,7 @@ func (c *Client) RemoveMembers(pattern string, toRemove []string) error {
 		}
 	}
 	var cl ContactList
-	if _, err := c.storage.ReadDataFile(c.fileHash(contactsFile), &cl); err != nil {
+	if err := c.storage.ReadDataFile(c.fileHash(contactsFile), &cl); err != nil {
 		return err
 	}
 	var ids []string
@@ -260,7 +260,7 @@ func (c *Client) ChangePermissions(patterns, perms []string) (retErr error) {
 // Contacts displays the contacts matching the patterns.
 func (c *Client) Contacts(patterns []string) error {
 	var cl ContactList
-	if _, err := c.storage.ReadDataFile(c.fileHash(contactsFile), &cl); err != nil {
+	if err := c.storage.ReadDataFile(c.fileHash(contactsFile), &cl); err != nil {
 		return err
 	}
 	var out []string
