@@ -157,6 +157,9 @@ func (c *Client) Copy(patterns []string, dest string) error {
 		if item.Set == stingle.TrashSet {
 			return fmt.Errorf("cannot copy from trash, only move: %s", item.Filename)
 		}
+		if item.Album != nil && item.Album.IsOwner != "1" && !stingle.Permissions(item.Album.Permissions).AllowCopy() {
+			return fmt.Errorf("copying is not allowed: %s", item.Filename)
+		}
 	}
 	groups := make(map[string][]ListItem)
 	for _, item := range si {
@@ -226,6 +229,9 @@ func (c *Client) Move(patterns []string, dest string) error {
 	for _, item := range si {
 		if item.IsDir {
 			return fmt.Errorf("cannot move a directory to another directory: %s", item.Filename)
+		}
+		if item.Album != nil && item.Album.IsOwner != "1" {
+			return fmt.Errorf("moving is not allowed: %s", item.Filename)
 		}
 	}
 	groups := make(map[string][]ListItem)

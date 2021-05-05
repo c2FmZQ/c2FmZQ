@@ -697,3 +697,72 @@ func TestSharing(t *testing.T) {
 		t.Fatalf("Unexpected file list. Diff: %v", diff)
 	}
 }
+
+func TestCopyPermission(t *testing.T) {
+	_, url, done := startServer(t)
+	defer done()
+
+	c := make(map[string]*client.Client)
+	for _, n := range []string{"alice", "bob"} {
+		t.Logf("%s Login", n)
+		var err error
+		if c[n], err = newClient(t.TempDir()); err != nil {
+			t.Fatalf("newClient: %v", err)
+		}
+		if err := c[n].CreateAccount(url, n+"@", n+"-pass", true); err != nil {
+			t.Fatalf("CreateAccount(%s): %v", n, err)
+		}
+	}
+
+	t.Log("alice AddAlbum alpha beta")
+	if err := c["alice"].AddAlbums([]string{"alpha", "beta"}); err != nil {
+		t.Fatalf("alice.AddAlbums: %v", err)
+	}
+	testdir := t.TempDir()
+	if err := makeImages(testdir, 0, 1); err != nil {
+		t.Fatalf("makeImages: %v", err)
+	}
+
+	t.Log("alice Import -> alpha")
+	if _, err := c["alice"].ImportFiles([]string{filepath.Join(testdir, "*")}, "alpha"); err != nil {
+		t.Errorf("alice.ImportFiles: %v", err)
+	}
+	t.Log("alice Copy alpha/* -> beta")
+	if err := c["alice"].Copy([]string{"alpha/*"}, "beta"); err != nil {
+		t.Fatalf("alice.Copy: %v", err)
+	}
+	t.Log("alice Sync")
+	if err := c["alice"].Sync(false); err != nil {
+		t.Fatalf("alice.Sync: %v", err)
+	}
+	c["alice"].SetPrompt(func(string) (string, error) { return "YES", nil })
+	t.Log("alice Share alpha")
+	if err := c["alice"].Share("alpha", []string{"bob@"}, []string{"+copy"}); err != nil {
+		t.Fatalf("alice.Share: %v", err)
+	}
+	t.Log("alice Share beta")
+	if err := c["alice"].Share("beta", []string{"bob@"}, nil); err != nil {
+		t.Fatalf("alice.Share: %v", err)
+	}
+
+	for n, client := range c {
+		t.Logf("%s GetUpdates", n)
+		if err := client.GetUpdates(false); err != nil {
+			t.Fatalf("%s.GetUpdates: %v", n, err)
+		}
+	}
+	t.Log("bob Copy beta/* -> gallery   Should fail")
+	if err := c["bob"].Copy([]string{"beta/*"}, "gallery"); err == nil {
+		t.Fatal("bob.Copy succeeded unexpectedly")
+	} else {
+		t.Logf("Copy error: %v", err)
+	}
+	t.Log("bob Copy alpha/* -> gallery")
+	if err := c["bob"].Copy([]string{"alpha/*"}, "gallery"); err != nil {
+		t.Fatalf("bob.Copy: %v", err)
+	}
+	t.Log("bob Sync")
+	if err := c["bob"].Sync(false); err != nil {
+		t.Fatalf("bob.Sync: %v", err)
+	}
+}

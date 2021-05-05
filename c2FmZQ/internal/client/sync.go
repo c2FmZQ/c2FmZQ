@@ -347,7 +347,6 @@ func (c *Client) diff() (*albumDiffs, error) {
 			diffs.AlbumsToRemove = append(diffs.AlbumsToRemove, album)
 		}
 	}
-	// TODO: Add sharing diffs.
 
 	// Diff files.
 	//
@@ -438,14 +437,32 @@ func (c *Client) diff() (*albumDiffs, error) {
 	for fn, changes := range fileChanges {
 		var loc []setAlbum
 		for l, f := range remoteFileLocations[fn] {
+			if a := al.RemoteAlbums[l.albumID]; a != nil && a.IsOwner != "1" && !stingle.Permissions(a.Permissions).AllowCopy() {
+				continue
+			}
 			l.file = f
 			loc = append(loc, l)
 		}
+		// Sort suchs that the order is:
+		//  - gallery
+		//  - albums ordered by albumID
+		//  - trash
 		sort.Slice(loc, func(i, j int) bool {
-			if loc[i].set == loc[j].set {
+			var v [2]int
+			for x, set := range []string{loc[i].set, loc[j].set} {
+				switch set {
+				case stingle.GallerySet:
+					v[x] = 0
+				case stingle.AlbumSet:
+					v[x] = 1
+				case stingle.TrashSet:
+					v[x] = 2
+				}
+			}
+			if v[0] == v[1] {
 				return loc[i].albumID < loc[j].albumID
 			}
-			return loc[i].set < loc[i].albumID
+			return v[0] < v[1]
 		})
 		for _, add := range changes.add {
 			if loc == nil {
