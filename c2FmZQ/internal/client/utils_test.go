@@ -74,21 +74,19 @@ func makeImages(dir string, start, n int) error {
 
 func globAll(c *client.Client) ([]string, error) {
 	var out []string
-	for _, p := range []string{"*", "*/*"} {
-		li, err := c.GlobFiles([]string{p}, client.MatchAll)
-		if err != nil {
-			return nil, err
-		}
-		var list []string
-		for _, item := range li {
-			line := item.Filename
-			if item.LocalOnly {
-				line += " LOCAL"
-			}
-			list = append(list, line)
-		}
-		sort.Strings(list)
-		out = append(out, list...)
+	li, err := c.GlobFiles([]string{"*"}, client.GlobOptions{MatchDot: true, Recursive: true})
+	if err != nil {
+		return nil, err
 	}
+	var list []string
+	for _, item := range li {
+		line := item.Filename
+		if item.LocalOnly {
+			line += " LOCAL"
+		}
+		list = append(list, line)
+	}
+	sort.Strings(list)
+	out = append(out, list...)
 	return out, nil
 }

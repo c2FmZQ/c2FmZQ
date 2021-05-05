@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -12,7 +13,7 @@ import (
 )
 
 func (c *Client) AddAlbums(names []string) error {
-	li, err := c.GlobFiles(names, GlobOptions{})
+	li, err := c.GlobFiles(names, GlobOptions{Quiet: true})
 	if err != nil {
 		return err
 	}
@@ -21,20 +22,17 @@ func (c *Client) AddAlbums(names []string) error {
 	}
 	for _, n := range names {
 		n := strings.TrimSuffix(n, "/")
-		if strings.Contains(n, "/") {
-			return fmt.Errorf("album name may not contain a slash: %q", n)
-		}
-		if err := c.addAlbum(n); err != nil {
+		if _, err := c.addAlbum(n); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (c *Client) addAlbum(name string) error {
+func (c *Client) addAlbum(name string) (*stingle.Album, error) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
-		return err
+		return nil, err
 	}
 	albumID := base64.RawURLEncoding.EncodeToString(b)
 	ask := stingle.MakeSecretKey()
@@ -58,7 +56,7 @@ func (c *Client) addAlbum(name string) error {
 	var al AlbumList
 	commit, err := c.storage.OpenForUpdate(c.fileHash(albumList), &al)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if al.Albums == nil {
 		al.Albums = make(map[string]*stingle.Album)
@@ -68,13 +66,13 @@ func (c *Client) addAlbum(name string) error {
 	}
 	al.Albums[albumID] = &album
 	if err := c.storage.CreateEmptyFile(c.fileHash(albumPrefix+albumID), &FileSet{}); err != nil {
-		return err
+		return nil, err
 	}
 	if err := commit(true, nil); err != nil {
-		return err
+		return nil, err
 	}
 	c.Printf("Created %s (not synced)\n", name)
-	return nil
+	return &album, nil
 }
 
 // RemoveAlbums deletes albums.
@@ -97,6 +95,9 @@ func (c *Client) RemoveAlbums(patterns []string) error {
 }
 
 func (c *Client) removeAlbum(item ListItem) (retErr error) {
+	if !item.IsDir || item.Album == nil {
+		return fmt.Errorf("cannot remove: %s", item.Filename)
+	}
 	c.Printf("Removing %s (not synced)\n", item.Filename)
 	var al AlbumList
 	commit, err := c.storage.OpenForUpdate(c.fileHash(albumList), &al)
@@ -104,9 +105,6 @@ func (c *Client) removeAlbum(item ListItem) (retErr error) {
 		return err
 	}
 	defer commit(false, &retErr)
-	if item.Album == nil {
-		return fmt.Errorf("not an album: %s", item.Filename)
-	}
 	delete(al.Albums, item.Album.AlbumID)
 	var fs FileSet
 	if err := c.storage.ReadDataFile(c.fileHash(albumPrefix+item.Album.AlbumID), &fs); err != nil {
@@ -126,29 +124,12 @@ func (c *Client) removeAlbum(item ListItem) (retErr error) {
 // Copy copies files to an existing album.
 func (c *Client) Copy(patterns []string, dest string) error {
 	dest = strings.TrimSuffix(dest, "/")
-	di, err := c.glob(dest, GlobOptions{})
-	if err != nil {
-		return err
-	}
 	si, err := c.GlobFiles(patterns, GlobOptions{})
 	if err != nil {
 		return err
 	}
 	if len(si) == 0 {
 		return fmt.Errorf("no match for: %s", strings.Join(patterns, " "))
-	}
-	if len(di) == 0 {
-		return fmt.Errorf("no match for: %s", dest)
-	}
-	if len(di) != 1 || !di[0].IsDir {
-		return fmt.Errorf("destination must be a directory: %s", dest)
-	}
-	dst := di[0]
-	if dst.Album != nil && dst.Album.IsOwner != "1" && !stingle.Permissions(dst.Album.Permissions).AllowAdd() {
-		return fmt.Errorf("adding is not allowed: %s", dest)
-	}
-	if dst.Set == stingle.TrashSet {
-		return fmt.Errorf("cannot copy to trash, only move: %s", dst.Filename)
 	}
 	for _, item := range si {
 		if item.IsDir {
@@ -160,6 +141,34 @@ func (c *Client) Copy(patterns []string, dest string) error {
 		if item.Album != nil && item.Album.IsOwner != "1" && !stingle.Permissions(item.Album.Permissions).AllowCopy() {
 			return fmt.Errorf("copying is not allowed: %s", item.Filename)
 		}
+	}
+
+	di, err := c.glob(dest, GlobOptions{})
+	if err != nil {
+		return err
+	}
+	if len(di) == 0 {
+		return fmt.Errorf("no match for: %s", dest)
+	}
+	if len(di) != 1 || !di[0].IsDir {
+		return fmt.Errorf("destination must be a directory: %s", dest)
+	}
+	dst := di[0]
+	if dst.Set == "" {
+		album, err := c.addAlbum(strings.TrimSuffix(dst.Filename, "/"))
+		if err != nil {
+			return err
+		}
+		dst.Set = stingle.AlbumSet
+		dst.Album = album
+		dst.FileSet = albumPrefix + album.AlbumID
+	}
+
+	if dst.Album != nil && dst.Album.IsOwner != "1" && !stingle.Permissions(dst.Album.Permissions).AllowAdd() {
+		return fmt.Errorf("adding is not allowed: %s", dest)
+	}
+	if dst.Set == stingle.TrashSet {
+		return fmt.Errorf("cannot copy to trash, only move: %s", dst.Filename)
 	}
 	groups := make(map[string][]ListItem)
 	for _, item := range si {
@@ -197,16 +206,12 @@ func (c *Client) RenameAlbum(patterns []string, dest string) error {
 	if len(di) != 0 {
 		return fmt.Errorf("destination already exists: %s", di[0].Filename)
 	}
-	return c.renameAlbum(si[0], dest)
+	return c.renameDir(si[0], dest, true)
 }
 
 // Move moves files to an existing album, or renames an album.
 func (c *Client) Move(patterns []string, dest string) error {
 	dest = strings.TrimSuffix(dest, "/")
-	di, err := c.glob(dest, GlobOptions{})
-	if err != nil {
-		return err
-	}
 	si, err := c.GlobFiles(patterns, GlobOptions{})
 	if err != nil {
 		return err
@@ -214,28 +219,55 @@ func (c *Client) Move(patterns []string, dest string) error {
 	if len(si) == 0 {
 		return fmt.Errorf("no match for: %s", strings.Join(patterns, " "))
 	}
-	// Rename an album.
-	if len(si) == 1 && si[0].IsDir && len(di) == 0 {
-		return c.renameAlbum(si[0], dest)
-	}
-	// Move files to a different album.
-	if len(di) != 1 || !di[0].IsDir {
-		return fmt.Errorf("destination must be a directory: %s", dest)
-	}
-	dst := di[0]
-	if dst.Album != nil && dst.Album.IsOwner != "1" && !stingle.Permissions(dst.Album.Permissions).AllowAdd() {
-		return fmt.Errorf("adding is not allowed: %s", dest)
-	}
 	for _, item := range si {
-		if item.IsDir {
-			return fmt.Errorf("cannot move a directory to another directory: %s", item.Filename)
-		}
 		if item.Album != nil && item.Album.IsOwner != "1" {
 			return fmt.Errorf("moving is not allowed: %s", item.Filename)
 		}
 	}
+
+	di, err := c.glob(dest, GlobOptions{})
+	if err != nil {
+		return err
+	}
+	// Rename an album.
+	if len(si) == 1 && si[0].IsDir && len(di) == 0 {
+		return c.renameDir(si[0], dest, true)
+	}
+	// Move to a different directory.
+	if len(di) != 1 || !di[0].IsDir {
+		return fmt.Errorf("destination must be a directory: %s", dest)
+	}
+	dst := di[0]
+	if dst.Set == "" {
+		album, err := c.addAlbum(strings.TrimSuffix(dst.Filename, "/"))
+		if err != nil {
+			return err
+		}
+		dst.Set = stingle.AlbumSet
+		dst.Album = album
+		dst.FileSet = albumPrefix + album.AlbumID
+	}
+
+	if dst.Album != nil && dst.Album.IsOwner != "1" && !stingle.Permissions(dst.Album.Permissions).AllowAdd() {
+		return fmt.Errorf("adding is not allowed: %s", dest)
+	}
 	groups := make(map[string][]ListItem)
 	for _, item := range si {
+		if item.IsDir {
+			_, n := path.Split(item.Filename)
+			newName := path.Join(dst.Filename, n)
+			di, err := c.glob(newName, GlobOptions{ExactMatch: true})
+			if err != nil {
+				return err
+			}
+			if len(di) > 0 {
+				return fmt.Errorf("already exists: %v", newName)
+			}
+			if err := c.renameDir(item, newName, true); err != nil {
+				return err
+			}
+			continue
+		}
 		key := item.Set + "/"
 		if item.Album != nil {
 			key += item.Album.AlbumID
@@ -291,38 +323,58 @@ func (c *Client) Delete(patterns []string) error {
 	return nil
 }
 
-func (c *Client) renameAlbum(li ListItem, name string) (retErr error) {
-	var albumID string
-	if li.Album != nil {
-		albumID = li.Album.AlbumID
-	}
+func (c *Client) renameDir(item ListItem, name string, recursive bool) (retErr error) {
 	name = strings.TrimSuffix(name, "/")
-	if albumID == "" {
-		return fmt.Errorf("cannot rename gallery or trash")
-	}
-	if name == "" || strings.Contains(name, "/") {
+	if name == "" {
 		return fmt.Errorf("illegal name: %q", name)
 	}
-	if li.Album != nil && li.Album.IsOwner != "1" {
-		return fmt.Errorf("only the album owner can rename it: %s", li.Filename)
+	if item.Album != nil {
+		if item.Album.IsOwner != "1" {
+			return fmt.Errorf("only the album owner can rename it: %s", item.Filename)
+		}
+		pk, err := item.Album.PK()
+		if err != nil {
+			return err
+		}
+
+		c.Printf("Renaming %s -> %s (not synced)\n", strings.TrimSuffix(item.Filename, "/"), name)
+
+		var al AlbumList
+		commit, err := c.storage.OpenForUpdate(c.fileHash(albumList), &al)
+		if err != nil {
+			return err
+		}
+		md := stingle.EncryptAlbumMetadata(stingle.AlbumMetadata{Name: name}, pk)
+		al.Albums[item.Album.AlbumID].Metadata = md
+		al.Albums[item.Album.AlbumID].DateModified = nowJSON()
+		if err := commit(true, nil); err != nil {
+			return err
+		}
 	}
-	pk, err := li.Album.PK()
+	if !recursive {
+		return nil
+	}
+
+	oldPrefix := item.Filename + "/"
+	newPrefix := name + "/"
+	li, err := c.glob(oldPrefix+"*", GlobOptions{MatchDot: true, Recursive: true})
 	if err != nil {
 		return err
 	}
-
-	c.Printf("Renaming %s -> %s (not synced)\n", strings.TrimSuffix(li.Filename, "/"), name)
-
-	var al AlbumList
-	commit, err := c.storage.OpenForUpdate(c.fileHash(albumList), &al)
-	if err != nil {
-		return err
+	var errList []error
+	for _, item := range li {
+		if !item.IsDir || item.Album == nil {
+			continue
+		}
+		newName := newPrefix + item.Filename[len(oldPrefix):]
+		if err := c.renameDir(item, newName, false); err != nil {
+			errList = append(errList, err)
+		}
 	}
-	defer commit(false, &retErr)
-	md := stingle.EncryptAlbumMetadata(stingle.AlbumMetadata{Name: name}, pk)
-	al.Albums[albumID].Metadata = md
-	al.Albums[albumID].DateModified = nowJSON()
-	return commit(true, nil)
+	if errList != nil {
+		return fmt.Errorf("%w [%v]", errList[0], errList[1:])
+	}
+	return nil
 }
 
 func (c *Client) moveFiles(fromItems []ListItem, toItem ListItem, moving bool) (retErr error) {

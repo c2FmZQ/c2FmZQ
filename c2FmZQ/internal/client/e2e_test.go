@@ -199,13 +199,13 @@ func TestCopyMoveDelete(t *testing.T) {
 	want := []string{
 		".trash",
 		"alpha LOCAL",
-		"beta LOCAL",
-		"charlie LOCAL",
-		"gallery",
 		"alpha/image000.jpg LOCAL",
 		"alpha/image001.jpg LOCAL",
+		"beta LOCAL",
 		"beta/image002.jpg LOCAL",
 		"beta/image003.jpg LOCAL",
+		"charlie LOCAL",
+		"gallery",
 		"gallery/image000.jpg LOCAL",
 		"gallery/image001.jpg LOCAL",
 		"gallery/image004.jpg LOCAL",
@@ -225,15 +225,15 @@ func TestCopyMoveDelete(t *testing.T) {
 
 	want = []string{
 		".trash",
-		"alpha LOCAL",
-		"beta LOCAL",
-		"charlie LOCAL",
-		"gallery",
 		".trash/image000.jpg LOCAL",
 		".trash/image004.jpg LOCAL",
+		"alpha LOCAL",
 		"alpha/image001.jpg LOCAL",
+		"beta LOCAL",
 		"beta/image002.jpg LOCAL",
 		"beta/image003.jpg LOCAL",
+		"charlie LOCAL",
+		"gallery",
 		"gallery/image000.jpg LOCAL",
 		"gallery/image001.jpg LOCAL",
 	}
@@ -252,12 +252,12 @@ func TestCopyMoveDelete(t *testing.T) {
 	want = []string{
 		".trash",
 		"alpha LOCAL",
-		"beta LOCAL",
-		"charlie LOCAL",
-		"gallery",
 		"alpha/image001.jpg LOCAL",
+		"beta LOCAL",
 		"beta/image002.jpg LOCAL",
 		"beta/image003.jpg LOCAL",
+		"charlie LOCAL",
+		"gallery",
 		"gallery/image000.jpg LOCAL",
 		"gallery/image001.jpg LOCAL",
 	}
@@ -287,15 +287,73 @@ func TestCopyMoveDelete(t *testing.T) {
 	want = []string{
 		".trash",
 		"alpha",
-		"beta",
-		"gallery",
 		"alpha/image001.jpg",
+		"beta",
 		"beta/image002.jpg",
 		"beta/image003.jpg",
+		"gallery",
 		"gallery/image000.jpg",
 		"gallery/image001.jpg",
 	}
 	if got, err = globAll(c); err != nil {
+		t.Fatalf("globAll: %v", err)
+	}
+	if diff := deep.Equal(want, got); diff != nil {
+		t.Fatalf("Unexpected file list. Diff: %v", diff)
+	}
+}
+
+func TestNestedDirectories(t *testing.T) {
+	c, url, done := startServer(t)
+	defer done()
+	t.Log("CreateAccount")
+	if err := c.CreateAccount(url, "alice@", "pass", true); err != nil {
+		t.Fatalf("CreateAccount: %v", err)
+	}
+
+	testdir := t.TempDir()
+	if err := makeImages(testdir, 0, 1); err != nil {
+		t.Fatalf("makeImages: %v", err)
+	}
+	t.Log("Import")
+	if n, err := c.ImportFiles([]string{filepath.Join(testdir, "*")}, "gallery"); err != nil {
+		t.Errorf("c.ImportFiles: %v", err)
+	} else if want, got := 1, n; want != got {
+		t.Errorf("Unexpected ImportFiles result. Want %d, got %d", want, got)
+	}
+
+	t.Log("AddAlbums a/b/c/d")
+	if err := c.AddAlbums([]string{"a/b/c/d"}); err != nil {
+		t.Fatalf("AddAlbums: %v", err)
+	}
+
+	t.Log("Copy gallery/* -> a/b/c/d")
+	if err := c.Copy([]string{"gallery/*"}, "a/b/c/d"); err != nil {
+		t.Fatalf("c.Copy: %v", err)
+	}
+
+	t.Log("Move a/b/c/d/* -> a/b")
+	if err := c.Move([]string{"a/b/c/d/*"}, "a/b"); err != nil {
+		t.Fatalf("c.Move: %v", err)
+	}
+
+	t.Log("Sync")
+	if err := c.Sync(false); err != nil {
+		t.Fatalf("c.Sync: %v", err)
+	}
+
+	want := []string{
+		".trash",
+		"a LOCAL",
+		"a/b",
+		"a/b/c LOCAL",
+		"a/b/c/d",
+		"a/b/image000.jpg",
+		"gallery",
+		"gallery/image000.jpg",
+	}
+	got, err := globAll(c)
+	if err != nil {
 		t.Fatalf("globAll: %v", err)
 	}
 	if diff := deep.Equal(want, got); diff != nil {
@@ -369,16 +427,16 @@ func TestSyncTrash(t *testing.T) {
 	want := []string{
 		".trash",
 		"alpha",
-		"beta",
-		"gallery",
 		"alpha/image001.jpg",
 		"alpha/image002.jpg",
 		"alpha/image003.jpg",
 		"alpha/image004.jpg",
+		"beta",
 		"beta/image001.jpg",
 		"beta/image002.jpg",
 		"beta/image003.jpg",
 		"beta/image004.jpg",
+		"gallery",
 	}
 	got, err := globAll(c)
 	if err != nil {
@@ -419,14 +477,14 @@ func TestConcurrentMutations(t *testing.T) {
 	want := []string{
 		".trash",
 		"alpha",
-		"beta",
-		"delta",
-		"gallery",
 		"alpha/image000.jpg",
 		"alpha/image001.jpg",
 		"alpha/image002.jpg",
 		"alpha/image003.jpg",
 		"alpha/image004.jpg",
+		"beta",
+		"delta",
+		"gallery",
 	}
 	got, err := globAll(c1)
 	if err != nil {
@@ -479,19 +537,19 @@ func TestConcurrentMutations(t *testing.T) {
 	want = []string{
 		".trash",
 		"alpha",
-		"beta",
-		"charlie LOCAL",
-		"gallery",
 		"alpha/image001.jpg",
 		"alpha/image002.jpg",
 		"alpha/image003.jpg",
 		"alpha/image004.jpg",
+		"beta",
 		"beta/image000.jpg LOCAL",
 		"beta/image100.jpg LOCAL",
+		"charlie LOCAL",
 		"charlie/image101.jpg LOCAL",
 		"charlie/image102.jpg LOCAL",
 		"charlie/image103.jpg LOCAL",
 		"charlie/image104.jpg LOCAL",
+		"gallery",
 	}
 	if got, err = globAll(c2); err != nil {
 		t.Fatalf("globAll: %v", err)
@@ -515,12 +573,12 @@ func TestConcurrentMutations(t *testing.T) {
 	want = []string{
 		".trash",
 		"delta",
-		"gallery",
 		"delta/image000.jpg",
 		"delta/image001.jpg",
 		"delta/image002.jpg",
 		"delta/image003.jpg",
 		"delta/image004.jpg",
+		"gallery",
 	}
 	if got, err = globAll(c1); err != nil {
 		t.Fatalf("globAll: %v", err)
@@ -536,20 +594,20 @@ func TestConcurrentMutations(t *testing.T) {
 	want = []string{
 		".trash",
 		"beta",
-		"charlie",
-		"delta",
-		"gallery",
 		"beta/image000.jpg",
 		"beta/image100.jpg",
+		"charlie",
 		"charlie/image101.jpg",
 		"charlie/image102.jpg",
 		"charlie/image103.jpg",
 		"charlie/image104.jpg",
+		"delta",
 		"delta/image000.jpg",
 		"delta/image001.jpg",
 		"delta/image002.jpg",
 		"delta/image003.jpg",
 		"delta/image004.jpg",
+		"gallery",
 	}
 	if got, err = globAll(c2); err != nil {
 		t.Fatalf("globAll: %v", err)
@@ -621,12 +679,12 @@ func TestSharing(t *testing.T) {
 		want := []string{
 			".trash",
 			"alpha",
-			"gallery",
 			"alpha/image000.jpg",
 			"alpha/image001.jpg",
 			"alpha/image002.jpg",
 			"alpha/image003.jpg",
 			"alpha/image004.jpg",
+			"gallery",
 		}
 		got, err := globAll(client)
 		if err != nil {

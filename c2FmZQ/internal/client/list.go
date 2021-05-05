@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"path"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -34,19 +33,120 @@ type ListItem struct {
 // GlobOptions contains options for GlobFiles and ListFiles.
 type GlobOptions struct {
 	// Glob options
-	MatchDot bool // Wildcards match dot at the beginning of dir/file names.
-	Quiet    bool // Don't show errors.
+	MatchDot   bool // Wildcards match dot at the beginning of dir/file names.
+	Quiet      bool // Don't show errors.
+	Recursive  bool // Traverse tree recursively.
+	ExactMatch bool // pattern is an exact name to match, i.e. no wildcards.
 
 	// List options
 	Long      bool // Show long output.
 	Directory bool // Show directories themselves.
-	Recursive bool // Show content recursively.
 
 	trimPrefix string
-	indent     string
 }
 
 var MatchAll = GlobOptions{MatchDot: true}
+
+type node struct {
+	name  string
+	local bool
+	dir   *dir
+	file  *file
+
+	children map[string]*node
+}
+
+type dir struct {
+	fileSet string
+	set     string
+	sk      stingle.SecretKey
+	album   *stingle.Album
+}
+
+type file struct {
+	f       *stingle.File
+	hdrs    []stingle.Header
+	fileSet string
+	set     string
+	album   *stingle.Album
+}
+
+type glob struct {
+	elems []string
+	opt   GlobOptions
+}
+
+func (g *glob) matchFirstElem(n string) bool {
+	if len(g.elems) == 0 {
+		return g.opt.Recursive
+	}
+	if g.elems[0] == n {
+		return true
+	}
+	if !g.opt.MatchDot && !strings.HasPrefix(g.elems[0], ".") && strings.HasPrefix(n, ".") {
+		return false
+	}
+	if g.opt.ExactMatch {
+		return g.elems[0] == n
+	}
+	matched, _ := path.Match(g.elems[0], n)
+	return matched
+}
+
+func newNode(name string) *node {
+	return &node{
+		name:     name,
+		children: make(map[string]*node),
+	}
+}
+
+func (n *node) find(name string, create bool) *node {
+	elems := strings.Split(name, "/")
+	for {
+		if len(elems) == 0 {
+			return n
+		}
+		if len(elems[0]) == 0 {
+			elems = elems[1:]
+			continue
+		}
+		if next, ok := n.children[elems[0]]; ok {
+			n = next
+			elems = elems[1:]
+			continue
+		}
+		if create {
+			n.children[elems[0]] = newNode(elems[0])
+			n = n.children[elems[0]]
+			elems = elems[1:]
+			continue
+		}
+		return nil
+	}
+}
+
+func (n *node) insertDir(name, fileSet, set string, sk stingle.SecretKey, album *stingle.Album, local bool) {
+	nn := n.find(name, true)
+	nn.local = local
+	nn.dir = &dir{
+		fileSet: fileSet,
+		set:     set,
+		sk:      sk,
+		album:   album,
+	}
+}
+
+func (n *node) insertFile(name string, f *stingle.File, hdrs []stingle.Header, fileSet, set string, album *stingle.Album, local bool) {
+	nn := n.find(name, true)
+	nn.local = local
+	nn.file = &file{
+		f:       f,
+		hdrs:    hdrs,
+		fileSet: fileSet,
+		set:     set,
+		album:   album,
+	}
+}
 
 // GlobFiles returns files that match the glob patterns.
 func (c *Client) GlobFiles(patterns []string, opt GlobOptions) ([]ListItem, error) {
@@ -80,23 +180,12 @@ func (c *Client) glob(pattern string, opt GlobOptions) ([]ListItem, error) {
 		return nil, err
 	}
 	pattern = strings.TrimSuffix(pattern, "/")
-	// The directory structure can only be 2 deep.
-	pathElems := strings.SplitN(pattern, "/", 2)
-	if len(pathElems) > 2 {
-		return nil, nil
-	}
-	type dir struct {
-		name    string
-		fileSet string
-		set     string
-		sk      stingle.SecretKey
-		album   *stingle.Album
-		local   bool
-	}
-	dirs := []dir{
-		{"gallery", galleryFile, stingle.GallerySet, c.SecretKey(), nil, false},
-		{".trash", trashFile, stingle.TrashSet, c.SecretKey(), nil, false},
-	}
+	g := &glob{opt: opt}
+	g.elems = strings.Split(pattern, "/")
+
+	root := newNode("")
+	root.insertDir("gallery", galleryFile, stingle.GallerySet, c.SecretKey(), nil, false)
+	root.insertDir(".trash", trashFile, stingle.TrashSet, c.SecretKey(), nil, false)
 	var al AlbumList
 	if err := c.storage.ReadDataFile(c.fileHash(albumList), &al); err != nil {
 		return nil, fmt.Errorf("albumList: %w", err)
@@ -111,61 +200,78 @@ func (c *Client) glob(pattern string, opt GlobOptions) ([]ListItem, error) {
 		if err != nil {
 			return nil, err
 		}
-		dirs = append(dirs, dir{md.Name, albumPrefix + album.AlbumID, stingle.AlbumSet, ask, album, local})
+		root.insertDir(md.Name, albumPrefix+album.AlbumID, stingle.AlbumSet, ask, album, local)
 	}
 
 	var out []ListItem
-	for _, d := range dirs {
-		if !opt.MatchDot && !strings.HasPrefix(pathElems[0], ".") && strings.HasPrefix(d.name, ".") {
-			continue
-		}
-		if matched, _ := path.Match(pathElems[0], d.name); !matched {
-			continue
-		}
+	if err := c.globStep("", g, root, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *Client) globStep(parent string, g *glob, n *node, li *[]ListItem) error {
+	if n.dir != nil {
 		var fs FileSet
-		if err := c.storage.ReadDataFile(c.fileHash(d.fileSet), &fs); err != nil {
-			return nil, err
+		if err := c.storage.ReadDataFile(c.fileHash(n.dir.fileSet), &fs); err != nil {
+			return err
 		}
-		// Only show directories.
-		if len(pathElems) == 1 {
-			li := ListItem{
-				Filename:  d.name,
-				FileSet:   d.fileSet,
-				IsDir:     true,
-				DirSize:   len(fs.Files),
-				Set:       d.set,
-				Album:     d.album,
-				LocalOnly: d.local,
-			}
-			out = append(out, li)
-			continue
-		}
-		// Look for matching files.
 		for _, f := range fs.Files {
 			local := fs.RemoteFiles[f.File] == nil
-			hdrs, err := stingle.DecryptBase64Headers(f.Headers, d.sk)
+			hdrs, err := stingle.DecryptBase64Headers(f.Headers, n.dir.sk)
 			if err != nil {
-				return nil, err
+				return err
 			}
 			fn := string(hdrs[0].Filename)
-			if !opt.MatchDot && !strings.HasPrefix(pathElems[1], ".") && strings.HasPrefix(fn, ".") {
-				continue
-			}
-			if matched, _ := path.Match(pathElems[1], fn); matched {
-				out = append(out, ListItem{
-					Filename:  d.name + "/" + fn,
-					Header:    hdrs[0],
-					FilePath:  c.blobPath(f.File, false),
-					FileSet:   d.fileSet,
-					FSFile:    *f,
-					Set:       d.set,
-					Album:     d.album,
-					LocalOnly: local,
-				})
+			n.insertFile(fn, f, hdrs, n.dir.fileSet, n.dir.set, n.dir.album, local)
+		}
+	}
+	if len(g.elems) == 0 {
+		if n.dir != nil {
+			*li = append(*li, ListItem{
+				Filename:  path.Join(parent, n.name),
+				FileSet:   n.dir.fileSet,
+				IsDir:     true,
+				DirSize:   len(n.children),
+				Set:       n.dir.set,
+				Album:     n.dir.album,
+				LocalOnly: n.local,
+			})
+		} else if n.file != nil {
+			*li = append(*li, ListItem{
+				Filename:  path.Join(parent, n.name),
+				Header:    n.file.hdrs[0],
+				FilePath:  c.blobPath(n.file.f.File, false),
+				FileSet:   n.file.fileSet,
+				FSFile:    *n.file.f,
+				Set:       n.file.set,
+				Album:     n.file.album,
+				LocalOnly: n.local,
+			})
+		} else {
+			*li = append(*li, ListItem{
+				Filename:  path.Join(parent, n.name),
+				IsDir:     true,
+				LocalOnly: true,
+			})
+		}
+		if !g.opt.Recursive {
+			return nil
+		}
+	}
+
+	gg := &glob{opt: g.opt}
+	if len(g.elems) > 0 {
+		gg.elems = g.elems[1:]
+	}
+	for _, child := range n.children {
+		if g.matchFirstElem(child.name) {
+			if err := c.globStep(path.Join(parent, n.name), gg, child, li); err != nil {
+				return err
 			}
 		}
 	}
-	return out, nil
+	return nil
 }
 
 func (c *Client) ListFiles(patterns []string, opt GlobOptions) error {
@@ -196,21 +302,18 @@ func (c *Client) ListFiles(patterns []string, opt GlobOptions) error {
 		return err
 	}
 
+	var expand []string
+	fileCount := 0
 	for _, item := range li {
 		if item.IsDir {
-			if !opt.Directory {
-				opt2 := opt
-				opt2.Quiet = true
-				opt2.Directory = true
-				opt2.trimPrefix = item.Filename + "/"
-				opt2.indent = "  "
-				c.Printf("%s%s/\n", opt.indent, item.Filename)
-				c.ListFiles([]string{filepath.Join(item.Filename, "*")}, opt2)
-				c.Print()
+			if !opt.Directory && !opt.Recursive {
+				expand = append(expand, item.Filename)
 			} else if !opt.Long {
-				c.Print(opt.indent + strings.TrimPrefix(item.Filename+"/", opt.trimPrefix))
+				c.Print(strings.TrimPrefix(item.Filename+"/", opt.trimPrefix))
+			} else if item.Set == "" {
+				c.Printf("%*s %*s -\n", -maxFilenameWidth, strings.TrimPrefix(item.Filename+"/", opt.trimPrefix), maxSizeWidth, "")
 			} else {
-				s := fmt.Sprintf("%*s %6d file", -maxFilenameWidth, strings.TrimPrefix(item.Filename+"/", opt.trimPrefix), item.DirSize)
+				s := fmt.Sprintf("%*s %*d file", -maxFilenameWidth, strings.TrimPrefix(item.Filename+"/", opt.trimPrefix), maxSizeWidth, item.DirSize)
 				if item.DirSize != 1 {
 					s += "s"
 				}
@@ -238,20 +341,13 @@ func (c *Client) ListFiles(patterns []string, opt GlobOptions) error {
 				if item.LocalOnly {
 					s += ", Local"
 				}
-				c.Print(opt.indent + s)
-			}
-			if opt.Recursive {
-				opt2 := opt
-				opt2.Quiet = true
-				opt2.trimPrefix = item.Filename + "/"
-				opt2.indent = "  "
-				c.ListFiles([]string{filepath.Join(item.Filename, "*")}, opt2)
-				c.Print()
+				c.Print(s)
 			}
 			continue
 		}
+		fileCount++
 		if !opt.Long {
-			c.Print(opt.indent + strings.TrimPrefix(item.Filename, opt.trimPrefix))
+			c.Print(strings.TrimPrefix(item.Filename, opt.trimPrefix))
 			continue
 		}
 		duration := ""
@@ -275,10 +371,23 @@ func (c *Client) ListFiles(patterns []string, opt GlobOptions) error {
 			local = " Local"
 		}
 		ms, _ := item.FSFile.DateCreated.Int64()
-		c.Printf("%s%*s %*d %s %s%s%s%s\n", opt.indent, -maxFilenameWidth,
+		c.Printf("%*s %*d %s %s%s%s%s\n", -maxFilenameWidth,
 			strings.TrimPrefix(item.Filename, opt.trimPrefix), maxSizeWidth, item.Header.DataSize,
 			time.Unix(ms/1000, 0).Format("2006-01-02 15:04:05"), stingle.FileType(item.Header.FileType),
 			exifData, duration, local)
+	}
+	if fileCount > 0 && len(expand) > 0 {
+		c.Print()
+	}
+	opt.Quiet = true
+	opt.Directory = true
+	for i, d := range expand {
+		if i > 0 {
+			c.Print()
+		}
+		opt.trimPrefix = d + "/"
+		c.Printf("%s:\n", d)
+		c.ListFiles([]string{path.Join(d, "*")}, opt)
 	}
 	return nil
 }

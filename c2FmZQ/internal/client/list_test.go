@@ -46,12 +46,12 @@ func TestList(t *testing.T) {
 		{
 			"ls -l",
 			[]string{""}, client.GlobOptions{Long: true},
-			"gallery/      2 files\n",
+			"gallery/ 2 files\n",
 		},
 		{
 			"ls *",
 			[]string{"*"}, client.GlobOptions{},
-			"gallery/\n  image001.jpg\n\n",
+			"gallery:\nimage001.jpg\n",
 		},
 		{
 			"ls -d *",
@@ -61,7 +61,7 @@ func TestList(t *testing.T) {
 		{
 			"ls -ld *",
 			[]string{"*"}, client.GlobOptions{Long: true, Directory: true},
-			"gallery/      2 files\n",
+			"gallery/ 2 files\n",
 		},
 		{
 			"ls -a",
@@ -71,12 +71,12 @@ func TestList(t *testing.T) {
 		{
 			"ls -a *",
 			[]string{"*"}, client.GlobOptions{MatchDot: true},
-			".trash/\n\ngallery/\n  .image002.jpg\n  image001.jpg\n\n",
+			".trash:\n\ngallery:\n.image002.jpg\nimage001.jpg\n",
 		},
 		{
 			"ls -l gallery",
 			[]string{"gallery"}, client.GlobOptions{Long: true},
-			"gallery/\n  image001.jpg  789 XXXX-XX-XX XX:XX:XX photo Local\n\n",
+			"gallery:\nimage001.jpg  789 XXXX-XX-XX XX:XX:XX photo Local\n",
 		},
 		{
 			"ls */*",
@@ -91,16 +91,17 @@ func TestList(t *testing.T) {
 		{
 			"ls -lR",
 			[]string{""}, client.GlobOptions{Long: true, Recursive: true},
-			"gallery/      2 files\n" +
-				"  image001.jpg  789 XXXX-XX-XX XX:XX:XX photo Local\n\n",
+			"gallery/                 2 files\n" +
+				"gallery/.image002.jpg  789 XXXX-XX-XX XX:XX:XX photo Local\n" +
+				"gallery/image001.jpg   789 XXXX-XX-XX XX:XX:XX photo Local\n",
 		},
 		{
 			"ls -alR",
 			[]string{""}, client.GlobOptions{MatchDot: true, Long: true, Recursive: true},
-			".trash/       0 files\n\n" +
-				"gallery/      2 files\n" +
-				"  .image002.jpg  789 XXXX-XX-XX XX:XX:XX photo Local\n" +
-				"  image001.jpg   789 XXXX-XX-XX XX:XX:XX photo Local\n\n",
+			".trash/                  0 files\n" +
+				"gallery/                 2 files\n" +
+				"gallery/.image002.jpg  789 XXXX-XX-XX XX:XX:XX photo Local\n" +
+				"gallery/image001.jpg   789 XXXX-XX-XX XX:XX:XX photo Local\n",
 		},
 	}
 	dateRE := regexp.MustCompile(`....-..-.. ..:..:..`)
