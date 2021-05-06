@@ -263,25 +263,30 @@ func (c *Client) Contacts(patterns []string) error {
 	if err := c.storage.ReadDataFile(c.fileHash(contactsFile), &cl); err != nil {
 		return err
 	}
-	var out []string
+	var show []*stingle.Contact
+	maxSize := 5
 L:
 	for _, c := range cl.Contacts {
 		for _, p := range patterns {
 			if m, err := path.Match(p, c.Email); err == nil && m {
-				pk, _ := c.PK()
-				out = append(out, fmt.Sprintf("%s (% X)", c.Email, pk.ToBytes()))
+				show = append(show, c)
+				if len(c.Email) > maxSize {
+					maxSize = len(c.Email)
+				}
 				continue L
 			}
 		}
 	}
-	if out == nil {
+	if show == nil {
 		c.Printf("No match.\n")
 		return nil
 	}
-	sort.Strings(out)
-	c.Printf("Contacts:\n")
-	for _, e := range out {
-		c.Printf("* %s\n", e)
+	sort.Slice(show, func(i, j int) bool { return show[i].Email < show[j].Email })
+	c.Printf("Contacts:\n\n")
+	c.Printf("%*s %s\n", -maxSize, "Email", "Public Key")
+	for _, contact := range show {
+		pk, _ := contact.PK()
+		c.Printf("%*s % X\n", -maxSize, contact.Email, pk.ToBytes())
 	}
 	return nil
 }
