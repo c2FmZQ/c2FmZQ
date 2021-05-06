@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/rwcarlsen/goexif/exif"
 
@@ -148,6 +149,15 @@ func (n *node) insertFile(name string, f *stingle.File, hdrs []stingle.Header, f
 	}
 }
 
+func sanitize(s string) string {
+	return strings.Map(func(r rune) rune {
+		if !unicode.IsPrint(r) {
+			return unicode.ReplacementChar
+		}
+		return r
+	}, s)
+}
+
 // GlobFiles returns files that match the glob patterns.
 func (c *Client) GlobFiles(patterns []string, opt GlobOptions) ([]ListItem, error) {
 	var li []ListItem
@@ -200,7 +210,7 @@ func (c *Client) glob(pattern string, opt GlobOptions) ([]ListItem, error) {
 		if err != nil {
 			return nil, err
 		}
-		root.insertDir(md.Name, albumPrefix+album.AlbumID, stingle.AlbumSet, ask, album, local)
+		root.insertDir(sanitize(md.Name), albumPrefix+album.AlbumID, stingle.AlbumSet, ask, album, local)
 	}
 
 	var out []ListItem
@@ -222,7 +232,7 @@ func (c *Client) globStep(parent string, g *glob, n *node, li *[]ListItem) error
 			if err != nil {
 				return err
 			}
-			fn := string(hdrs[0].Filename)
+			fn := sanitize(string(hdrs[0].Filename))
 			n.insertFile(fn, f, hdrs, n.dir.fileSet, n.dir.set, n.dir.album, local)
 		}
 	}
