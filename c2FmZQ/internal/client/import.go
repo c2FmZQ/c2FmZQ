@@ -35,6 +35,19 @@ func (c *Client) ImportFiles(patterns []string, dir string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
+	if len(li) == 0 || (len(li) == 1 && li[0].IsDir && li[0].Set == "") {
+		name := dir
+		if len(li) == 1 {
+			name = li[0].Filename
+		}
+		if _, err := c.addAlbum(name); err != nil {
+			return 0, err
+		}
+		if li, err = c.glob(name, GlobOptions{ExactMatch: true}); err != nil {
+			return 0, err
+		}
+
+	}
 	if len(li) != 1 || !li[0].IsDir {
 		return 0, fmt.Errorf("%s is not a directory", dir)
 	}
@@ -52,7 +65,7 @@ func (c *Client) ImportFiles(patterns []string, dir string) (int, error) {
 		}
 	}
 
-	existingItems, err := c.glob(dir+"/*", MatchAll)
+	existingItems, err := c.glob(dst.Filename+"/*", MatchAll)
 	if err != nil {
 		return 0, err
 	}
@@ -97,9 +110,11 @@ func (c *Client) importFile(file string, dst ListItem, pk stingle.PublicKey) err
 
 	creationTime := time.Now()
 	switch ext := strings.ToLower(filepath.Ext(file)); ext {
-	case ".jpg", ".jpeg", ".png", ".gif":
+	case ".jpg", ".jpeg", ".png", ".gif", ".tiff", ".bmp", ".webp", ".svg":
 		hdrs[0].FileType = stingle.FileTypePhoto
-	case ".mp4", ".mov":
+	case ".mp4", ".mov", ".webm", ".mkv", ".flv", ".vob", ".ogv", ".ogg", ".avi", ".mts",
+		".m2ts", ".ts", ".qt", ".wmv", ".yuv", ".rm", ".rmvb", ".m4p", ".m4v", ".mpg",
+		".mp2", ".mpeg", ".mpe", ".mpv", ".m2v", ".svi", ".3gp", ".3g2":
 		hdrs[0].FileType = stingle.FileTypeVideo
 	default:
 		hdrs[0].FileType = stingle.FileTypeGeneral
@@ -110,6 +125,11 @@ func (c *Client) importFile(file string, dst ListItem, pk stingle.PublicKey) err
 			if !ct.IsZero() {
 				creationTime = ct
 			}
+		}
+	}
+	if x, err := c.importExif(file); err == nil {
+		if t, err := x.DateTime(); err == nil {
+			creationTime = t
 		}
 	}
 	var thumbnail []byte
@@ -145,11 +165,6 @@ func (c *Client) importFile(file string, dst ListItem, pk stingle.PublicKey) err
 	}
 	if dst.Album != nil {
 		sFile.AlbumID = dst.Album.AlbumID
-	}
-	if x, err := c.importExif(file); err == nil {
-		if t, err := x.DateTime(); err == nil {
-			sFile.DateCreated = json.Number(strconv.FormatInt(t.UnixNano()/1000000, 10))
-		}
 	}
 	in, err := os.Open(file)
 	if err != nil {

@@ -155,7 +155,7 @@ func (c *Client) Copy(patterns []string, dest string) error {
 	}
 	dst := di[0]
 	if dst.Set == "" {
-		album, err := c.addAlbum(strings.TrimSuffix(dst.Filename, "/"))
+		album, err := c.addAlbum(dst.Filename)
 		if err != nil {
 			return err
 		}
@@ -239,7 +239,7 @@ func (c *Client) Move(patterns []string, dest string) error {
 	}
 	dst := di[0]
 	if dst.Set == "" {
-		album, err := c.addAlbum(strings.TrimSuffix(dst.Filename, "/"))
+		album, err := c.addAlbum(dst.Filename)
 		if err != nil {
 			return err
 		}

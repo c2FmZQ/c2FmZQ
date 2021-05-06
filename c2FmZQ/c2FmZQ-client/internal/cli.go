@@ -198,9 +198,17 @@ func New() *App {
 			Name:      "download",
 			Aliases:   []string{"pull"},
 			Usage:     "Download a local copy of encrypted files.",
-			ArgsUsage: `["glob"] ... (default "*/*")`,
+			ArgsUsage: `["glob"] ... (default "*")`,
 			Action:    app.pullFiles,
 			Category:  "Sync",
+			Flags: []cli.Flag{
+				&cli.BoolFlag{
+					Name:    "recursive",
+					Aliases: []string{"R"},
+					Value:   true,
+					Usage:   "Pull files recursively.",
+				},
+			},
 		},
 		&cli.Command{
 			Name:      "sync",
@@ -219,9 +227,17 @@ func New() *App {
 		&cli.Command{
 			Name:      "free",
 			Usage:     "Remove the local copy of encrypted files that are backed up.",
-			ArgsUsage: `["glob"] ... (default "*/*")`,
+			ArgsUsage: `["glob"] ... (default "*")`,
 			Action:    app.freeFiles,
 			Category:  "Sync",
+			Flags: []cli.Flag{
+				&cli.BoolFlag{
+					Name:    "recursive",
+					Aliases: []string{"R"},
+					Value:   true,
+					Usage:   "Remove files recursively.",
+				},
+			},
 		},
 		&cli.Command{
 			Name:      "create-album",
@@ -411,7 +427,9 @@ func (a *App) init(ctx *cli.Context, update bool) error {
 
 		c, err := client.Load(storage)
 		if err != nil {
-			c, err = client.Create(storage)
+			if c, err = client.Create(storage); err != nil {
+				log.Fatalf("client.Create: %v", err)
+			}
 		}
 		a.client = c
 		a.client.SetPrompt(a.prompt)
@@ -809,11 +827,15 @@ func (a *App) pullFiles(ctx *cli.Context) error {
 		a.client.Print("Pull requires logging in to a remote server.")
 		return nil
 	}
-	patterns := []string{"*/*"}
+	patterns := []string{"*"}
 	if ctx.Args().Len() > 0 {
 		patterns = ctx.Args().Slice()
 	}
-	_, err := a.client.Pull(patterns)
+	opt := client.GlobOptions{}
+	if ctx.Bool("recursive") {
+		opt.Recursive = true
+	}
+	_, err := a.client.Pull(patterns, opt)
 	return err
 }
 
@@ -832,11 +854,15 @@ func (a *App) freeFiles(ctx *cli.Context) error {
 	if err := a.init(ctx, true); err != nil {
 		return err
 	}
-	patterns := []string{"*/*"}
+	patterns := []string{"*"}
 	if ctx.Args().Len() > 0 {
 		patterns = ctx.Args().Slice()
 	}
-	_, err := a.client.Free(patterns)
+	opt := client.GlobOptions{}
+	if ctx.Bool("recursive") {
+		opt.Recursive = true
+	}
+	_, err := a.client.Free(patterns, opt)
 	return err
 }
 

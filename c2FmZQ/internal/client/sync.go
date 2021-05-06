@@ -67,6 +67,7 @@ func (c *Client) Sync(dryrun bool) error {
 		return err
 	}
 	if dryrun {
+		c.Print("Dry-run mode, not synced.")
 		return nil
 	}
 	return c.GetUpdates(true)
@@ -581,14 +582,14 @@ func (c *Client) diff() (*albumDiffs, error) {
 
 // Pull downloads all the files matching pattern that are not already present
 // in the local storage. Returns the number of files downloaded.
-func (c *Client) Pull(patterns []string) (int, error) {
-	list, err := c.GlobFiles(patterns, GlobOptions{})
+func (c *Client) Pull(patterns []string, opt GlobOptions) (int, error) {
+	list, err := c.GlobFiles(patterns, opt)
 	if err != nil {
 		return 0, err
 	}
 	files := make(map[string]ListItem)
 	for _, item := range list {
-		if item.LocalOnly {
+		if item.IsDir || item.LocalOnly {
 			continue
 		}
 		fn := c.blobPath(item.FSFile.File, false)
@@ -627,14 +628,14 @@ func (c *Client) Pull(patterns []string) (int, error) {
 
 // Free deletes all the files matching pattern that are already present in the
 // remote storage. Returns the number of files freed.
-func (c *Client) Free(patterns []string) (int, error) {
-	list, err := c.GlobFiles(patterns, GlobOptions{})
+func (c *Client) Free(patterns []string, opt GlobOptions) (int, error) {
+	list, err := c.GlobFiles(patterns, opt)
 	if err != nil {
 		return 0, err
 	}
 	count := 0
 	for _, item := range list {
-		if item.LocalOnly {
+		if item.IsDir || item.LocalOnly {
 			continue
 		}
 		fn := c.blobPath(item.FSFile.File, false)

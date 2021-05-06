@@ -91,9 +91,9 @@ func (c *Client) exportFile(item ListItem, dir string) (err error) {
 	if err := stingle.SkipHeader(in); err != nil {
 		return err
 	}
-	_, fn := filepath.Split(string(item.Header.Filename))
+	_, fn := filepath.Split(sanitize(string(item.Header.Filename)))
 	if fn == "" {
-		_, fn = filepath.Split(string(item.FSFile.File))
+		_, fn = filepath.Split(sanitize(string(item.FSFile.File)))
 		fn = "decrypted-" + fn
 	}
 	fn = filepath.Join(dir, fn)

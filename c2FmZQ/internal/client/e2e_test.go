@@ -142,20 +142,20 @@ func TestImportExportSync(t *testing.T) {
 	}
 
 	t.Log("CLIENT FREE gallery/*")
-	if n, err := c.Free([]string{"gallery/*"}); err != nil {
+	if n, err := c.Free([]string{"gallery/*"}, client.GlobOptions{}); err != nil {
 		t.Errorf("c.Free: %v", err)
 	} else if want, got := 10, n; want != got {
 		t.Errorf("Unexpected Free result. Want %d, got %d", want, got)
 	}
 
 	t.Log("CLIENT PULL gallery/*0.jpg")
-	if n, err := c.Pull([]string{"gallery/*0.jpg"}); err != nil {
+	if n, err := c.Pull([]string{"gallery/*0.jpg"}, client.GlobOptions{}); err != nil {
 		t.Errorf("c.Pull: %v", err)
 	} else if want, got := 1, n; want != got {
 		t.Errorf("Unexpected Pull result. Want %d, got %d", want, got)
 	}
 	t.Log("CLIENT PULL gallery/*")
-	if n, err := c.Pull([]string{"gallery/*"}); err != nil {
+	if n, err := c.Pull([]string{"gallery/*"}, client.GlobOptions{}); err != nil {
 		t.Errorf("c.Pull: %v", err)
 	} else if want, got := 9, n; want != got {
 		t.Errorf("Unexpected Pull result. Want %d, got %d", want, got)
@@ -509,7 +509,7 @@ func TestConcurrentMutations(t *testing.T) {
 		t.Fatalf("c2.GetUpdates: %v", err)
 	}
 	t.Log("CLIENT 2 Pull */*")
-	if _, err := c2.Pull([]string{"*/*"}); err != nil {
+	if _, err := c2.Pull([]string{"*/*"}, client.GlobOptions{}); err != nil {
 		t.Fatalf("c2.Pull: %v", err)
 	}
 	testdir = t.TempDir()
