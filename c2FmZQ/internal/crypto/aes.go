@@ -15,16 +15,16 @@ import (
 	"os"
 	"path/filepath"
 
-	"golang.org/x/crypto/pbkdf2"
 	"c2FmZQ/internal/log"
+	"golang.org/x/crypto/pbkdf2"
 )
 
 const (
 	// The size of an encrypted key.
-	encryptedKeySize = 93 // 1 (version) + 12 (nonce) + 64 (key) + 16 (mac)
+	encryptedKeySize = 129 // 1 (version) + 16 (iv) + 64 (key) + 16 (pad) + 32 (mac)
 
 	// The size of encrypted chunks in streams.
-	streamChunkSize = 16 * 1024
+	fileChunkSize = 1 << 20
 )
 
 var (
@@ -149,29 +149,36 @@ func (k EncryptionKey) Decrypt(data []byte) ([]byte, error) {
 	if len(k.maskedKey) == 0 {
 		log.Fatal("key is not set")
 	}
+	if (len(data)-1)%aes.BlockSize != 0 || len(data)-1 < aes.BlockSize+32 {
+		return nil, ErrDecryptFailed
+	}
 	version, data := data[0], data[1:]
 	if version != 1 {
-		log.Debugf("Decrypt: unexpected version %d", version)
+		return nil, ErrDecryptFailed
+	}
+	iv, data := data[:aes.BlockSize], data[aes.BlockSize:]
+	encData, data := data[:len(data)-32], data[len(data)-32:]
+	hm := data[:32]
+	if !hmac.Equal(hm, k.Hash(encData)) {
 		return nil, ErrDecryptFailed
 	}
 	block, err := aes.NewCipher(k.key()[:32])
 	if err != nil {
-		log.Debugf("aes.NewCipher: %v", err)
 		return nil, ErrDecryptFailed
 	}
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		log.Debugf("cipher.NewGCM: %v", err)
+	mode := cipher.NewCBCDecrypter(block, iv)
+	dec := make([]byte, len(encData))
+	mode.CryptBlocks(dec, encData)
+	padSize := int(dec[len(dec)-1])
+	if padSize > len(encData) || padSize > aes.BlockSize {
 		return nil, ErrDecryptFailed
 	}
-	nonce := data[:gcm.NonceSize()]
-	encData := data[gcm.NonceSize():]
-	dec, err := gcm.Open(nil, nonce, encData, nil)
-	if err != nil {
-		log.Debugf("gcm.Open: %v", err)
-		return nil, ErrDecryptFailed
+	for i := 0; i < padSize; i++ {
+		if dec[len(dec)-i-1] != byte(padSize) {
+			return nil, ErrDecryptFailed
+		}
 	}
-	return dec, nil
+	return dec[:len(dec)-padSize], nil
 }
 
 // Encrypt encrypts data using the key.
@@ -181,21 +188,30 @@ func (k EncryptionKey) Encrypt(data []byte) ([]byte, error) {
 	}
 	block, err := aes.NewCipher(k.key()[:32])
 	if err != nil {
-		log.Debugf("aes.NewCipher: %v", err)
 		return nil, ErrEncryptFailed
 	}
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		log.Debugf("cipher.NewGCM: %v", err)
+	iv := make([]byte, aes.BlockSize)
+	if _, err := rand.Read(iv); err != nil {
 		return nil, ErrEncryptFailed
 	}
-	out := make([]byte, 1+gcm.NonceSize())
+	padSize := aes.BlockSize - len(data)%aes.BlockSize
+	pData := make([]byte, len(data)+padSize)
+	copy(pData, data)
+	for i := 0; i < padSize; i++ {
+		pData[len(data)+i] = byte(padSize)
+	}
+
+	mode := cipher.NewCBCEncrypter(block, iv)
+	encData := make([]byte, len(pData))
+	mode.CryptBlocks(encData, pData)
+	hmac := k.Hash(encData)
+
+	out := make([]byte, 1+len(iv)+len(encData)+len(hmac))
 	out[0] = 1 // version
-	if _, err := rand.Read(out[1:]); err != nil {
-		log.Debugf("io.ReadFull: %v", err)
-		return nil, ErrEncryptFailed
-	}
-	return gcm.Seal(out, out[1:1+gcm.NonceSize()], data, nil), nil
+	copy(out[1:], iv)
+	copy(out[1+len(iv):], encData)
+	copy(out[1+len(iv)+len(encData):], hmac)
+	return out, nil
 }
 
 // encryptionKeyFromBytes returns an EncryptionKey with the raw bytes provided.
@@ -259,8 +275,16 @@ func (k EncryptionKey) DecryptKey(encryptedKey []byte) (*EncryptionKey, error) {
 type StreamReader struct {
 	gcm cipher.AEAD
 	r   io.Reader
+	ctx uint32
 	c   uint64
 	buf []byte
+}
+
+func gcmNonce(ctx uint32, counter uint64) []byte {
+	var n [12]byte
+	binary.BigEndian.PutUint32(n[:4], ctx)
+	binary.BigEndian.PutUint64(n[4:], counter)
+	return n[:]
 }
 
 func (r *StreamReader) Read(b []byte) (n int, err error) {
@@ -271,19 +295,15 @@ func (r *StreamReader) Read(b []byte) (n int, err error) {
 		if n == len(b) {
 			break
 		}
-		in := make([]byte, 8+r.gcm.NonceSize()+streamChunkSize+r.gcm.Overhead())
+		in := make([]byte, fileChunkSize+r.gcm.Overhead())
 		if nn, err = io.ReadFull(r.r, in); nn > 0 {
 			r.c++
-			if nn <= 36 {
+			nonce := gcmNonce(r.ctx, r.c)
+			if nn <= r.gcm.Overhead() {
 				log.Debugf("StreamReader.Read: short chunk %d", nn)
 				return n, ErrDecryptFailed
 			}
-			cc := binary.BigEndian.Uint64(in[:8])
-			if r.c != cc {
-				log.Debugf("StreamReader.Read: wrong chunk number %d", cc)
-				return n, ErrDecryptFailed
-			}
-			dec, err := r.gcm.Open(nil, in[8:8+r.gcm.NonceSize()], in[8+r.gcm.NonceSize():nn], in[:8])
+			dec, err := r.gcm.Open(nil, nonce, in[:nn], nil)
 			if err != nil {
 				log.Debugf("gcm.Open: %v", err)
 				return n, ErrDecryptFailed
@@ -313,7 +333,7 @@ func (r *StreamReader) Close() error {
 }
 
 // StartReader opens a reader to decrypt a stream of data.
-func (k EncryptionKey) StartReader(r io.Reader) (*StreamReader, error) {
+func (k EncryptionKey) StartReader(ctx uint32, r io.Reader) (*StreamReader, error) {
 	block, err := aes.NewCipher(k.key()[:32])
 	if err != nil {
 		log.Debugf("aes.NewCipher: %v", err)
@@ -324,35 +344,31 @@ func (k EncryptionKey) StartReader(r io.Reader) (*StreamReader, error) {
 		log.Debugf("cipher.NewGCM: %v", err)
 		return nil, ErrDecryptFailed
 	}
-	return &StreamReader{gcm: gcm, r: r}, nil
+	return &StreamReader{gcm: gcm, r: r, ctx: ctx}, nil
 }
 
 // StreamWriter encrypts a stream of data.
 type StreamWriter struct {
 	gcm cipher.AEAD
 	w   io.Writer
+	ctx uint32
 	c   uint64
 	buf []byte
 }
 
 func (w *StreamWriter) writeChunk(b []byte) (int, error) {
 	w.c++
-	out := make([]byte, 8+w.gcm.NonceSize())
-	binary.BigEndian.PutUint64(out[:8], w.c)
-	if _, err := rand.Read(out[8:]); err != nil {
-		log.Debugf("io.ReadFull: %v", err)
-		return 0, ErrEncryptFailed
-	}
-	out = w.gcm.Seal(out, out[8:8+w.gcm.NonceSize()], b, out[:8])
+	nonce := gcmNonce(w.ctx, w.c)
+	out := w.gcm.Seal(nil, nonce, b, nil)
 	return w.w.Write(out)
 }
 
 func (w *StreamWriter) Write(b []byte) (n int, err error) {
 	w.buf = append(w.buf, b...)
 	n = len(b)
-	for len(w.buf) >= streamChunkSize {
-		_, err = w.writeChunk(w.buf[:streamChunkSize])
-		w.buf = w.buf[streamChunkSize:]
+	for len(w.buf) >= fileChunkSize {
+		_, err = w.writeChunk(w.buf[:fileChunkSize])
+		w.buf = w.buf[fileChunkSize:]
 		if err != nil {
 			break
 		}
@@ -373,7 +389,7 @@ func (w *StreamWriter) Close() (err error) {
 }
 
 // StartWriter opens a writer to encrypt a stream of data.
-func (k EncryptionKey) StartWriter(w io.Writer) (*StreamWriter, error) {
+func (k EncryptionKey) StartWriter(ctx uint32, w io.Writer) (*StreamWriter, error) {
 	block, err := aes.NewCipher(k.key()[:32])
 	if err != nil {
 		log.Debugf("aes.NewCipher: %v", err)
@@ -384,7 +400,7 @@ func (k EncryptionKey) StartWriter(w io.Writer) (*StreamWriter, error) {
 		log.Debugf("cipher.NewGCM: %v", err)
 		return nil, ErrEncryptFailed
 	}
-	return &StreamWriter{gcm: gcm, w: w}, nil
+	return &StreamWriter{gcm: gcm, w: w, ctx: ctx}, nil
 }
 
 // ReadEncryptedKey reads an encrypted key and decrypts it.

@@ -95,7 +95,8 @@ func TestStream(t *testing.T) {
 	if _, err := rand.Read(content); err != nil {
 		t.Fatalf("rand: %v", err)
 	}
-	w, err := mk.StartWriter(&buf)
+	ctx := uint32(0x12121212)
+	w, err := mk.StartWriter(ctx, &buf)
 	if err != nil {
 		t.Fatalf("StartWriter: %v", err)
 	}
@@ -106,7 +107,7 @@ func TestStream(t *testing.T) {
 		t.Fatalf("StartWriter.Close: %v", err)
 	}
 
-	r, err := mk.StartReader(&buf)
+	r, err := mk.StartReader(ctx, &buf)
 	if err != nil {
 		t.Fatalf("StartReader: %v", err)
 	}
@@ -140,7 +141,8 @@ func TestStreamInvalidMAC(t *testing.T) {
 	if _, err := rand.Read(content); err != nil {
 		t.Fatalf("rand: %v", err)
 	}
-	w, err := mk.StartWriter(&buf)
+	ctx := uint32(0x44332211)
+	w, err := mk.StartWriter(ctx, &buf)
 	if err != nil {
 		t.Fatalf("StartWriter: %v", err)
 	}
@@ -154,7 +156,7 @@ func TestStreamInvalidMAC(t *testing.T) {
 	c := buf.Bytes()[buf.Len()-1]
 	buf.Bytes()[buf.Len()-1] = ^c
 
-	r, err := mk.StartReader(&buf)
+	r, err := mk.StartReader(ctx, &buf)
 	if err != nil {
 		t.Fatalf("StartReader: %v", err)
 	}

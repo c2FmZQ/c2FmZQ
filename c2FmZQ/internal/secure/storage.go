@@ -4,7 +4,9 @@ package secure
 import (
 	"bytes"
 	"compress/gzip"
+	"crypto/sha1"
 	"encoding"
+	"encoding/binary"
 	"encoding/gob"
 	"encoding/hex"
 	"encoding/json"
@@ -296,6 +298,12 @@ func (s *Storage) OpenManyForUpdate(files []string, objects interface{}) (func(c
 	}, nil
 }
 
+func context(s string) (ctx uint32) {
+	h := sha1.Sum([]byte(s))
+	ctx = binary.BigEndian.Uint32(h[:4])
+	return
+}
+
 // ReadDataFile reads an object from a file.
 func (s *Storage) ReadDataFile(filename string, obj interface{}) error {
 	f, err := os.Open(filepath.Join(s.dir, filename))
@@ -324,7 +332,7 @@ func (s *Storage) ReadDataFile(filename string, obj interface{}) error {
 			return err
 		}
 		// Use the file key to decrypt the rest of the file.
-		if r, err = k.StartReader(f); err != nil {
+		if r, err = k.StartReader(context(filename), f); err != nil {
 			return err
 		}
 		// Read the header again.
@@ -406,7 +414,7 @@ func (s *Storage) ReadDataFile(filename string, obj interface{}) error {
 // SaveDataFile atomically replace an object in a file.
 func (s *Storage) SaveDataFile(filename string, obj interface{}) error {
 	t := fmt.Sprintf("%s.tmp-%d", filename, time.Now().UnixNano())
-	if err := s.writeFile(t, obj); err != nil {
+	if err := s.writeFile(context(filename), t, obj); err != nil {
 		return err
 	}
 	// Atomically replace the file.
@@ -415,11 +423,11 @@ func (s *Storage) SaveDataFile(filename string, obj interface{}) error {
 
 // CreateEmptyFile creates an empty file.
 func (s *Storage) CreateEmptyFile(filename string, empty interface{}) error {
-	return s.writeFile(filename, empty)
+	return s.writeFile(context(filename), filename, empty)
 }
 
 // writeFile writes obj to a file.
-func (s *Storage) writeFile(filename string, obj interface{}) (retErr error) {
+func (s *Storage) writeFile(ctx uint32, filename string, obj interface{}) (retErr error) {
 	fn := filepath.Join(s.dir, filename)
 	if err := createParentIfNotExist(fn); err != nil {
 		return err
@@ -462,7 +470,7 @@ func (s *Storage) writeFile(filename string, obj interface{}) (retErr error) {
 			return err
 		}
 		// Use the file key to encrypt the rest of the file.
-		if w, err = k.StartWriter(f); err != nil {
+		if w, err = k.StartWriter(ctx, f); err != nil {
 			f.Close()
 			return err
 		}
