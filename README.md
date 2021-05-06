@@ -24,17 +24,18 @@ reverse engineering the API.
 contributions are welcome.
 
 The server has no way to decrypt the files that are uploaded by the clients.
-The server knows how many files you have, how big they are, and who they're
+It knows how many files you have, how big they are, and who they're
 shared with.
 
 The client has to trust the server when sharing albums. The server provides
 the contact search feature (/v2/sync/getContact), which returns a User ID and 
-a public key for the contact. Then the album is shared with that User ID and
+a public key for the contact. Then, the album is shared with that User ID and
 public key (via /v2/sync/share).
 
 A malicious server _could_ replace the contact's User ID and public key with
 someone else's, and make the user think they're sharing with their friend while
-actually sharing with an attacker.
+actually sharing with an attacker. The client application lets the user verify
+the contact's public key before sharing.
 
 When viewing a shared album, the app / user has to trust that the shared content is
 "safe". Since the server can't decrypt the content, it has no way to sanitize it
@@ -43,34 +44,33 @@ vulnerability in the client's code.
 
 Once an album is shared, there is really no way to completely _unshare_ it. The
 permissions on the album can be changed, but it is impossible to control what
-happens to the files that were previously shared. They could have been
-downloaded, exported, published to the New York Times, etc.
+happens to the files that were previously shared. They could have been downloaded,
+exported, published to the New York Times, etc.
 
 ## c2FmZQ Server
 
 c2FmZQ-server is an API server with a relatively small footprint. It can run
-just about anywhere, as long as it has access to lots of disk space, a modern
+just about anywhere, as long as it has access to a lot of disk space, and a modern
 CPU. It must be reachable by the client(s) via HTTPS.
 
-The server needs at two pieces of information: the name of the directory where
+The server needs at least two pieces of information: the name of the directory where
 its data will be stored, and a passphrase to protect the data. The passphrase
-_can_ be stored in a file, otherwise the server will prompt for it when it
-starts.
+_can_ be read from a file, otherwise the server will prompt for it when it starts.
 
 For TLS, the server also needs the TLS key, and certificates.
 
 ### Connecting the Stingle app to this server
 
-For the app to connect to this server, it has to the recompiled with api_server_url
+For the Stingle app to connect to this server, it has to the recompiled with api_server_url
 set to point to this server.
 See [this commit](https://github.com/rthellend/stingle-photos-android/commit/c6758758513f7b9d3cdf755085e4b57945f2494f) for an example.
 
-Note: build the F-Droid version with: gradlew installFdroidRelease
+Note: build the F-Droid version with: `gradlew installFdroidRelease`
 
 ### Scale and performance
 
-The server was designed for personal use, not for large scale or speed. On a
-modern CPU and SSD, it scales to 10+ concurrent users with tens of thousands of
+The server was designed for personal use, not for large scale deployment or speed.
+On a modern CPU and SSD, it scales to 10+ concurrent users with tens of thousands of
 files per album, while maintaining a response time well under a second (excluding
 network I/O).
 
@@ -85,7 +85,7 @@ stores all its data on a local filesystem.
 
 Simply build it, and run it.
 
-```bash
+```
 $ cd c2FmZQ/c2FmZQ-server
 $ go build
 $ ./c2FmZQ-server help
@@ -110,7 +110,7 @@ GLOBAL OPTIONS:
 
 Or, build a docker image.
 
-```bash
+```
 $ docker build -t c2fmzq-server .
 $ docker run -u ${USER} -v ${DATABASEDIR}:/data -v ${SECRETSDIR}:/secrets:ro c2fmzq-server
 ```
@@ -125,7 +125,7 @@ With the default Dockerfile, the server expects the following files in ${SECRETD
 
 Or, build a binary for arm and run the server on a NAS, raspberry pi, etc.
 
-```bash
+```
 $ cd c2FmZQ/c2FmZQ-server
 $ GOOS=linux GOARCH=arm go build -o c2FmZQ-server-arm
 $ scp c2FmZQ-server-arm root@NAS:.
@@ -144,7 +144,7 @@ server when _create-account_, _login_, or _recover-account_ is used.
 
 To run it:
 
-```bash
+```
 $ cd c2FmZQ/c2FmZQ-client
 $ go build
 $ ./c2FmZQ-client
@@ -201,4 +201,3 @@ GLOBAL OPTIONS:
    --server value             The API server base URL. [$C2FMZQ_API_SERVER]
    --auto-update              Automatically fetch metadata updates from the remote server before each command. (default: true)
 ```
-
