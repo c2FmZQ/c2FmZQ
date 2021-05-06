@@ -75,8 +75,8 @@ files per album, while maintaining a response time well under a second (excludin
 network I/O).
 
 On a small device, e.g. a raspberry pi, it scales to a handful of concurrent
-users with a few thousand files each if metadata encryption is turned off, and
-still maintain a response time ~ 5 seconds depending on storage type.
+users with a few thousand files each, and still maintain a response time ~ 5
+seconds depending on storage type.
 
 ### How to run the server
 
