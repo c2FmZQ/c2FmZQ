@@ -75,6 +75,7 @@ func New(dir, passphrase string) *Database {
 
 	// Fail silently if it already exists.
 	db.storage.CreateEmptyFile(db.filePath(userListFile), []userList{})
+	db.CreateEmptyQuotaFile()
 	return db
 }
 

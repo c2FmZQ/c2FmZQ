@@ -11,11 +11,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/prometheus/client_golang/prometheus"
 	"c2FmZQ/internal/database"
 	"c2FmZQ/internal/log"
 	"c2FmZQ/internal/stingle"
 	"c2FmZQ/internal/stingle/token"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 // handleUpload handles the /v2/sync/upload endpoint. It is used to upload
@@ -60,6 +60,9 @@ func (s *Server) handleUpload(req *http.Request) *stingle.Response {
 
 	if err := s.db.AddFile(user, up.FileSpec, up.name, up.set, up.albumID); err != nil {
 		log.Errorf("AddFile: %v", err)
+		if err == database.ErrQuotaExceeded {
+			return stingle.ResponseNOK().AddError("Quota exceeded")
+		}
 		return stingle.ResponseNOK()
 	}
 	return stingle.ResponseOK()

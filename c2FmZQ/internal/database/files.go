@@ -16,6 +16,10 @@ const (
 	fileSetPattern = "fileset-%s"
 )
 
+var (
+	ErrQuotaExceeded = errors.New("quota exceeded")
+)
+
 // FileSet encapsulates to information of a file set, i.e. a group of files
 // like the Gallery, the Trash, or albums.
 type FileSet struct {
@@ -131,6 +135,21 @@ func (d *Database) makeFilePath() (string, error) {
 // will be moved to random file names.
 func (d *Database) AddFile(user User, file FileSpec, name, set, albumID string) error {
 	defer recordLatency("AddFile")()
+
+	spaceUsed, err := d.SpaceUsed(user)
+	if err != nil {
+		return err
+	}
+	quota, err := d.Quota(user.UserID)
+	if err != nil {
+		return err
+	}
+	if total := spaceUsed + file.StoreFileSize + file.StoreThumbSize; total > quota {
+		log.Errorf("User quota exceeded: %d > %d", total, quota)
+		os.Remove(file.StoreFile)
+		os.Remove(file.StoreThumb)
+		return ErrQuotaExceeded
+	}
 
 	fn, err := d.makeFilePath()
 	if err != nil {

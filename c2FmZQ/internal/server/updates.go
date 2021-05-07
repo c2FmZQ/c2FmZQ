@@ -72,6 +72,10 @@ func (s *Server) handleGetUpdates(user database.User, req *http.Request) *stingl
 	if err != nil {
 		log.Errorf("SpaceUSed() failed: %v", err)
 	}
+	spaceQuota, err := s.db.Quota(user.UserID)
+	if err != nil {
+		log.Errorf("Quota() failed: %v", err)
+	}
 	return stingle.ResponseOK().
 		AddPart("files", files).
 		AddPart("trash", trash).
@@ -80,5 +84,5 @@ func (s *Server) handleGetUpdates(user database.User, req *http.Request) *stingl
 		AddPart("contacts", contacts).
 		AddPart("deletes", deletes).
 		AddPart("spaceUsed", fmt.Sprintf("%d", spaceUsed>>20)).
-		AddPart("spaceQuota", "104857600") // 100 TB. Arbitrary large value.
+		AddPart("spaceQuota", fmt.Sprintf("%d", spaceQuota>>20))
 }

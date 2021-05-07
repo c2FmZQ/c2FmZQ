@@ -2,6 +2,7 @@
 package secure
 
 import (
+	"bufio"
 	"bytes"
 	"compress/gzip"
 	"crypto/sha1"
@@ -15,9 +16,11 @@ import (
 	"io"
 	"math/rand"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strings"
 	"time"
 
 	"c2FmZQ/internal/crypto"
@@ -543,4 +546,74 @@ func (s *Storage) writeFile(ctx uint32, filename string, obj interface{}) (retEr
 	}
 
 	return nil
+}
+
+// EditDataFile opens a file in a text editor.
+func (s *Storage) EditDataFile(filename string, obj interface{}) (retErr error) {
+	commit, err := s.OpenForUpdate(filename, obj)
+	if err != nil {
+		return err
+	}
+	defer commit(false, &retErr)
+
+	f, err := os.CreateTemp("/dev/shm", "edit-*")
+	if err != nil {
+		return err
+	}
+	defer func() { os.Remove(f.Name()) }()
+	enc := json.NewEncoder(f)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(obj); err != nil {
+		f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	var bin string
+	for _, ed := range []string{os.Getenv("EDITOR"), "vim", "vi", "nano"} {
+		if ed == "" {
+			continue
+		}
+		if bin, err = exec.LookPath(ed); err == nil {
+			break
+		}
+		log.Debugf("LookPath(%q): %v", ed, err)
+		continue
+
+	}
+	if bin == "" {
+		return errors.New("cannot find any text editor")
+	}
+	for {
+		cmd := exec.Command(bin, f.Name())
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			return err
+		}
+
+		// Clear the object before unmarshalling into it again.
+		data := reflect.Indirect(reflect.ValueOf(obj))
+		data.Set(reflect.Zero(data.Type()))
+
+		in, err := os.Open(f.Name())
+		if err != nil {
+			return err
+		}
+		if err := json.NewDecoder(in).Decode(obj); err != nil {
+			in.Close()
+			fmt.Fprintf(os.Stderr, "JSON: %v\n", err)
+			fmt.Printf("\nRetry (Y/n) ? ")
+			reply, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+			if reply = strings.ToLower(strings.TrimSpace(reply)); reply == "n" {
+				return errors.New("aborted")
+			}
+			continue
+		}
+		in.Close()
+		break
+	}
+	return commit(true, nil)
 }

@@ -24,8 +24,8 @@ var (
 
 func main() {
 	app := &cli.App{
-		Name:     "debug",
-		Usage:    "Access debug information from the c2FmZQ database.",
+		Name:     "inspect",
+		Usage:    "Access internal information from the c2FmZQ database.",
 		HideHelp: true,
 		Flags: []cli.Flag{
 			&cli.StringFlag{
@@ -41,8 +41,8 @@ func main() {
 			&cli.IntFlag{
 				Name:        "verbose",
 				Aliases:     []string{"v"},
-				Value:       3,
-				DefaultText: "3 (debug)",
+				Value:       2,
+				DefaultText: "2 (info)",
 				Usage:       "The level of logging verbosity: 1:Error 2:Info 3:Debug",
 				Destination: &flagLogLevel,
 			},
@@ -100,6 +100,12 @@ func main() {
 						Required: true,
 					},
 				},
+			},
+			&cli.Command{
+				Name:    "quotas",
+				Aliases: []string{"quota"},
+				Usage:   "Edit quotas.",
+				Action:  editQuotas,
 			},
 		},
 	}
@@ -253,4 +259,12 @@ func decryptFile(c *cli.Context) error {
 		log.Infof("Decrypted %s to %s", fn, out.Name())
 	}
 	return nil
+}
+
+func editQuotas(c *cli.Context) error {
+	db, err := initDB(c)
+	if err != nil {
+		return err
+	}
+	return db.EditQuotas()
 }

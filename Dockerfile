@@ -10,19 +10,24 @@ RUN go mod download
 
 ADD c2FmZQ /app/go/src/c2FmZQ
 RUN go install ./c2FmZQ-server
+RUN go install ./c2FmZQ-server/inspect
 
 FROM alpine:3.13
 RUN apk update && apk upgrade
 RUN apk add --no-cache libsodium=1.0.18-r0
 RUN mkdir -p /app/bin
-COPY --from=build /go/bin/c2FmZQ-server /app/bin/
+COPY --from=build /go/bin/c2FmZQ-server /go/bin/inspect /app/bin/
 WORKDIR /app
 
 EXPOSE 80 443
 VOLUME ["/data", "/secrets"]
 
-ENTRYPOINT ["/app/bin/c2FmZQ-server", "-db=/data"]
+ENV C2FMZQ_PASSPHRASE_FILE=/secrets/passphrase
+ENV C2FMZQ_DATABASE=/data
+ENV PATH=/app/bin:$PATH
+
+ENTRYPOINT ["/app/bin/c2FmZQ-server"]
 # For HTTPS
-CMD ["-address=:443", "-passphrase-file=/secrets/c2FmZQ-passphrase", "-tlskey=/secrets/privkey.pem", "-tlscert=/secrets/fullchain.pem"]
+CMD ["-address=:443", "-tlskey=/secrets/privkey.pem", "-tlscert=/secrets/fullchain.pem"]
 # For HTTP
-#CMD ["-address=:80", "-passphrase-file=/secrets/c2FmZQ-passphrase"]
+#CMD ["-address=:80"]
