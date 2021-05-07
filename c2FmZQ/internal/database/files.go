@@ -282,10 +282,18 @@ type MoveFileParams struct {
 func (d *Database) MoveFile(user User, p MoveFileParams) (retErr error) {
 	defer recordLatency("MoveFile")()
 
+	var (
+		commit   func(bool, *error) error
+		fileSets []*FileSet
+		err      error
+	)
 	if p.SetTo == p.SetFrom && p.AlbumIDTo == p.AlbumIDFrom {
-		return errors.New("src and dest are the same")
+		p.IsMoving = false
+		c, fs, e := d.fileSetForUpdate(user, p.SetFrom, p.AlbumIDFrom)
+		commit, fileSets, err = c, []*FileSet{fs, fs}, e
+	} else {
+		commit, fileSets, err = d.fileSetsForUpdate(user, []string{p.SetTo, p.SetFrom}, []string{p.AlbumIDTo, p.AlbumIDFrom})
 	}
-	commit, fileSets, err := d.fileSetsForUpdate(user, []string{p.SetTo, p.SetFrom}, []string{p.AlbumIDTo, p.AlbumIDFrom})
 	if err != nil {
 		log.Errorf("fileSetsForUpdate(%q, {%q, %q}, {%q, %q}) failed: %v",
 			user.Email, p.SetTo, p.SetFrom, p.AlbumIDTo, p.AlbumIDFrom, err)

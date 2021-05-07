@@ -99,6 +99,7 @@ func (s *Storage) Lock(fn string) error {
 	for {
 		f, err := os.OpenFile(lockf, os.O_WRONLY|os.O_CREATE|os.O_EXCL|os.O_SYNC, 0600)
 		if errors.Is(err, os.ErrExist) {
+			log.Debugf("waiting for %s", lockf)
 			tryToRemoveStaleLock(lockf, deadline)
 			time.Sleep(time.Duration(50+rand.Int()%100) * time.Millisecond)
 			continue
@@ -145,7 +146,7 @@ func (s *Storage) Unlock(fn string) error {
 func (s *Storage) UnlockMany(filenames []string) error {
 	sorted := make([]string, len(filenames))
 	copy(sorted, filenames)
-	sort.Sort(sort.Reverse(sort.StringSlice(filenames)))
+	sort.Sort(sort.Reverse(sort.StringSlice(sorted)))
 	for _, f := range sorted {
 		if err := s.Unlock(f); err != nil {
 			return err

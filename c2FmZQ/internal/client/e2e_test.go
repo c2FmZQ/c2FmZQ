@@ -89,7 +89,7 @@ func TestRecovery(t *testing.T) {
 func TestImportExportSync(t *testing.T) {
 	c, url, done := startServer(t)
 	defer done()
-	t.Log("CLIENT LOGIN")
+	t.Log("CLIENT CreateAccount")
 	if err := c.CreateAccount(url, "alice@", "pass", true); err != nil {
 		t.Fatalf("CreateAccount: %v", err)
 	}
@@ -98,20 +98,20 @@ func TestImportExportSync(t *testing.T) {
 	if err := makeImages(testdir, 0, 10); err != nil {
 		t.Fatalf("makeImages: %v", err)
 	}
-	t.Log("CLIENT IMPORT *")
+	t.Log("CLIENT Import *")
 	if n, err := c.ImportFiles([]string{filepath.Join(testdir, "*")}, "gallery"); err != nil {
 		t.Errorf("c.ImportFiles: %v", err)
 	} else if want, got := 10, n; want != got {
 		t.Errorf("Unexpected ImportFiles result. Want %d, got %d", want, got)
 	}
-	t.Log("CLIENT IMPORT *.jpg")
+	t.Log("CLIENT Import *0.jpg")
 	if n, err := c.ImportFiles([]string{filepath.Join(testdir, "*0.jpg")}, "gallery"); err != nil {
 		t.Errorf("c.ImportFiles: %v", err)
 	} else if want, got := 0, n; want != got {
 		t.Errorf("Unexpected ImportFiles result. Want %d, got %d", want, got)
 	}
 
-	t.Log("CLIENT LIST gallery/*")
+	t.Log("CLIENT ListFiles gallery/*")
 	if err := c.ListFiles([]string{"gallery/*"}, client.GlobOptions{}); err != nil {
 		t.Errorf("c.ListFiles: %v", err)
 	}
@@ -120,41 +120,41 @@ func TestImportExportSync(t *testing.T) {
 	if err := os.Mkdir(exportDir, 0700); err != nil {
 		t.Fatalf("os.Mkdir: %v", err)
 	}
-	t.Log("CLIENT EXPORT gallery/*")
+	t.Log("CLIENT Export gallery/*")
 	if n, err := c.ExportFiles([]string{"gallery/*"}, exportDir); err != nil {
 		t.Errorf("c.ExportFiles: %v", err)
 	} else if want, got := 10, n; want != got {
 		t.Errorf("Unexpected ExportFiles result. Want %d, got %d", want, got)
 	}
 
-	t.Log("CLIENT SYNC dryrun")
+	t.Log("CLIENT Sync dryrun")
 	if err := c.Sync(true); err != nil {
 		t.Errorf("c.Sync: %v", err)
 	}
-	t.Log("CLIENT SYNC")
+	t.Log("CLIENT Sync")
 	if err := c.Sync(false); err != nil {
 		t.Errorf("c.Sync: %v", err)
 	}
 
-	t.Log("CLIENT GETUPDATES")
+	t.Log("CLIENT GetUpdates")
 	if err := c.GetUpdates(false); err != nil {
 		t.Errorf("c.GetUpdates: %v", err)
 	}
 
-	t.Log("CLIENT FREE gallery/*")
+	t.Log("CLIENT Free gallery/*")
 	if n, err := c.Free([]string{"gallery/*"}, client.GlobOptions{}); err != nil {
 		t.Errorf("c.Free: %v", err)
 	} else if want, got := 10, n; want != got {
 		t.Errorf("Unexpected Free result. Want %d, got %d", want, got)
 	}
 
-	t.Log("CLIENT PULL gallery/*0.jpg")
+	t.Log("CLIENT Pull gallery/*0.jpg")
 	if n, err := c.Pull([]string{"gallery/*0.jpg"}, client.GlobOptions{}); err != nil {
 		t.Errorf("c.Pull: %v", err)
 	} else if want, got := 1, n; want != got {
 		t.Errorf("Unexpected Pull result. Want %d, got %d", want, got)
 	}
-	t.Log("CLIENT PULL gallery/*")
+	t.Log("CLIENT Pull gallery/*")
 	if n, err := c.Pull([]string{"gallery/*"}, client.GlobOptions{}); err != nil {
 		t.Errorf("c.Pull: %v", err)
 	} else if want, got := 9, n; want != got {
@@ -162,10 +162,10 @@ func TestImportExportSync(t *testing.T) {
 	}
 }
 
-func TestCopyMoveDelete(t *testing.T) {
+func TestCopyMoveDeleteFiles(t *testing.T) {
 	c, url, done := startServer(t)
 	defer done()
-	t.Log("CLIENT LOGIN")
+	t.Log("CLIENT CreateAccount")
 	if err := c.CreateAccount(url, "alice@", "pass", true); err != nil {
 		t.Fatalf("CreateAccount: %v", err)
 	}
@@ -174,24 +174,24 @@ func TestCopyMoveDelete(t *testing.T) {
 	if err := makeImages(testdir, 0, 5); err != nil {
 		t.Fatalf("makeImages: %v", err)
 	}
-	t.Log("CLIENT IMPORT")
+	t.Log("CLIENT Import")
 	if n, err := c.ImportFiles([]string{filepath.Join(testdir, "*")}, "gallery"); err != nil {
 		t.Errorf("c.ImportFiles: %v", err)
 	} else if want, got := 5, n; want != got {
 		t.Errorf("Unexpected ImportFiles result. Want %d, got %d", want, got)
 	}
 
-	t.Log("CLIENT ADDALBUMS alpha beta charlie")
+	t.Log("CLIENT AddAlbums alpha beta charlie")
 	if err := c.AddAlbums([]string{"alpha", "beta", "charlie"}); err != nil {
 		t.Fatalf("AddAlbums: %v", err)
 	}
 
-	t.Log("CLIENT COPY gallery/image00[0-1].jpg -> alpha")
+	t.Log("CLIENT Copy gallery/image00[0-1].jpg -> alpha")
 	if err := c.Copy([]string{"gallery/image00[0-1].jpg"}, "alpha"); err != nil {
 		t.Fatalf("c.Copy: %v", err)
 	}
 
-	t.Log("CLIENT MOVE gallery/image00[2-3].jpg -> beta")
+	t.Log("CLIENT Move gallery/image00[2-3].jpg -> beta")
 	if err := c.Move([]string{"gallery/image00[2-3].jpg"}, "beta"); err != nil {
 		t.Fatalf("c.Move: %v", err)
 	}
@@ -215,10 +215,10 @@ func TestCopyMoveDelete(t *testing.T) {
 		t.Fatalf("globAll: %v", err)
 	}
 	if diff := deep.Equal(want, got); diff != nil {
-		t.Fatalf("Unexpected file list. Diff: %v", diff)
+		t.Fatalf("Unexpected file list. Want %#v, got %#v, diff: %v", want, got, diff)
 	}
 
-	t.Log("CLIENT DELETE alpha/image000.jpg gallery/image004.jpg")
+	t.Log("CLIENT Delete alpha/image000.jpg gallery/image004.jpg")
 	if err := c.Delete([]string{"alpha/image000.jpg", "gallery/image004.jpg"}); err != nil {
 		t.Fatalf("c.Delete: %v", err)
 	}
@@ -241,10 +241,10 @@ func TestCopyMoveDelete(t *testing.T) {
 		t.Fatalf("globAll: %v", err)
 	}
 	if diff := deep.Equal(want, got); diff != nil {
-		t.Fatalf("Unexpected file list. Diff: %v", diff)
+		t.Fatalf("Unexpected file list. Want %#v, got %#v, diff: %v", want, got, diff)
 	}
 
-	t.Log("CLIENT DELETE .trash/*")
+	t.Log("CLIENT Delete .trash/*")
 	if err := c.Delete([]string{".trash/*"}); err != nil {
 		t.Fatalf("c.Delete: %v", err)
 	}
@@ -265,21 +265,21 @@ func TestCopyMoveDelete(t *testing.T) {
 		t.Fatalf("globAll: %v", err)
 	}
 	if diff := deep.Equal(want, got); diff != nil {
-		t.Fatalf("Unexpected file list. Diff: %v", diff)
+		t.Fatalf("Unexpected file list. Want %#v, got %#v, diff: %v", want, got, diff)
 	}
 
 	// Delete alpha should fail because it's not empty.
-	t.Log("CLIENT DELETE alpha (should fail)")
+	t.Log("CLIENT Delete alpha (should fail)")
 	if err := c.Delete([]string{"alpha"}); err == nil {
 		t.Fatal("c.Delete succeeded unexpectedly.")
 	}
-	t.Log("CLIENT DELETE charlie")
+	t.Log("CLIENT Delete charlie")
 	// Delete charlie should succeed because it is empty.
 	if err := c.Delete([]string{"charlie"}); err != nil {
 		t.Fatalf("c.Delete: %v", err)
 	}
 
-	t.Log("CLIENT SYNC")
+	t.Log("CLIENT Sync")
 	if err := c.Sync(false); err != nil {
 		t.Fatalf("c.Sync: %v", err)
 	}
@@ -299,7 +299,48 @@ func TestCopyMoveDelete(t *testing.T) {
 		t.Fatalf("globAll: %v", err)
 	}
 	if diff := deep.Equal(want, got); diff != nil {
-		t.Fatalf("Unexpected file list. Diff: %v", diff)
+		t.Fatalf("Unexpected file list. Want %#v, got %#v, diff: %v", want, got, diff)
+	}
+
+	t.Log("CLIENT Move gallery/image000.jpg -> gallery/foo.jpg")
+	if err := c.Move([]string{"gallery/image000.jpg"}, "gallery/foo.jpg"); err != nil {
+		t.Fatalf("c.Move: %v", err)
+	}
+	t.Log("CLIENT Move gallery/foo.jpg -> beta/bar.jpg")
+	if err := c.Move([]string{"gallery/foo.jpg"}, "beta/bar.jpg"); err != nil {
+		t.Fatalf("c.Move: %v", err)
+	}
+	t.Log("CLIENT Copy gallery/image001.jpg -> gallery/abc.jpg (should fail)")
+	if err := c.Copy([]string{"gallery/image001.jpg"}, "gallery/abc.jpg"); err == nil {
+		t.Fatal("c.Copy succeeded unexpectedly")
+	}
+	t.Log("CLIENT Copy gallery/image001.jpg -> beta/xyz.jpg")
+	if err := c.Copy([]string{"gallery/image001.jpg"}, "beta/xyz.jpg"); err != nil {
+		t.Fatalf("c.Copy: %v", err)
+	}
+
+	t.Log("CLIENT Sync")
+	if err := c.Sync(false); err != nil {
+		t.Fatalf("c.Sync: %v", err)
+	}
+
+	want = []string{
+		".trash",
+		"alpha",
+		"alpha/image001.jpg",
+		"beta",
+		"beta/bar.jpg",
+		"beta/image002.jpg",
+		"beta/image003.jpg",
+		"beta/xyz.jpg",
+		"gallery",
+		"gallery/image001.jpg",
+	}
+	if got, err = globAll(c); err != nil {
+		t.Fatalf("globAll: %v", err)
+	}
+	if diff := deep.Equal(want, got); diff != nil {
+		t.Fatalf("Unexpected file list. Want %#v, got %#v, Diff: %v", want, got, diff)
 	}
 }
 
@@ -323,7 +364,7 @@ func TestNestedDirectories(t *testing.T) {
 	}
 
 	t.Log("AddAlbums a/b/c/d")
-	if err := c.AddAlbums([]string{"a/b/c/d"}); err != nil {
+	if err := c.AddAlbums([]string{"a/b/c/d", "a/b/e/f"}); err != nil {
 		t.Fatalf("AddAlbums: %v", err)
 	}
 
@@ -348,6 +389,8 @@ func TestNestedDirectories(t *testing.T) {
 		"a/b",
 		"a/b/c LOCAL",
 		"a/b/c/d",
+		"a/b/e LOCAL",
+		"a/b/e/f",
 		"a/b/image000.jpg",
 		"gallery",
 		"gallery/image000.jpg",
@@ -357,7 +400,40 @@ func TestNestedDirectories(t *testing.T) {
 		t.Fatalf("globAll: %v", err)
 	}
 	if diff := deep.Equal(want, got); diff != nil {
-		t.Fatalf("Unexpected file list. Diff: %v", diff)
+		t.Fatalf("Unexpected file list. Want %#v, got %#v, diff: %v", want, got, diff)
+	}
+
+	t.Log("Move a/b/c/d -> a/b/e")
+	if err := c.Move([]string{"a/b/c/d"}, "a/b/e"); err != nil {
+		t.Fatalf("c.Move: %v", err)
+	}
+	t.Log("Copy gallery/* -> a")
+	if err := c.Copy([]string{"gallery/*"}, "a"); err != nil {
+		t.Fatalf("c.Move: %v", err)
+	}
+
+	t.Log("Sync")
+	if err := c.Sync(false); err != nil {
+		t.Fatalf("c.Sync: %v", err)
+	}
+
+	want = []string{
+		".trash",
+		"a",
+		"a/b",
+		"a/b/e",
+		"a/b/e/d",
+		"a/b/e/f",
+		"a/b/image000.jpg",
+		"a/image000.jpg",
+		"gallery",
+		"gallery/image000.jpg",
+	}
+	if got, err = globAll(c); err != nil {
+		t.Fatalf("globAll: %v", err)
+	}
+	if diff := deep.Equal(want, got); diff != nil {
+		t.Fatalf("Unexpected file list. Want %#v, got %#v, diff: %v", want, got, diff)
 	}
 }
 

@@ -32,5 +32,4 @@ func TestDecryptHeader(t *testing.T) {
 	if want, got := header, dec; !reflect.DeepEqual(want, got) {
 		t.Errorf("DecryptHeader returned unexpected result. Want %#v, got %#v", want, got)
 	}
-
 }

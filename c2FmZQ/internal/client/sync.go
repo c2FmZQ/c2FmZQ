@@ -417,6 +417,14 @@ func (c *Client) diff() (*albumDiffs, error) {
 				sa.file = f
 				fileChanges[fn].add = append(fileChanges[fn].add, sa)
 			}
+			// Headers changed?
+			if rl != nil && rl[sa] != nil && rl[sa].Headers != f.Headers {
+				if fileChanges[fn] == nil {
+					fileChanges[fn] = &fileChange{}
+				}
+				sa.file = f
+				fileChanges[fn].add = append(fileChanges[fn].add, sa)
+			}
 		}
 	}
 	for fn, rl := range remoteFileLocations {
