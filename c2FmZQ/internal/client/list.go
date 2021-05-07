@@ -127,7 +127,17 @@ func (n *node) find(name string, create bool) *node {
 }
 
 func (n *node) insertDir(name, fileSet, set string, sk stingle.SecretKey, album *stingle.Album, local bool) {
-	nn := n.find(name, true)
+	var nn *node
+	for i := 0; ; i++ {
+		nodeName := name
+		if i > 0 {
+			nodeName = fmt.Sprintf("%s (%d)", name, i)
+		}
+		nn = n.find(nodeName, true)
+		if nn.dir == nil && nn.file == nil {
+			break
+		}
+	}
 	nn.local = local
 	nn.dir = &dir{
 		fileSet: fileSet,
@@ -138,7 +148,17 @@ func (n *node) insertDir(name, fileSet, set string, sk stingle.SecretKey, album 
 }
 
 func (n *node) insertFile(name string, f *stingle.File, hdrs []stingle.Header, fileSet, set string, album *stingle.Album, local bool) {
-	nn := n.find(name, true)
+	var nn *node
+	for i := 0; ; i++ {
+		nodeName := name
+		if i > 0 {
+			nodeName = fmt.Sprintf("%s (%d)", name, i)
+		}
+		nn = n.find(nodeName, true)
+		if nn.dir == nil && nn.file == nil {
+			break
+		}
+	}
 	nn.local = local
 	nn.file = &file{
 		f:       f,
@@ -150,6 +170,13 @@ func (n *node) insertFile(name string, f *stingle.File, hdrs []stingle.Header, f
 }
 
 func sanitize(s string) string {
+	if s == "" {
+		s = "(noname)"
+	} else if s == "." {
+		s = "(dot)"
+	} else if s == ".." {
+		s = "(dotdot)"
+	}
 	return strings.Map(func(r rune) rune {
 		if !unicode.IsPrint(r) {
 			return unicode.ReplacementChar
@@ -200,8 +227,14 @@ func (c *Client) glob(pattern string, opt GlobOptions) ([]ListItem, error) {
 	if err := c.storage.ReadDataFile(c.fileHash(albumList), &al); err != nil {
 		return nil, fmt.Errorf("albumList: %w", err)
 	}
-	for _, album := range al.Albums {
-		local := al.RemoteAlbums[album.AlbumID] == nil
+	var albumIDs []string
+	for albumID := range al.Albums {
+		albumIDs = append(albumIDs, albumID)
+	}
+	sort.Strings(albumIDs)
+	for _, albumID := range albumIDs {
+		album := al.Albums[albumID]
+		local := al.RemoteAlbums[albumID] == nil
 		ask, err := album.SK(c.SecretKey())
 		if err != nil {
 			return nil, err
@@ -226,7 +259,13 @@ func (c *Client) globStep(parent string, g *glob, n *node, li *[]ListItem) error
 		if err := c.storage.ReadDataFile(c.fileHash(n.dir.fileSet), &fs); err != nil {
 			return err
 		}
-		for _, f := range fs.Files {
+		var files []string
+		for file := range fs.Files {
+			files = append(files, file)
+		}
+		sort.Strings(files)
+		for _, file := range files {
+			f := fs.Files[file]
 			local := fs.RemoteFiles[f.File] == nil
 			hdrs, err := stingle.DecryptBase64Headers(f.Headers, n.dir.sk)
 			if err != nil {

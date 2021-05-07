@@ -30,6 +30,9 @@ func (c *Client) AddAlbums(names []string) error {
 }
 
 func (c *Client) addAlbum(name string) (*stingle.Album, error) {
+	if name == "" || name == "." {
+		return nil, fmt.Errorf("name is not allowed: %q", name)
+	}
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
 		return nil, err
