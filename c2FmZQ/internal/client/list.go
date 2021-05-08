@@ -243,7 +243,11 @@ func (c *Client) glob(pattern string, opt GlobOptions) ([]ListItem, error) {
 		if err != nil {
 			return nil, err
 		}
-		root.insertDir(sanitize(md.Name), albumPrefix+album.AlbumID, stingle.AlbumSet, ask, album, local)
+		name := md.Name
+		if album.IsShared == "1" && album.IsOwner != "1" {
+			name = path.Join("shared", name)
+		}
+		root.insertDir(sanitize(name), albumPrefix+album.AlbumID, stingle.AlbumSet, ask, album, local)
 	}
 
 	var out []ListItem

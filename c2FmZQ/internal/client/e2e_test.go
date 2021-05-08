@@ -752,27 +752,42 @@ func TestSharing(t *testing.T) {
 		if err := client.GetUpdates(false); err != nil {
 			t.Fatalf("%s.GetUpdates: %v", n, err)
 		}
-		want := []string{
-			".trash",
-			"alpha",
-			"alpha/image000.jpg",
-			"alpha/image001.jpg",
-			"alpha/image002.jpg",
-			"alpha/image003.jpg",
-			"alpha/image004.jpg",
-			"gallery",
+		var want []string
+		if n == "alice" {
+			want = []string{
+				".trash",
+				"alpha",
+				"alpha/image000.jpg",
+				"alpha/image001.jpg",
+				"alpha/image002.jpg",
+				"alpha/image003.jpg",
+				"alpha/image004.jpg",
+				"gallery",
+			}
+		} else {
+			want = []string{
+				".trash",
+				"gallery",
+				"shared LOCAL",
+				"shared/alpha",
+				"shared/alpha/image000.jpg",
+				"shared/alpha/image001.jpg",
+				"shared/alpha/image002.jpg",
+				"shared/alpha/image003.jpg",
+				"shared/alpha/image004.jpg",
+			}
 		}
 		got, err := globAll(client)
 		if err != nil {
 			t.Fatalf("globAll: %v", err)
 		}
 		if diff := deep.Equal(want, got); diff != nil {
-			t.Fatalf("Unexpected file list. Diff: %v", diff)
+			t.Fatalf("Unexpected file list. Want %#v, got %#v, diff: %v", want, got, diff)
 		}
 	}
 
 	t.Log("bob Leave")
-	if err := c["bob"].Leave([]string{"alpha"}); err != nil {
+	if err := c["bob"].Leave([]string{"shared/alpha"}); err != nil {
 		t.Fatalf("bob.Leave: %v", err)
 	}
 
@@ -885,14 +900,14 @@ func TestCopyPermission(t *testing.T) {
 			t.Fatalf("%s.GetUpdates: %v", n, err)
 		}
 	}
-	t.Log("bob Copy beta/* -> gallery   Should fail")
-	if err := c["bob"].Copy([]string{"beta/*"}, "gallery"); err == nil {
+	t.Log("bob Copy shared/beta/* -> gallery   Should fail")
+	if err := c["bob"].Copy([]string{"shared/beta/*"}, "gallery"); err == nil {
 		t.Fatal("bob.Copy succeeded unexpectedly")
 	} else {
 		t.Logf("Copy error: %v", err)
 	}
-	t.Log("bob Copy alpha/* -> gallery")
-	if err := c["bob"].Copy([]string{"alpha/*"}, "gallery"); err != nil {
+	t.Log("bob Copy shared/alpha/* -> gallery")
+	if err := c["bob"].Copy([]string{"shared/alpha/*"}, "gallery"); err != nil {
 		t.Fatalf("bob.Copy: %v", err)
 	}
 	t.Log("bob Sync")
