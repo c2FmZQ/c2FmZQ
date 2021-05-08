@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"math/rand"
 	"os"
 	"os/exec"
@@ -557,11 +558,19 @@ func (s *Storage) EditDataFile(filename string, obj interface{}) (retErr error) 
 	}
 	defer commit(false, &retErr)
 
-	f, err := os.CreateTemp("/dev/shm", "edit-*")
+	dir, err := ioutil.TempDir("/dev/shm", "edit-*")
 	if err != nil {
 		return err
 	}
-	defer func() { os.Remove(f.Name()) }()
+	defer func() { os.RemoveAll(dir) }()
+	if err := os.Chmod(dir, 0700); err != nil {
+		return err
+	}
+	fn := filepath.Join(dir, "datafile")
+	f, err := os.Create(fn)
+	if err != nil {
+		return err
+	}
 	enc := json.NewEncoder(f)
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(obj); err != nil {
@@ -587,7 +596,7 @@ func (s *Storage) EditDataFile(filename string, obj interface{}) (retErr error) 
 		return errors.New("cannot find any text editor")
 	}
 	for {
-		cmd := exec.Command(bin, f.Name())
+		cmd := exec.Command(bin, fn)
 		cmd.Stdin = os.Stdin
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
@@ -599,7 +608,7 @@ func (s *Storage) EditDataFile(filename string, obj interface{}) (retErr error) 
 		data := reflect.Indirect(reflect.ValueOf(obj))
 		data.Set(reflect.Zero(data.Type()))
 
-		in, err := os.Open(f.Name())
+		in, err := os.Open(fn)
 		if err != nil {
 			return err
 		}
