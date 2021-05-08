@@ -211,7 +211,7 @@ func (c *Client) applyFilesToMove(moves []MoveItem, al AlbumList, dryrun bool) e
 			if err != nil {
 				n = f.File
 			}
-			files = append(files, n)
+			files = append(files, sanitize(n))
 		}
 		c.Printf("* %s %s -> %s: %s\n", op, src, dst, strings.Join(files, ","))
 	}
@@ -266,7 +266,7 @@ func (c *Client) showAlbumsToSync(label string, albums []*stingle.Album) error {
 		if err != nil {
 			return err
 		}
-		c.Printf("* %s\n", name)
+		c.Printf("* %s\n", sanitize(name))
 	}
 	return nil
 }
@@ -298,7 +298,7 @@ func (c *Client) showFilesToSync(label string, files []FileLoc, al AlbumList) er
 		if err != nil {
 			return err
 		}
-		c.Printf("* %s/%s\n", d, n)
+		c.Printf("* %s/%s\n", sanitize(d), sanitize(n))
 	}
 	return nil
 }

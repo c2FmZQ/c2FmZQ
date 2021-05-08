@@ -213,7 +213,7 @@ func (c *Client) processAlbumFileUpdates(updates []stingle.File) (retErr error) 
 			al.Albums[a] = al.RemoteAlbums[a]
 			if album := al.Albums[a]; album != nil {
 				name, _ := album.Name(c.SecretKey())
-				log.Debugf("Album recovered %s (%s)", name, a)
+				log.Debugf("Album recovered %q (%s)", name, a)
 			}
 		}
 	}
@@ -277,10 +277,10 @@ func (c *Client) processDeleteAlbums(deletes []stingle.DeleteEvent) (retErr erro
 				return err
 			}
 			if d > ad && (a.IsOwner != "1" || (a.Equals(al.RemoteAlbums[del.AlbumID]) && !localChanges)) {
-				log.Debugf("Album deleted: %s (%s)", name, a.AlbumID)
+				log.Debugf("Album deleted: %q (%s)", name, a.AlbumID)
 				delete(al.Albums, del.AlbumID)
 			} else {
-				log.Debugf("Album NOT deleted: %s (%s)", name, a.AlbumID)
+				log.Debugf("Album NOT deleted: %q (%s)", name, a.AlbumID)
 			}
 		}
 		if a, ok := al.RemoteAlbums[del.AlbumID]; ok {
