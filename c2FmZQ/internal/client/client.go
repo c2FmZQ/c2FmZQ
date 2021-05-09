@@ -248,6 +248,92 @@ func (c *Client) download(file, set, thumb string) (io.ReadCloser, error) {
 	return resp.Body, nil
 }
 
+// DownloadGet returns a seekable download stream for the remote file.
+func (c *Client) DownloadGet(file, set string) (*SeekDownloader, error) {
+	if c.Account == nil {
+		return nil, ErrNotLoggedIn
+	}
+	if c.Account.ServerBaseURL == "" {
+		return nil, errors.New("ServerBaseURL is not set")
+	}
+	form := url.Values{}
+	form.Set("token", c.Account.Token)
+	form.Set("file", file)
+	form.Set("set", set)
+	sr, err := c.sendRequest("/v2/sync/getUrl", form, "")
+	if err != nil {
+		return nil, err
+	}
+	if sr.Status != "ok" {
+		return nil, sr
+	}
+	url, ok := sr.Part("url").(string)
+	if !ok {
+		return nil, fmt.Errorf("server did not return a url: %v", sr.Part("url"))
+	}
+
+	return &SeekDownloader{hc: c.hc, url: url}, nil
+}
+
+// SeekDownloader uses HTTP GET with a Range header to make the download
+// stream seekable.
+type SeekDownloader struct {
+	hc     *http.Client
+	url    string
+	offset int64
+	body   io.ReadCloser
+}
+
+func (d *SeekDownloader) Seek(offset int64, whence int) (int64, error) {
+	var newOffset int64
+	switch whence {
+	case io.SeekStart:
+		newOffset = offset
+	case io.SeekCurrent:
+		newOffset = d.offset + offset
+	case io.SeekEnd:
+		return 0, errors.New("seekend is not implemented")
+	}
+	if d.body != nil && d.offset == newOffset {
+		return d.offset, nil
+	}
+	d.offset = newOffset
+
+	log.Debugf("SEND GET %v offset: %d", d.url, d.offset)
+
+	req, err := http.NewRequest("GET", d.url, nil)
+	if err != nil {
+		return 0, err
+	}
+	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("Range", fmt.Sprintf("bytes=%d-", d.offset))
+	resp, err := d.hc.Do(req)
+	if err != nil {
+		return 0, err
+	}
+	if resp.StatusCode != http.StatusPartialContent || (resp.StatusCode == http.StatusOK && d.offset != 0) {
+		resp.Body.Close()
+		return 0, fmt.Errorf("request returned status code %d for offset %d", resp.StatusCode, d.offset)
+	}
+	d.body = resp.Body
+	return d.offset, nil
+}
+
+func (d *SeekDownloader) Read(b []byte) (n int, err error) {
+	if d.body == nil {
+		if _, err := d.Seek(0, io.SeekStart); err != nil {
+			return 0, err
+		}
+	}
+	n, err = d.body.Read(b)
+	d.offset += int64(n)
+	return
+}
+
+func (d *SeekDownloader) Close() error {
+	return d.body.Close()
+}
+
 func (c *Client) createEmptyFiles() (err error) {
 	if e := c.storage.CreateEmptyFile(c.fileHash(galleryFile), &FileSet{}); err == nil {
 		err = e

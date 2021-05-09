@@ -5,6 +5,8 @@ package stingle
 import (
 	"bytes"
 	"io"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/jamesruan/sodium"
@@ -31,27 +33,69 @@ func TestFileEncryption(t *testing.T) {
 
 	Pellentesque massa placerat duis ultricies lacus. Commodo viverra maecenas accumsan lacus vel. Mi in nulla posuere sollicitudin. Varius vel pharetra vel turpis nunc eget lorem. Leo in vitae turpis massa. Amet consectetur adipiscing elit pellentesque habitant morbi tristique senectus. Amet porttitor eget dolor morbi non arcu risus. Vulputate dignissim suspendisse in est ante in nibh mauris cursus. Cras semper auctor neque vitae tempus quam pellentesque nec. Fringilla urna porttitor rhoncus dolor. Et egestas quis ipsum suspendisse ultrices gravida dictum fusce ut. Diam sollicitudin tempor id eu. Quis hendrerit dolor magna eget est lorem. Id volutpat lacus laoreet non curabitur gravida arcu ac tortor. Velit ut tortor pretium viverra suspendisse potenti nullam ac. Quis lectus nulla at volutpat diam ut venenatis.`)
 
-	var encrypted bytes.Buffer
-	if err := EncryptHeader(&encrypted, header, sk.PublicKey()); err != nil {
+	fn := filepath.Join(t.TempDir(), "encrypted")
+	f, err := os.Create(fn)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if err := EncryptHeader(f, header, sk.PublicKey()); err != nil {
 		t.Fatalf("EncryptHeader: %v", err)
 	}
-	w := EncryptFile(&encrypted, header)
+	w := EncryptFile(f, header)
 	if _, err := io.Copy(w, bytes.NewBuffer(orig)); err != nil {
 		t.Fatalf("EncryptFile: %v", err)
 	}
 	w.Close()
 
-	header2, err := DecryptHeader(&encrypted, sk)
+	if f, err = os.Open(fn); err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer f.Close()
+
+	header2, err := DecryptHeader(f, sk)
 	if err != nil {
 		t.Fatalf("DecryptHeader: %v", err)
 	}
 
 	var decrypted bytes.Buffer
-	reader := DecryptFile(&encrypted, header2)
+	reader := DecryptFile(f, header2)
 	if _, err := io.Copy(&decrypted, reader); err != nil {
 		t.Fatalf("DecryptFile: %v", err)
 	}
 	if want, got := orig, decrypted.Bytes(); bytes.Compare(want, got) != 0 {
 		t.Errorf("Unexpected plaintext. Want %q, got %q", want, got)
+	}
+
+	if n, err := reader.Seek(6, io.SeekStart); n != 6 || err != nil {
+		t.Fatalf("Seek: Want: 6, nil, got: %d %v", n, err)
+	}
+	buf := make([]byte, 5)
+	if n, err := reader.Read(buf); n != 5 || err != nil {
+		t.Fatalf("Read: Want: 5, nil, got: %d %v", n, err)
+	}
+	if want, got := "ipsum", string(buf); want != got {
+		t.Errorf("Unexpected read. Want %q, got %q", want, got)
+	}
+
+	if n, err := reader.Seek(207, io.SeekStart); n != 207 || err != nil {
+		t.Fatalf("Seek: Want: 207, nil, got: %d %v", n, err)
+	}
+	buf = make([]byte, 6)
+	if n, err := reader.Read(buf); n != 6 || err != nil {
+		t.Fatalf("Read: Want: 5, nil, got: %d %v", n, err)
+	}
+	if want, got := "tortor", string(buf); want != got {
+		t.Errorf("Unexpected read. Want %q, got %q", want, got)
+	}
+
+	if n, err := reader.Seek(-10, io.SeekEnd); n != 4430 || err != nil {
+		t.Fatalf("Seek: Want: 4430, nil, got: %d %v", n, err)
+	}
+	buf = make([]byte, 10)
+	if n, err := reader.Read(buf); n != 10 || err != nil {
+		t.Fatalf("Read: Want: 10, nil, got: %d %v", n, err)
+	}
+	if want, got := "venenatis.", string(buf); want != got {
+		t.Errorf("Unexpected read. Want %q, got %q", want, got)
 	}
 }

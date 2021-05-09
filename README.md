@@ -180,6 +180,7 @@ COMMANDS:
      export  Decrypt and export files.
      import  Encrypt and import files.
    Mode:
+     mount  Mount as a fuse filesystem.
      shell  Run in shell mode.
    Share:
      change-permissions, chmod  Change the permissions on a shared directory (album).
@@ -201,3 +202,24 @@ GLOBAL OPTIONS:
    --server value             The API server base URL. [$C2FMZQ_API_SERVER]
    --auto-update              Automatically fetch metadata updates from the remote server before each command. (default: true)
 ```
+
+### Mount as fuse filesystem
+
+The c2FmZQ client can mount itself as a fuse filesystem. It supports read and
+write operations with some caveats.
+
+* Files can only be opened for writing when they are created, and all writes must
+  append. The file content is encrypted as it is written.
+* Once a new file is closed, it is read-only (regardless of file permissions).
+  The only way to modify a file after that is to delete or replace it. Renames
+  are OK.
+* While the fuse filesystem is mounted, data isn't automatically uploaded to the
+  cloud/remote server, but remote content will be streamed for reading if a local
+  copy doesn't exist.
+
+Bulk copy in and out of the fuse filesystem should work as expected with:
+
+* cp, cp -r, mv
+* tar
+* rsync, with --no-times
+

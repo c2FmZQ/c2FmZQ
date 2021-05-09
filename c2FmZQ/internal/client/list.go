@@ -34,10 +34,11 @@ type ListItem struct {
 // GlobOptions contains options for GlobFiles and ListFiles.
 type GlobOptions struct {
 	// Glob options
-	MatchDot   bool // Wildcards match dot at the beginning of dir/file names.
-	Quiet      bool // Don't show errors.
-	Recursive  bool // Traverse tree recursively.
-	ExactMatch bool // pattern is an exact name to match, i.e. no wildcards.
+	MatchDot             bool // Wildcards match dot at the beginning of dir/file names.
+	Quiet                bool // Don't show errors.
+	Recursive            bool // Traverse tree recursively.
+	ExactMatch           bool // pattern is an exact name to match, i.e. no wildcards.
+	ExactMatchExceptLast bool // pattern is an exact match except for the last element.
 
 	// List options
 	Long      bool // Show long output.
@@ -87,7 +88,7 @@ func (g *glob) matchFirstElem(n string) bool {
 	if !g.opt.MatchDot && !strings.HasPrefix(g.elems[0], ".") && strings.HasPrefix(n, ".") {
 		return false
 	}
-	if g.opt.ExactMatch {
+	if g.opt.ExactMatch || (g.opt.ExactMatchExceptLast && len(g.elems) > 1) {
 		return g.elems[0] == n
 	}
 	matched, _ := path.Match(g.elems[0], n)

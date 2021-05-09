@@ -15,6 +15,7 @@ import (
 	"golang.org/x/term"
 
 	"c2FmZQ/internal/client"
+	"c2FmZQ/internal/client/fuse"
 	"c2FmZQ/internal/crypto"
 	"c2FmZQ/internal/log"
 	"c2FmZQ/internal/secure"
@@ -95,6 +96,13 @@ func New() *App {
 			Usage:    "Run in shell mode.",
 			Action:   app.shell,
 			Category: "Mode",
+		},
+		&cli.Command{
+			Name:      "mount",
+			Usage:     "Mount as a fuse filesystem.",
+			ArgsUsage: "<dir>",
+			Action:    app.mount,
+			Category:  "Mode",
 		},
 		&cli.Command{
 			Name:      "create-account",
@@ -556,6 +564,17 @@ func (a *App) shell(ctx *cli.Context) error {
 	}
 }
 
+func (a *App) mount(ctx *cli.Context) error {
+	if err := a.init(ctx, false); err != nil {
+		return err
+	}
+	if ctx.Args().Len() != 1 {
+		cli.ShowSubcommandHelp(ctx)
+		return nil
+	}
+	return fuse.Mount(a.client, ctx.Args().Get(0))
+}
+
 func (a *App) passphrase(ctx *cli.Context) (string, error) {
 	if f := a.flagPassphraseFile; f != "" {
 		p, err := os.ReadFile(f)
@@ -935,7 +954,7 @@ func (a *App) copyFiles(ctx *cli.Context) error {
 		cli.ShowSubcommandHelp(ctx)
 		return nil
 	}
-	return a.client.Copy(args[:len(args)-1], args[len(args)-1])
+	return a.client.Copy(args[:len(args)-1], args[len(args)-1], false)
 }
 
 func (a *App) moveFiles(ctx *cli.Context) error {
@@ -947,7 +966,7 @@ func (a *App) moveFiles(ctx *cli.Context) error {
 		cli.ShowSubcommandHelp(ctx)
 		return nil
 	}
-	return a.client.Move(args[:len(args)-1], args[len(args)-1])
+	return a.client.Move(args[:len(args)-1], args[len(args)-1], false)
 }
 
 func (a *App) deleteFiles(ctx *cli.Context) error {
@@ -959,7 +978,7 @@ func (a *App) deleteFiles(ctx *cli.Context) error {
 		cli.ShowSubcommandHelp(ctx)
 		return nil
 	}
-	return a.client.Delete(args)
+	return a.client.Delete(args, false)
 }
 
 func (a *App) catFiles(ctx *cli.Context) error {

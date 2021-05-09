@@ -20,6 +20,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -100,13 +101,24 @@ func (s *Storage) Lock(fn string) error {
 	for {
 		f, err := os.OpenFile(lockf, os.O_WRONLY|os.O_CREATE|os.O_EXCL|os.O_SYNC, 0600)
 		if errors.Is(err, os.ErrExist) {
-			log.Debugf("waiting for %s", lockf)
+			if log.Level >= log.DebugLevel {
+				log.Debugf("waiting for %s", lockf)
+				if stack, err := os.ReadFile(lockf); err == nil {
+					log.Debugf("Lock holder is: %s", string(stack))
+				}
+			}
 			tryToRemoveStaleLock(lockf, deadline)
-			time.Sleep(time.Duration(50+rand.Int()%100) * time.Millisecond)
+			time.Sleep(time.Duration(100+rand.Int()%100) * time.Millisecond)
 			continue
 		}
 		if err != nil {
 			return err
+		}
+		log.Debugf("Locked %s", fn)
+		if log.Level >= log.DebugLevel {
+			buf := make([]byte, 4096)
+			n := runtime.Stack(buf, false)
+			f.Write(buf[:n])
 		}
 		if err := f.Close(); err != nil {
 			return err
@@ -140,6 +152,7 @@ func (s *Storage) Unlock(fn string) error {
 	if err := os.Remove(lockf); err != nil {
 		return err
 	}
+	log.Debugf("Unlocked %s", fn)
 	return nil
 }
 

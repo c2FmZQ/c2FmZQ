@@ -187,12 +187,12 @@ func TestCopyMoveDeleteFiles(t *testing.T) {
 	}
 
 	t.Log("CLIENT Copy gallery/image00[0-1].jpg -> alpha")
-	if err := c.Copy([]string{"gallery/image00[0-1].jpg"}, "alpha"); err != nil {
+	if err := c.Copy([]string{"gallery/image00[0-1].jpg"}, "alpha", false); err != nil {
 		t.Fatalf("c.Copy: %v", err)
 	}
 
 	t.Log("CLIENT Move gallery/image00[2-3].jpg -> beta")
-	if err := c.Move([]string{"gallery/image00[2-3].jpg"}, "beta"); err != nil {
+	if err := c.Move([]string{"gallery/image00[2-3].jpg"}, "beta", false); err != nil {
 		t.Fatalf("c.Move: %v", err)
 	}
 
@@ -219,7 +219,7 @@ func TestCopyMoveDeleteFiles(t *testing.T) {
 	}
 
 	t.Log("CLIENT Delete alpha/image000.jpg gallery/image004.jpg")
-	if err := c.Delete([]string{"alpha/image000.jpg", "gallery/image004.jpg"}); err != nil {
+	if err := c.Delete([]string{"alpha/image000.jpg", "gallery/image004.jpg"}, false); err != nil {
 		t.Fatalf("c.Delete: %v", err)
 	}
 
@@ -245,7 +245,7 @@ func TestCopyMoveDeleteFiles(t *testing.T) {
 	}
 
 	t.Log("CLIENT Delete .trash/*")
-	if err := c.Delete([]string{".trash/*"}); err != nil {
+	if err := c.Delete([]string{".trash/*"}, false); err != nil {
 		t.Fatalf("c.Delete: %v", err)
 	}
 
@@ -270,12 +270,12 @@ func TestCopyMoveDeleteFiles(t *testing.T) {
 
 	// Delete alpha should fail because it's not empty.
 	t.Log("CLIENT Delete alpha (should fail)")
-	if err := c.Delete([]string{"alpha"}); err == nil {
+	if err := c.Delete([]string{"alpha"}, false); err == nil {
 		t.Fatal("c.Delete succeeded unexpectedly.")
 	}
 	t.Log("CLIENT Delete charlie")
 	// Delete charlie should succeed because it is empty.
-	if err := c.Delete([]string{"charlie"}); err != nil {
+	if err := c.Delete([]string{"charlie"}, false); err != nil {
 		t.Fatalf("c.Delete: %v", err)
 	}
 
@@ -303,19 +303,19 @@ func TestCopyMoveDeleteFiles(t *testing.T) {
 	}
 
 	t.Log("CLIENT Move gallery/image000.jpg -> gallery/foo.jpg")
-	if err := c.Move([]string{"gallery/image000.jpg"}, "gallery/foo.jpg"); err != nil {
+	if err := c.Move([]string{"gallery/image000.jpg"}, "gallery/foo.jpg", false); err != nil {
 		t.Fatalf("c.Move: %v", err)
 	}
 	t.Log("CLIENT Move gallery/foo.jpg -> beta/bar.jpg")
-	if err := c.Move([]string{"gallery/foo.jpg"}, "beta/bar.jpg"); err != nil {
+	if err := c.Move([]string{"gallery/foo.jpg"}, "beta/bar.jpg", false); err != nil {
 		t.Fatalf("c.Move: %v", err)
 	}
 	t.Log("CLIENT Copy gallery/image001.jpg -> gallery/abc.jpg (should fail)")
-	if err := c.Copy([]string{"gallery/image001.jpg"}, "gallery/abc.jpg"); err == nil {
+	if err := c.Copy([]string{"gallery/image001.jpg"}, "gallery/abc.jpg", false); err == nil {
 		t.Fatal("c.Copy succeeded unexpectedly")
 	}
 	t.Log("CLIENT Copy gallery/image001.jpg -> beta/xyz.jpg")
-	if err := c.Copy([]string{"gallery/image001.jpg"}, "beta/xyz.jpg"); err != nil {
+	if err := c.Copy([]string{"gallery/image001.jpg"}, "beta/xyz.jpg", false); err != nil {
 		t.Fatalf("c.Copy: %v", err)
 	}
 
@@ -369,12 +369,12 @@ func TestNestedDirectories(t *testing.T) {
 	}
 
 	t.Log("Copy gallery/* -> a/b/c/d")
-	if err := c.Copy([]string{"gallery/*"}, "a/b/c/d"); err != nil {
+	if err := c.Copy([]string{"gallery/*"}, "a/b/c/d", false); err != nil {
 		t.Fatalf("c.Copy: %v", err)
 	}
 
 	t.Log("Move a/b/c/d/* -> a/b")
-	if err := c.Move([]string{"a/b/c/d/*"}, "a/b"); err != nil {
+	if err := c.Move([]string{"a/b/c/d/*"}, "a/b", false); err != nil {
 		t.Fatalf("c.Move: %v", err)
 	}
 
@@ -404,11 +404,11 @@ func TestNestedDirectories(t *testing.T) {
 	}
 
 	t.Log("Move a/b/c/d -> a/b/e")
-	if err := c.Move([]string{"a/b/c/d"}, "a/b/e"); err != nil {
+	if err := c.Move([]string{"a/b/c/d"}, "a/b/e", false); err != nil {
 		t.Fatalf("c.Move: %v", err)
 	}
 	t.Log("Copy gallery/* -> a")
-	if err := c.Copy([]string{"gallery/*"}, "a"); err != nil {
+	if err := c.Copy([]string{"gallery/*"}, "a", false); err != nil {
 		t.Fatalf("c.Move: %v", err)
 	}
 
@@ -456,11 +456,11 @@ func TestSyncTrash(t *testing.T) {
 		t.Errorf("Unexpected ImportFiles result. Want %d, got %d", want, got)
 	}
 	t.Log("CLIENT Copy gallery/* -> .trash")
-	if err := c.Copy([]string{"gallery/*"}, ".trash"); err == nil {
+	if err := c.Copy([]string{"gallery/*"}, ".trash", false); err == nil {
 		t.Fatalf("c.Copy to trash succeeded unexpectedly")
 	}
 	t.Log("CLIENT Move gallery/* -> .trash")
-	if err := c.Move([]string{"gallery/*"}, ".trash"); err != nil {
+	if err := c.Move([]string{"gallery/*"}, ".trash", false); err != nil {
 		t.Fatalf("Move to trash: %v", err)
 	}
 	t.Log("CLIENT Sync")
@@ -468,7 +468,7 @@ func TestSyncTrash(t *testing.T) {
 		t.Fatalf("c.Sync: %v", err)
 	}
 	t.Log("CLIENT Copy trash/* -> gallery")
-	if err := c.Copy([]string{".trash/*"}, "gallery"); err == nil {
+	if err := c.Copy([]string{".trash/*"}, "gallery", false); err == nil {
 		t.Fatalf("c.Copy from trash succeeded unexpectedly")
 	}
 	t.Log("CLIENT AddAlbums alpha beta")
@@ -476,11 +476,11 @@ func TestSyncTrash(t *testing.T) {
 		t.Fatalf("AddAlbums: %v", err)
 	}
 	t.Log("CLIENT Move trash/* -> alpha")
-	if err := c.Move([]string{".trash/*"}, "alpha"); err != nil {
+	if err := c.Move([]string{".trash/*"}, "alpha", false); err != nil {
 		t.Fatalf("Move from trash to alpha: %v", err)
 	}
 	t.Log("CLIENT Copy alpha/* -> beta")
-	if err := c.Copy([]string{"alpha/*"}, "beta"); err != nil {
+	if err := c.Copy([]string{"alpha/*"}, "beta", false); err != nil {
 		t.Fatalf("Copy from alpha to beta: %v", err)
 	}
 	t.Log("CLIENT Sync")
@@ -488,11 +488,11 @@ func TestSyncTrash(t *testing.T) {
 		t.Fatalf("c.Sync: %v", err)
 	}
 	t.Log("CLIENT Delete */image000.jpg")
-	if err := c.Delete([]string{"*/image000.jpg"}); err != nil {
+	if err := c.Delete([]string{"*/image000.jpg"}, false); err != nil {
 		t.Fatalf("c.Delete: %v", err)
 	}
 	t.Log("CLIENT Delete .trash/image000.jpg")
-	if err := c.Delete([]string{".trash/image000.jpg"}); err != nil {
+	if err := c.Delete([]string{".trash/image000.jpg"}, false); err != nil {
 		t.Fatalf("c.Delete: %v", err)
 	}
 	t.Log("CLIENT Sync")
@@ -597,7 +597,7 @@ func TestConcurrentMutations(t *testing.T) {
 		t.Fatalf("c2.AddAlbums: %v", err)
 	}
 	t.Log("CLIENT 2 Delete delta")
-	if err := c2.Delete([]string{"delta"}); err != nil {
+	if err := c2.Delete([]string{"delta"}, false); err != nil {
 		t.Fatalf("c2.Delete: %v", err)
 	}
 	t.Log("CLIENT 2 Import -> charlie")
@@ -607,7 +607,7 @@ func TestConcurrentMutations(t *testing.T) {
 		t.Errorf("Unexpected ImportFiles result. Want %d, got %d", want, got)
 	}
 	t.Log("CLIENT 2 Move alpha/image000.jpg charlie/image100.jpg -> beta")
-	if err := c2.Move([]string{"alpha/image000.jpg", "charlie/image100.jpg"}, "beta"); err != nil {
+	if err := c2.Move([]string{"alpha/image000.jpg", "charlie/image100.jpg"}, "beta", false); err != nil {
 		t.Fatalf("c2.Move: %v", err)
 	}
 	want = []string{
@@ -635,11 +635,11 @@ func TestConcurrentMutations(t *testing.T) {
 	}
 
 	t.Log("CLIENT 1 Move alpha/* -> delta")
-	if err := c1.Move([]string{"alpha/*"}, "delta"); err != nil {
+	if err := c1.Move([]string{"alpha/*"}, "delta", false); err != nil {
 		t.Fatalf("c1.Move: %v", err)
 	}
 	t.Log("CLIENT 1 Delete alpha beta")
-	if err := c1.Delete([]string{"alpha", "beta"}); err != nil {
+	if err := c1.Delete([]string{"alpha", "beta"}, false); err != nil {
 		t.Fatalf("c1.Delete: %v", err)
 	}
 	t.Log("CLIENT 1 Sync")
@@ -877,7 +877,7 @@ func TestCopyPermission(t *testing.T) {
 		t.Errorf("alice.ImportFiles: %v", err)
 	}
 	t.Log("alice Copy alpha/* -> beta")
-	if err := c["alice"].Copy([]string{"alpha/*"}, "beta"); err != nil {
+	if err := c["alice"].Copy([]string{"alpha/*"}, "beta", false); err != nil {
 		t.Fatalf("alice.Copy: %v", err)
 	}
 	t.Log("alice Sync")
@@ -901,13 +901,13 @@ func TestCopyPermission(t *testing.T) {
 		}
 	}
 	t.Log("bob Copy shared/beta/* -> gallery   Should fail")
-	if err := c["bob"].Copy([]string{"shared/beta/*"}, "gallery"); err == nil {
+	if err := c["bob"].Copy([]string{"shared/beta/*"}, "gallery", false); err == nil {
 		t.Fatal("bob.Copy succeeded unexpectedly")
 	} else {
 		t.Logf("Copy error: %v", err)
 	}
 	t.Log("bob Copy shared/alpha/* -> gallery")
-	if err := c["bob"].Copy([]string{"shared/alpha/*"}, "gallery"); err != nil {
+	if err := c["bob"].Copy([]string{"shared/alpha/*"}, "gallery", false); err != nil {
 		t.Fatalf("bob.Copy: %v", err)
 	}
 	t.Log("bob Sync")

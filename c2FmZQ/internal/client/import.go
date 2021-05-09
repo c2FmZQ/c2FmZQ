@@ -99,45 +99,64 @@ func (c *Client) ImportFiles(patterns []string, dir string) (int, error) {
 	return count, nil
 }
 
+func fileTypeForExt(ext string) uint8 {
+	switch ext {
+	case ".jpg", ".jpeg", ".png", ".gif", ".tiff", ".bmp", ".webp", ".svg":
+		return stingle.FileTypePhoto
+	case ".mp4", ".mov", ".webm", ".mkv", ".flv", ".vob", ".ogv", ".ogg", ".avi", ".mts",
+		".m2ts", ".ts", ".qt", ".wmv", ".yuv", ".rm", ".rmvb", ".m4p", ".m4v", ".mpg",
+		".mp2", ".mpeg", ".mpe", ".mpv", ".m2v", ".svi", ".3gp", ".3g2":
+		return stingle.FileTypeVideo
+	default:
+		return stingle.FileTypeGeneral
+	}
+}
+
 func (c *Client) importFile(file string, dst ListItem, pk stingle.PublicKey) error {
 	fi, err := os.Stat(file)
 	if err != nil {
 		return err
 	}
+
+	in, err := os.Open(file)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
 	_, fn := filepath.Split(file)
+	creationTime := time.Now()
+
 	hdrs := stingle.NewHeaders(fn)
 	hdrs[0].DataSize = fi.Size()
-
-	creationTime := time.Now()
-	switch ext := strings.ToLower(filepath.Ext(file)); ext {
-	case ".jpg", ".jpeg", ".png", ".gif", ".tiff", ".bmp", ".webp", ".svg":
-		hdrs[0].FileType = stingle.FileTypePhoto
-	case ".mp4", ".mov", ".webm", ".mkv", ".flv", ".vob", ".ogv", ".ogg", ".avi", ".mts",
-		".m2ts", ".ts", ".qt", ".wmv", ".yuv", ".rm", ".rmvb", ".m4p", ".m4v", ".mpg",
-		".mp2", ".mpeg", ".mpe", ".mpv", ".m2v", ".svi", ".3gp", ".3g2":
-		hdrs[0].FileType = stingle.FileTypeVideo
-	default:
-		hdrs[0].FileType = stingle.FileTypeGeneral
-	}
+	hdrs[0].FileType = fileTypeForExt(strings.ToLower(filepath.Ext(file)))
 	if hdrs[0].FileType == stingle.FileTypeVideo {
-		if dur, ct, err := videoMetadata(file); err == nil {
+		if dur, ct, err := videoMetadata(in); err == nil {
 			hdrs[0].VideoDuration = dur
 			if !ct.IsZero() {
 				creationTime = ct
 			}
 		}
 	}
-	if x, err := c.importExif(file); err == nil {
+	if _, err := in.Seek(0, io.SeekStart); err != nil {
+		return err
+	}
+
+	if x, err := exif.Decode(in); err == nil {
 		if t, err := x.DateTime(); err == nil {
 			creationTime = t
 		}
 	}
+	if _, err := in.Seek(0, io.SeekStart); err != nil {
+		return err
+	}
+
 	var thumbnail []byte
 	switch hdrs[0].FileType {
 	case stingle.FileTypeVideo:
-		thumbnail, err = c.videoThumbnail(file)
+		thumbnail, err = c.videoThumbnail(in)
 	case stingle.FileTypePhoto:
-		thumbnail, err = c.photoThumbnail(file)
+		thumbnail, err = c.photoThumbnail(in)
 	default:
 		thumbnail, err = c.genericThumbnail(file)
 	}
@@ -166,11 +185,10 @@ func (c *Client) importFile(file string, dst ListItem, pk stingle.PublicKey) err
 	if dst.Album != nil {
 		sFile.AlbumID = dst.Album.AlbumID
 	}
-	in, err := os.Open(file)
-	if err != nil {
+
+	if _, err := in.Seek(0, io.SeekStart); err != nil {
 		return err
 	}
-	defer in.Close()
 	if err := c.encryptFile(in, sFile.File, hdrs[0], pk, false); err != nil {
 		return err
 	}
@@ -233,8 +251,8 @@ func (c *Client) genericThumbnail(filename string) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func (c *Client) photoThumbnail(filename string) ([]byte, error) {
-	img, err := imaging.Open(filename, imaging.AutoOrientation(true))
+func (c *Client) photoThumbnail(file io.Reader) ([]byte, error) {
+	img, err := imaging.Decode(file, imaging.AutoOrientation(true))
 	if err != nil {
 		return nil, err
 	}
@@ -248,12 +266,13 @@ func (c *Client) photoThumbnail(filename string) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func (c *Client) videoThumbnail(file string) ([]byte, error) {
+func (c *Client) videoThumbnail(file io.Reader) ([]byte, error) {
 	bin, err := exec.LookPath("ffmpeg")
 	if err != nil {
 		return nil, err
 	}
-	cmd := exec.Command(bin, "-i", file, "-frames:v", "1", "-an", "-vf", "scale=320:240", "-f", "apng", "pipe:1")
+	cmd := exec.Command(bin, "-i", "pipe:0", "-frames:v", "1", "-an", "-vf", "scale=320:240", "-f", "apng", "pipe:1")
+	cmd.Stdin = file
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	b, err := cmd.Output()
@@ -264,7 +283,7 @@ func (c *Client) videoThumbnail(file string) ([]byte, error) {
 	return b, nil
 }
 
-func videoMetadata(file string) (duration int32, creationTime time.Time, err error) {
+func videoMetadata(file io.Reader) (duration int32, creationTime time.Time, err error) {
 	bin, err := exec.LookPath("ffprobe")
 	if err != nil {
 		return
@@ -277,7 +296,8 @@ func videoMetadata(file string) (duration int32, creationTime time.Time, err err
 			} `json:"tags"`
 		} `json:"streams"`
 	}
-	cmd := exec.Command(bin, "-show_streams", "-print_format", "json", file)
+	cmd := exec.Command(bin, "-show_streams", "-print_format", "json", "-")
+	cmd.Stdin = file
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	b, err := cmd.Output()

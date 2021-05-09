@@ -3,6 +3,7 @@ module c2FmZQ
 go 1.16
 
 require (
+	bazil.org/fuse v0.0.0-20200524192727-fb710f7dfd05
 	github.com/NYTimes/gziphandler v1.1.1
 	github.com/disintegration/imaging v1.6.2
 	github.com/go-test/deep v1.0.7

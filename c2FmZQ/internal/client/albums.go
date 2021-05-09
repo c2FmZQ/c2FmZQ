@@ -13,7 +13,7 @@ import (
 )
 
 func (c *Client) AddAlbums(names []string) error {
-	li, err := c.GlobFiles(names, GlobOptions{Quiet: true})
+	li, err := c.GlobFiles(names, GlobOptions{Quiet: true, ExactMatch: true})
 	if err != nil {
 		return err
 	}
@@ -165,9 +165,9 @@ func (c *Client) RenameAlbum(patterns []string, dest string) error {
 // of dest.
 //
 // A file can't exist with different names in the same directory.
-func (c *Client) Copy(patterns []string, dest string) error {
+func (c *Client) Copy(patterns []string, dest string, exact bool) error {
 	dest = strings.TrimSuffix(dest, "/")
-	si, err := c.GlobFiles(patterns, GlobOptions{})
+	si, err := c.GlobFiles(patterns, GlobOptions{ExactMatch: exact})
 	if err != nil {
 		return err
 	}
@@ -271,9 +271,9 @@ func (c *Client) Copy(patterns []string, dest string) error {
 // is the parent of dest.
 //
 // A file can't exist with different names in the same directory.
-func (c *Client) Move(patterns []string, dest string) error {
+func (c *Client) Move(patterns []string, dest string, exact bool) error {
 	dest = strings.TrimSuffix(dest, "/")
-	si, err := c.GlobFiles(patterns, GlobOptions{})
+	si, err := c.GlobFiles(patterns, GlobOptions{ExactMatch: exact})
 	if err != nil {
 		return err
 	}
@@ -295,12 +295,18 @@ func (c *Client) Move(patterns []string, dest string) error {
 		return c.renameDir(si[0], dest, true)
 	}
 
-	// If there is one source file and the destination doesn't exist, we're
-	// renaming a single file.
+	// If there is one source file and the destination is a file or doesn't
+	// exist, we're renaming a single file.
 	//
 	// The destination directory is the parent of the new file name.
 	var rename string
-	if len(si) == 1 && !si[0].IsDir && len(di) == 0 {
+	if len(si) == 1 && !si[0].IsDir && (len(di) == 0 || (len(di) == 1 && !di[0].IsDir)) {
+		if len(di) == 1 {
+			if err := c.Delete([]string{di[0].Filename}, true); err != nil {
+				return err
+			}
+			di = nil
+		}
 		dir, file := path.Split(dest)
 		if di, err = c.glob(dir, GlobOptions{ExactMatch: true}); err != nil {
 			return err
@@ -372,8 +378,8 @@ func (c *Client) Move(patterns []string, dest string) error {
 }
 
 // Delete moves files trash, or deletes them from trash.
-func (c *Client) Delete(patterns []string) error {
-	si, err := c.GlobFiles(patterns, GlobOptions{})
+func (c *Client) Delete(patterns []string, exact bool) error {
+	si, err := c.GlobFiles(patterns, GlobOptions{ExactMatch: exact})
 	if err != nil {
 		return err
 	}
@@ -518,7 +524,12 @@ func (c *Client) moveFiles(fromItems []ListItem, toItem ListItem, rename string,
 	defer commit(false, &retErr)
 
 	for _, item := range fromItems {
-		ff := item.FSFile
+		var ff stingle.File
+		if f, ok := fs[0].Files[item.FSFile.File]; ok && f != nil {
+			ff = *f
+		} else {
+			continue
+		}
 		d := toItem.Filename
 		if rename != "" {
 			d = path.Join(d, rename)
