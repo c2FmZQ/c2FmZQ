@@ -3,7 +3,6 @@ package client
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -19,8 +18,6 @@ import (
 	"c2FmZQ/internal/log"
 	"c2FmZQ/internal/stingle"
 )
-
-var errRetry = errors.New("try again")
 
 // FuseImport allows importing files via a fuse mount.
 //
@@ -140,10 +137,6 @@ func (iw *FuseImportWriter) Close() error {
 	if err := iw.w.Close(); err != nil {
 		return err
 	}
-	// Update the size.
-	if err := iw.updateSize(); err != nil {
-		return err
-	}
 	return iw.processNewFile()
 }
 
@@ -165,36 +158,6 @@ func (iw *FuseImportWriter) sk() (sk stingle.SecretKey, err error) {
 		sk = ask
 	}
 	return sk, nil
-}
-
-func (iw *FuseImportWriter) updateSize() (retErr error) {
-	log.Debugf("updateSize: size=%d", iw.size)
-	sk, err := iw.sk()
-	if err != nil {
-		return err
-	}
-	commit, fs, err := iw.c.fileSetForUpdate(iw.fs)
-	if err != nil {
-		return err
-	}
-	defer commit(false, &retErr)
-	file, ok := fs.Files[iw.sfile]
-	if !ok {
-		return fmt.Errorf("file is not in the fileset anymore: %s", iw.origFilename)
-	}
-	hdrs, err := stingle.DecryptBase64Headers(file.Headers, sk)
-	if err != nil {
-		return err
-	}
-	hdrs[0].DataSize = iw.size
-	encHdrs, err := stingle.EncryptBase64Headers(hdrs, sk.PublicKey())
-	if err != nil {
-		return err
-	}
-	file.Headers = encHdrs
-	fs.Files[iw.sfile] = file
-
-	return commit(true, nil)
 }
 
 func (iw *FuseImportWriter) processNewFile() (retErr error) {
