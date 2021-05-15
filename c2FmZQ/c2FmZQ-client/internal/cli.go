@@ -491,11 +491,15 @@ func (a *App) shell(ctx *cli.Context) error {
 			if err != nil {
 				return
 			}
-			if pos == 0 || line[pos-1] == ' ' {
+			var currentWord string
+			if len(args) > 0 {
+				currentWord = args[len(args)-1]
+			}
+			if line == "" || (line[len(line)-1] == ' ' && currentWord[len(currentWord)-1] != ' ') {
 				args = append(args, "")
+				currentWord = ""
 			}
 			var options []autoCompleteOption
-			currentWord := args[len(args)-1]
 			if len(args) == 1 {
 				options = a.commandOptions(a.cli.Commands, currentWord)
 			}
@@ -509,7 +513,10 @@ func (a *App) shell(ctx *cli.Context) error {
 				a.displayOptions(t, width, options)
 			}
 			prefix := a.commonPrefix(options)
-			replace := line[:pos-len(currentWord)] + options[0].name[:prefix]
+			replace := line[:pos-len(escape(currentWord))] + options[0].name[:prefix]
+			if prefix == len(options[0].name) && options[0].name[len(options[0].name)-1] != '/' {
+				replace += " "
+			}
 			newLine = replace + line[pos:]
 			newPos = len(replace)
 			ok = true

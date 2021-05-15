@@ -40,6 +40,20 @@ func (a *App) commandOptions(cmds []*cli.Command, currentWord string) []autoComp
 	return options
 }
 
+func escape(s string) string {
+	var out []rune
+	for _, c := range s {
+		switch c {
+		case '*', '?', '\\', '[', ' ':
+			out = append(out, '\\')
+			fallthrough
+		default:
+			out = append(out, c)
+		}
+	}
+	return string(out)
+}
+
 func (a *App) fileOptions(currentWord string) []autoCompleteOption {
 	li, err := a.client.GlobFiles([]string{currentWord + "*"}, client.GlobOptions{Quiet: true})
 	if err != nil {
@@ -56,7 +70,7 @@ func (a *App) fileOptions(currentWord string) []autoCompleteOption {
 			n += "/"
 			d += "/"
 		}
-		options = append(options, autoCompleteOption{name: n, display: d})
+		options = append(options, autoCompleteOption{name: escape(n), display: d})
 	}
 	return options
 }
