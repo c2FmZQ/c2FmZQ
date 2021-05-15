@@ -7,7 +7,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"io"
 
 	"golang.org/x/crypto/curve25519"
 	"golang.org/x/crypto/ed25519"
