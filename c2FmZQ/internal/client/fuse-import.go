@@ -19,7 +19,8 @@ import (
 	"c2FmZQ/internal/stingle"
 )
 
-// FuseImport allows importing files via a fuse mount.
+// StreamImport allows importing files via a stream, like writes from a fuse
+// filesystem.
 //
 // First, it creates an initial entry in the fileset, and returns a
 // io.WriteCloser. The io.WriteCloser is used to import the plaintext
@@ -27,7 +28,7 @@ import (
 //
 // When Close is called, the file is reprocessed to create a thumbnail,
 // record its size, etc.
-func (c *Client) FuseImport(name string, dst ListItem) (*FuseImportWriter, error) {
+func (c *Client) StreamImport(name string, dst ListItem) (*FuseImportWriter, error) {
 	if dst.Set == "" {
 		album, err := c.addAlbum(dst.Filename)
 		if err != nil {

@@ -62,23 +62,24 @@ func Mount(c *client.Client, mnt string) error {
 	return srv.Serve(initFS(c, srv, mnt))
 }
 
+// Unmount unmounts the client filesystem.
 func Unmount(mnt string) error {
 	mountsMutex.Lock()
-	f := mounts[mnt]
-	f.mutations.Wait()
-	delete(mounts, mnt)
-	mountsMutex.Unlock()
+	defer mountsMutex.Unlock()
+	if f, ok := mounts[mnt]; ok {
+		f.mutations.Wait()
+		delete(mounts, mnt)
+	}
 	//f.debug()
 	return fuse.Unmount(mnt)
 }
 
 func initFS(c *client.Client, srv *fs.Server, mnt string) *filesys {
 	f := &filesys{
-		c:          c,
-		fuse:       srv,
-		mountPoint: mnt,
-		nodes:      make(map[fuse.NodeID]fs.Node),
-		attrs:      make(map[string]fuse.Attr),
+		c:     c,
+		fuse:  srv,
+		nodes: make(map[fuse.NodeID]fs.Node),
+		attrs: make(map[string]fuse.Attr),
 	}
 	f.root = f.newDirNode("Node ROOT DIR")
 	f.root.nodeID = fuse.RootID
@@ -91,20 +92,30 @@ func initFS(c *client.Client, srv *fs.Server, mnt string) *filesys {
 	return f
 }
 
-type filesys struct {
-	c          *client.Client
-	fuse       *fs.Server
-	mountPoint string
-	root       *dirNode
+var _ fs.FS = (*filesys)(nil)
 
-	mu    sync.Mutex
+// filesys implements a fuse filesystem.
+type filesys struct {
+	c    *client.Client
+	fuse *fs.Server
+	root *dirNode
+
+	// mu guards nodes and attrs.
+	mu sync.Mutex
+	// nodes is used to map fuse.NodeID (the ID assigned by the fuse library
+	// to one of our nodes (*dirNode or *fileNode).
 	nodes map[fuse.NodeID]fs.Node
+	// attrs is used to keep track of node attributes while the filesystem
+	// is mounted. These attributes are not really meaningful in the client
+	// database, but they are necessary to make the fuse filesystem work
+	// properly. The cached attributes are not preserved between remounts.
 	attrs map[string]fuse.Attr
 
 	// Keeps track of ongoing mutations.
 	mutations sync.WaitGroup
 }
 
+// Root is called to obtain the Node for the file system root.
 func (f *filesys) Root() (fs.Node, error) {
 	return f.root, nil
 }
@@ -127,6 +138,7 @@ func (f *filesys) nodeByID(id fuse.NodeID) fs.Node {
 	return f.nodes[id]
 }
 
+// attr returns the cached attributes for a node.
 func (f *filesys) attr(file string) (fuse.Attr, bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -134,6 +146,7 @@ func (f *filesys) attr(file string) (fuse.Attr, bool) {
 	return a, ok
 }
 
+// setAttr caches the attributes for a node.
 func (f *filesys) setAttr(file string, a fuse.Attr) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -151,12 +164,19 @@ func (f *filesys) newFileNode(label string) *fileNode {
 	return &fileNode{node: node{label: label, f: f}}
 }
 
+// node contains the information common to all nodes.
 type node struct {
-	label  string
-	f      *filesys
-	item   client.ListItem
+	// Used to debugging. It is set when the node is created, and never
+	// changed again.
+	label string
+	// Points to the filesys that owns this node.
+	f *filesys
+	// The client's metadata for this need.
+	item client.ListItem
+	// The NodeID assigned to this node by the fuse library.
 	nodeID fuse.NodeID
 
+	// mu guards all the mutable fields.
 	mu sync.Mutex
 }
 
@@ -174,6 +194,7 @@ func (n *node) unlock() {
 	n.mu.Unlock()
 }
 
+// checkHeader is called for every incoming request, except ReleaseRequest.
 func (n *node) checkHeader(ctx context.Context, nn fs.Node, hdr fuse.Header) error {
 	if hdr.Uid != uint32(os.Getuid()) {
 		log.Errorf("checkHeader: UID doesn't match, %d != %d", hdr.Uid, os.Getuid())
@@ -195,10 +216,7 @@ func (n *node) checkHeader(ctx context.Context, nn fs.Node, hdr fuse.Header) err
 	return nil
 }
 
-var _ fs.Node = (*dirNode)(nil)
-var _ fs.HandleReadDirAller = (*dirNode)(nil)
-var _ fs.NodeCreater = (*dirNode)(nil)
-
+// dirNode represents a directory.
 type dirNode struct {
 	node
 
@@ -289,6 +307,8 @@ func (n *dirNode) updateLocked() {
 	}
 }
 
+var _ fs.Node = (*dirNode)(nil)
+
 // Attr returns the node's attributes.
 func (n *dirNode) Attr(ctx context.Context, a *fuse.Attr) error {
 	log.Debugf("Attr called on %s", n)
@@ -317,6 +337,8 @@ func (n *dirNode) attrLocked(_ context.Context, a *fuse.Attr) error {
 	n.f.setAttr(n.item.Filename, *a)
 	return nil
 }
+
+var _ fs.NodeSetattrer = (*dirNode)(nil)
 
 // Setattr receives attribute changes for the directory.
 func (n *dirNode) Setattr(ctx context.Context, req *fuse.SetattrRequest, resp *fuse.SetattrResponse) error {
@@ -348,6 +370,8 @@ func (n *dirNode) Setattr(ctx context.Context, req *fuse.SetattrRequest, resp *f
 	return nil
 }
 
+var _ fs.NodeRequestLookuper = (*dirNode)(nil)
+
 // Lookup looks for a specific file in the directory.
 func (n *dirNode) Lookup(ctx context.Context, req *fuse.LookupRequest, resp *fuse.LookupResponse) (fs.Node, error) {
 	log.Debugf("Lookup(%q) called on %s", req.Name, n)
@@ -364,6 +388,8 @@ func (n *dirNode) Lookup(ctx context.Context, req *fuse.LookupRequest, resp *fus
 	}
 	return nil, syscall.ENOENT
 }
+
+var _ fs.HandleReadDirAller = (*dirNode)(nil)
 
 // ReadDirAll returns all the directory entries.
 func (n *dirNode) ReadDirAll(context.Context) ([]fuse.Dirent, error) {
@@ -396,14 +422,20 @@ func (n *dirNode) ReadDirAll(context.Context) ([]fuse.Dirent, error) {
 	return out, nil
 }
 
+var _ fs.HandlePoller = (*node)(nil)
+
 // Poll checks whether a handle is ready for I/O.
 func (node) Poll(ctx context.Context, req *fuse.PollRequest, resp *fuse.PollResponse) error {
 	return syscall.ENOSYS
 }
 
+var _ fs.NodeGetxattrer = (*node)(nil)
+
 func (node) Getxattr(ctx context.Context, req *fuse.GetxattrRequest, resp *fuse.GetxattrResponse) error {
 	return syscall.ENOSYS
 }
+
+var _ fs.NodeMkdirer = (*dirNode)(nil)
 
 // Mkdir creates a subdirectory.
 func (n *dirNode) Mkdir(ctx context.Context, req *fuse.MkdirRequest) (fs.Node, error) {
@@ -430,6 +462,8 @@ func (n *dirNode) Mkdir(ctx context.Context, req *fuse.MkdirRequest) (fs.Node, e
 	return nil, syscall.EINVAL
 }
 
+var _ fs.NodeRemover = (*dirNode)(nil)
+
 // Remove deletes a node.
 func (n *dirNode) Remove(ctx context.Context, req *fuse.RemoveRequest) error {
 	log.Debugf("Remove(%q) called on %s", req.Name, n)
@@ -452,10 +486,14 @@ func (n *dirNode) Remove(ctx context.Context, req *fuse.RemoveRequest) error {
 	return nil
 }
 
+var _ fs.NodeForgetter = (*node)(nil)
+
 // Forget tells us this node will not receive any further requests.
 func (n node) Forget() {
 	log.Debugf("Forget called on %s", n)
 }
+
+var _ fs.NodeRenamer = (*dirNode)(nil)
 
 // Rename changes the name of a directory entry.
 func (n *dirNode) Rename(ctx context.Context, req *fuse.RenameRequest, newDir fs.Node) error {
@@ -487,6 +525,8 @@ func (n *dirNode) Rename(ctx context.Context, req *fuse.RenameRequest, newDir fs
 	return nil
 }
 
+var _ fs.NodeCreater = (*dirNode)(nil)
+
 // Create creates a new file.
 func (n *dirNode) Create(ctx context.Context, req *fuse.CreateRequest, resp *fuse.CreateResponse) (fs.Node, fs.Handle, error) {
 	log.Debugf("Create(%s, %s) called on %s", req.Name, req.Flags, n)
@@ -501,7 +541,7 @@ func (n *dirNode) Create(ctx context.Context, req *fuse.CreateRequest, resp *fus
 		log.Debugf("Create can only open a file WRONLY or RDWR: %s", req.Flags)
 		return nil, nil, syscall.ENOTSUP
 	}
-	w, err := n.f.c.FuseImport(req.Name, n.item)
+	w, err := n.f.c.StreamImport(req.Name, n.item)
 	if err != nil {
 		log.Errorf("FuseImport(%q, %s) failed: %v", req.Name, n, err)
 		return nil, nil, syscall.EPERM
@@ -527,10 +567,11 @@ func (n *dirNode) Create(ctx context.Context, req *fuse.CreateRequest, resp *fus
 	nn.attrLocked(ctx, &resp.Attr)
 	resp.Attr.Mode = req.Mode
 	n.f.setAttr(nn.item.FSFile.File, resp.Attr)
-	//resp.Flags = fuse.OpenDirectIO
 	n.f.mutations.Add(1)
 	return nn, h, nil
 }
+
+var _ fs.NodeLinker = (*dirNode)(nil)
 
 // Link creates a hard link.
 func (n *dirNode) Link(ctx context.Context, req *fuse.LinkRequest, old fs.Node) (fs.Node, error) {
@@ -561,6 +602,8 @@ func (n *dirNode) Link(ctx context.Context, req *fuse.LinkRequest, old fs.Node) 
 	return nnn, nil
 }
 
+var _ fs.Node = (*fileNode)(nil)
+
 // Attr returns the attributes of the file.
 func (n *fileNode) Attr(ctx context.Context, a *fuse.Attr) error {
 	log.Debugf("Attr called on %s", n)
@@ -587,6 +630,8 @@ func (n *fileNode) attrLocked(_ context.Context, a *fuse.Attr) error {
 	n.f.setAttr(n.item.FSFile.File, *a)
 	return nil
 }
+
+var _ fs.NodeSetattrer = (*fileNode)(nil)
 
 // Setattr receives attribute changes for the file.
 func (n *fileNode) Setattr(ctx context.Context, req *fuse.SetattrRequest, resp *fuse.SetattrResponse) error {
@@ -618,6 +663,8 @@ func (n *fileNode) Setattr(ctx context.Context, req *fuse.SetattrRequest, resp *
 	return nil
 }
 
+var _ fs.NodeOpener = (*fileNode)(nil)
+
 // Open opens a file. Only reading is supported.
 func (n *fileNode) Open(ctx context.Context, req *fuse.OpenRequest, resp *fuse.OpenResponse) (h fs.Handle, err error) {
 	log.Debugf("Open(%s) called on %s", req.Flags, n)
@@ -631,14 +678,13 @@ func (n *fileNode) Open(ctx context.Context, req *fuse.OpenRequest, resp *fuse.O
 		return nil, syscall.ENOTDIR
 	}
 	if !req.Flags.IsReadOnly() {
-		return nil, syscall.ENOTSUP
+		return nil, syscall.EPERM
 	}
 	r, err := n.openRead()
 	if err != nil {
 		return nil, err
 	}
 	h = &handle{name: n.item.Filename, n: n, r: r}
-	//resp.Flags = fuse.OpenDirectIO
 	return h, nil
 }
 
@@ -660,13 +706,6 @@ func (n *fileNode) openRead() (io.ReadSeekCloser, error) {
 	}
 	return stingle.DecryptFile(f, n.item.Header), nil
 }
-
-var _ fs.HandleReleaser = (*handle)(nil)
-var _ fs.HandleFlusher = (*handle)(nil)
-var _ fs.HandleReader = (*handle)(nil)
-var _ fs.HandleWriter = (*handle)(nil)
-
-//var _ fs.HandlePoller = (*handle)(nil)
 
 // handle is a file handle for reading or writing.
 type handle struct {
@@ -705,6 +744,20 @@ func (h *handle) checkHeader(ctx context.Context, hdr fuse.Header) error {
 	return h.n.checkHeader(ctx, h.n, hdr)
 }
 
+func (h *handle) updateFileSize(ctx context.Context, updateMtime bool) {
+	h.n.lock()
+	var attr fuse.Attr
+	h.n.attrLocked(ctx, &attr)
+	attr.Size = uint64(h.size)
+	if updateMtime {
+		attr.Mtime = time.Now()
+	}
+	h.n.f.setAttr(h.n.item.FSFile.File, attr)
+	h.n.unlock()
+}
+
+var _ fs.HandleReleaser = (*handle)(nil)
+
 // Release is called when the file is closed.
 func (h *handle) Release(ctx context.Context, req *fuse.ReleaseRequest) error {
 	h.lock()
@@ -715,13 +768,7 @@ func (h *handle) Release(ctx context.Context, req *fuse.ReleaseRequest) error {
 		h.r = nil
 	}
 	if h.w != nil {
-		h.n.lock()
-		var attr fuse.Attr
-		h.n.attrLocked(ctx, &attr)
-		attr.Size = uint64(h.size)
-		h.n.f.setAttr(h.n.item.FSFile.File, attr)
-		h.n.unlock()
-
+		h.updateFileSize(ctx, false)
 		log.Debugf("Release starting Close %s", h)
 		h.w.Close()
 		h.w = nil
@@ -730,6 +777,8 @@ func (h *handle) Release(ctx context.Context, req *fuse.ReleaseRequest) error {
 	}
 	return nil
 }
+
+var _ fs.HandleFlusher = (*handle)(nil)
 
 // Flush is called when the file is closed.
 func (h *handle) Flush(ctx context.Context, req *fuse.FlushRequest) error {
@@ -740,12 +789,12 @@ func (h *handle) Flush(ctx context.Context, req *fuse.FlushRequest) error {
 		return err
 	}
 	if h.w != nil {
-		h.n.lock()
-		h.n.item.Header.DataSize = h.size
-		h.n.unlock()
+		h.updateFileSize(ctx, false)
 	}
 	return nil
 }
+
+var _ fs.HandleReader = (*handle)(nil)
 
 // Read reads data from the file.
 func (h *handle) Read(ctx context.Context, req *fuse.ReadRequest, resp *fuse.ReadResponse) error {
@@ -775,6 +824,8 @@ func (h *handle) Read(ctx context.Context, req *fuse.ReadRequest, resp *fuse.Rea
 	}
 	return err
 }
+
+var _ fs.HandleWriter = (*handle)(nil)
 
 // Write writes data to the file.
 func (h *handle) Write(ctx context.Context, req *fuse.WriteRequest, resp *fuse.WriteResponse) error {
@@ -811,6 +862,7 @@ func (h *handle) Write(ctx context.Context, req *fuse.WriteRequest, resp *fuse.W
 	h.size += int64(n)
 	resp.Size = n
 
+	h.updateFileSize(ctx, true)
 	h.n.lock()
 	var attr fuse.Attr
 	h.n.attrLocked(ctx, &attr)
@@ -821,13 +873,10 @@ func (h *handle) Write(ctx context.Context, req *fuse.WriteRequest, resp *fuse.W
 	return nil
 }
 
+var _ fs.HandlePoller = (*handle)(nil)
+
 // Poll checks whether a handle is ready for I/O.
 func (h *handle) Poll(context.Context, *fuse.PollRequest, *fuse.PollResponse) error {
 	log.Debugf("Poll called on %s", h)
-	return syscall.ENOSYS
-}
-
-func (h *handle) Getxattr(ctx context.Context, req *fuse.GetxattrRequest, resp *fuse.GetxattrResponse) error {
-	log.Debugf("Getxattr called on %s", h)
 	return syscall.ENOSYS
 }
