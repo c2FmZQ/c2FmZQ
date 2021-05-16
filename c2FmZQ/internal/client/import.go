@@ -13,10 +13,12 @@ import (
 	"image/color"
 	"image/png"
 	"io"
+	"io/fs"
 	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -28,75 +30,161 @@ import (
 	"c2FmZQ/internal/stingle"
 )
 
+type toImport struct {
+	src string
+	dst string
+}
+
 // ImportFiles encrypts and imports files. Returns the number of files imported.
-func (c *Client) ImportFiles(patterns []string, dir string) (int, error) {
-	dir = strings.TrimSuffix(dir, "/")
-	li, err := c.glob(dir, GlobOptions{})
+func (c *Client) ImportFiles(patterns []string, dest string, recursive bool) (int, error) {
+	files, err := c.findFilesToImport(patterns, dest, recursive)
 	if err != nil {
 		return 0, err
 	}
-	if len(li) == 0 || (len(li) == 1 && li[0].IsDir && li[0].Set == "") {
-		name := dir
-		if len(li) == 1 {
-			name = li[0].Filename
-		}
-		if _, err := c.addAlbum(name); err != nil {
-			return 0, err
-		}
-		if li, err = c.glob(name, GlobOptions{ExactMatch: true}); err != nil {
-			return 0, err
-		}
-
+	dirs := make(map[string][]ListItem)
+	for _, f := range files {
+		dir, _ := filepath.Split(f.dst)
+		dirs[dir] = nil
 	}
-	if len(li) != 1 || !li[0].IsDir {
-		return 0, fmt.Errorf("%s is not a directory", dir)
+	var sorted []string
+	for dir := range dirs {
+		sorted = append(sorted, dir)
 	}
-	dst := li[0]
-	if dst.Set == stingle.TrashSet {
-		return 0, fmt.Errorf("cannot import to trash: %s", dir)
-	}
-	pk := c.SecretKey().PublicKey()
-	if dst.Album != nil {
-		if dst.Album.IsOwner != "1" && !stingle.Permissions(dst.Album.Permissions).AllowAdd() {
-			return 0, fmt.Errorf("adding is not allowed: %s", dir)
-		}
-		if pk, err = dst.Album.PK(); err != nil {
-			return 0, err
-		}
-	}
-
-	existingItems, err := c.glob(dst.Filename+"/*", MatchAll)
-	if err != nil {
-		return 0, err
-	}
-	exist := make(map[string]bool)
-	for _, item := range existingItems {
-		_, fn := filepath.Split(item.Filename)
-		exist[fn] = true
-	}
-
-	var files []string
-	for _, p := range patterns {
-		m, err := filepath.Glob(p)
+	sort.Strings(sorted)
+	// The first loop on sorted catches most errors without mutating
+	// anything.
+	for _, dir := range sorted {
+		li, err := c.glob(dir, GlobOptions{ExactMatch: true})
 		if err != nil {
 			return 0, err
 		}
-		files = append(files, m...)
-	}
-	count := 0
-	for _, file := range files {
-		_, fn := filepath.Split(file)
-		if exist[fn] {
-			c.Printf("Skipping %s (already exists in %s)\n", file, dir)
+		dirs[dir] = li
+		if len(li) > 1 {
+			// Should not happen.
+			return 0, fmt.Errorf("%s is not a directory", dir)
+		}
+		if len(li) == 1 && !li[0].IsDir {
+			return 0, fmt.Errorf("%s is not a directory", dir)
+		}
+		if len(li) == 0 {
 			continue
 		}
-		c.Printf("Importing %s -> %s (not synced)\n", file, dir)
-		if err := c.importFile(file, dst, pk); err != nil {
-			return count, err
+		if li[0].Set == stingle.TrashSet {
+			return 0, fmt.Errorf("cannot import to trash: %s", dir)
 		}
-		count++
+		if li[0].Album != nil && li[0].Album.IsOwner != "1" && !stingle.Permissions(li[0].Album.Permissions).AllowAdd() {
+			return 0, fmt.Errorf("adding is not allowed: %s", dir)
+		}
 	}
+	count := 0
+	for _, dir := range sorted {
+		li := dirs[dir]
+		if len(li) == 0 || (len(li) == 1 && li[0].Set == "") {
+			name := dir
+			if len(li) == 1 {
+				name = li[0].Filename
+			}
+			if _, err := c.addAlbum(name); err != nil {
+				return 0, err
+			}
+			if li, err = c.glob(name, GlobOptions{ExactMatch: true}); err != nil {
+				return 0, err
+			}
+		}
+		pk := c.SecretKey().PublicKey()
+		if li[0].Album != nil {
+			if pk, err = li[0].Album.PK(); err != nil {
+				return 0, err
+			}
+		}
+		for _, f := range files {
+			if dd, _ := filepath.Split(f.dst); dir != dd {
+				continue
+			}
+			c.Printf("Importing %s -> %s (not synced)\n", f.src, f.dst)
+			if err := c.importFile(f.src, li[0], pk); err != nil {
+				return count, err
+			}
+			count++
+		}
+	}
+
 	return count, nil
+}
+
+func (c *Client) findFilesToImport(patterns []string, dest string, recursive bool) ([]toImport, error) {
+	dest = strings.TrimSuffix(dest, "/")
+	li, err := c.glob(dest, GlobOptions{})
+	if err != nil {
+		return nil, err
+	}
+	if len(li) > 1 || (len(li) == 1 && !li[0].IsDir) {
+		return nil, fmt.Errorf("destination must be a directory: %s", dest)
+	}
+	if len(li) == 1 {
+		dest = li[0].Filename
+	}
+
+	existingItems, err := c.glob(filepath.Join(dest, "*"), GlobOptions{MatchDot: true, Recursive: recursive})
+	if err != nil {
+		return nil, err
+	}
+	exist := make(map[string]bool)
+	for _, item := range existingItems {
+		exist[item.Filename] = true
+	}
+
+	var files []toImport
+	for _, p := range patterns {
+		m, err := filepath.Glob(p)
+		if err != nil {
+			return nil, err
+		}
+		for _, f := range m {
+			fi, err := os.Stat(f)
+			if err != nil {
+				log.Errorf("%s: %v", f, err)
+				continue
+			}
+			if !fi.IsDir() {
+				_, file := filepath.Split(f)
+				df := filepath.Join(dest, file)
+				if exist[df] {
+					c.Printf("Skipping %s (already exists)\n", df)
+					continue
+				}
+				files = append(files, toImport{src: f, dst: df})
+				continue
+			}
+			if !recursive {
+				continue
+			}
+			baseDir, _ := filepath.Split(f)
+			filepath.WalkDir(f, func(path string, d fs.DirEntry, err error) error {
+				if err != nil {
+					log.Errorf("%s: %v", path, err)
+					return nil
+				}
+				if d.IsDir() {
+					return nil
+				}
+				rel, err := filepath.Rel(baseDir, path)
+				if err != nil {
+					log.Errorf("%s: %v", path, err)
+					return nil
+				}
+				df := filepath.Join(dest, rel)
+				if exist[df] {
+					c.Printf("Skipping %s (already exists)\n", df)
+					return nil
+				}
+				files = append(files, toImport{src: path, dst: df})
+				return nil
+			})
+		}
+	}
+
+	return files, nil
 }
 
 func fileTypeForExt(ext string) uint8 {

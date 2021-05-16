@@ -99,13 +99,13 @@ func TestImportExportSync(t *testing.T) {
 		t.Fatalf("makeImages: %v", err)
 	}
 	t.Log("CLIENT Import *")
-	if n, err := c.ImportFiles([]string{filepath.Join(testdir, "*")}, "gallery"); err != nil {
+	if n, err := c.ImportFiles([]string{filepath.Join(testdir, "*")}, "gallery", true); err != nil {
 		t.Errorf("c.ImportFiles: %v", err)
 	} else if want, got := 10, n; want != got {
 		t.Errorf("Unexpected ImportFiles result. Want %d, got %d", want, got)
 	}
 	t.Log("CLIENT Import *0.jpg")
-	if n, err := c.ImportFiles([]string{filepath.Join(testdir, "*0.jpg")}, "gallery"); err != nil {
+	if n, err := c.ImportFiles([]string{filepath.Join(testdir, "*0.jpg")}, "gallery", true); err != nil {
 		t.Errorf("c.ImportFiles: %v", err)
 	} else if want, got := 0, n; want != got {
 		t.Errorf("Unexpected ImportFiles result. Want %d, got %d", want, got)
@@ -175,7 +175,7 @@ func TestCopyMoveDeleteFiles(t *testing.T) {
 		t.Fatalf("makeImages: %v", err)
 	}
 	t.Log("CLIENT Import")
-	if n, err := c.ImportFiles([]string{filepath.Join(testdir, "*")}, "gallery"); err != nil {
+	if n, err := c.ImportFiles([]string{filepath.Join(testdir, "*")}, "gallery", true); err != nil {
 		t.Errorf("c.ImportFiles: %v", err)
 	} else if want, got := 5, n; want != got {
 		t.Errorf("Unexpected ImportFiles result. Want %d, got %d", want, got)
@@ -357,7 +357,7 @@ func TestNestedDirectories(t *testing.T) {
 		t.Fatalf("makeImages: %v", err)
 	}
 	t.Log("Import")
-	if n, err := c.ImportFiles([]string{filepath.Join(testdir, "*")}, "gallery"); err != nil {
+	if n, err := c.ImportFiles([]string{filepath.Join(testdir, "*")}, "gallery", true); err != nil {
 		t.Errorf("c.ImportFiles: %v", err)
 	} else if want, got := 1, n; want != got {
 		t.Errorf("Unexpected ImportFiles result. Want %d, got %d", want, got)
@@ -450,7 +450,7 @@ func TestSyncTrash(t *testing.T) {
 		t.Fatalf("makeImages: %v", err)
 	}
 	t.Log("CLIENT Import")
-	if n, err := c.ImportFiles([]string{filepath.Join(testdir, "*")}, "gallery"); err != nil {
+	if n, err := c.ImportFiles([]string{filepath.Join(testdir, "*")}, "gallery", true); err != nil {
 		t.Errorf("c.ImportFiles: %v", err)
 	} else if want, got := 5, n; want != got {
 		t.Errorf("Unexpected ImportFiles result. Want %d, got %d", want, got)
@@ -541,7 +541,7 @@ func TestConcurrentMutations(t *testing.T) {
 		t.Fatalf("c1.AddAlbums: %v", err)
 	}
 	t.Log("CLIENT 1 Import -> alpha")
-	if n, err := c1.ImportFiles([]string{filepath.Join(testdir, "*")}, "alpha"); err != nil {
+	if n, err := c1.ImportFiles([]string{filepath.Join(testdir, "*")}, "alpha", true); err != nil {
 		t.Errorf("c1.ImportFiles: %v", err)
 	} else if want, got := 5, n; want != got {
 		t.Errorf("Unexpected ImportFiles result. Want %d, got %d", want, got)
@@ -601,7 +601,7 @@ func TestConcurrentMutations(t *testing.T) {
 		t.Fatalf("c2.Delete: %v", err)
 	}
 	t.Log("CLIENT 2 Import -> charlie")
-	if n, err := c2.ImportFiles([]string{filepath.Join(testdir, "*")}, "charlie"); err != nil {
+	if n, err := c2.ImportFiles([]string{filepath.Join(testdir, "*")}, "charlie", true); err != nil {
 		t.Errorf("c2.ImportFiles: %v", err)
 	} else if want, got := 5, n; want != got {
 		t.Errorf("Unexpected ImportFiles result. Want %d, got %d", want, got)
@@ -732,7 +732,7 @@ func TestSharing(t *testing.T) {
 		t.Fatalf("alice.AddAlbums: %v", err)
 	}
 	t.Log("alice Import -> alpha")
-	if n, err := c["alice"].ImportFiles([]string{filepath.Join(testdir, "*")}, "alpha"); err != nil {
+	if n, err := c["alice"].ImportFiles([]string{filepath.Join(testdir, "*")}, "alpha", true); err != nil {
 		t.Errorf("alice.ImportFiles: %v", err)
 	} else if want, got := 5, n; want != got {
 		t.Errorf("Unexpected ImportFiles result. Want %d, got %d", want, got)
@@ -873,7 +873,7 @@ func TestCopyPermission(t *testing.T) {
 	}
 
 	t.Log("alice Import -> alpha")
-	if _, err := c["alice"].ImportFiles([]string{filepath.Join(testdir, "*")}, "alpha"); err != nil {
+	if _, err := c["alice"].ImportFiles([]string{filepath.Join(testdir, "*")}, "alpha", true); err != nil {
 		t.Errorf("alice.ImportFiles: %v", err)
 	}
 	t.Log("alice Copy alpha/* -> beta")

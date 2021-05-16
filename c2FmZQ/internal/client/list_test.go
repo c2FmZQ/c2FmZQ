@@ -25,7 +25,7 @@ func TestList(t *testing.T) {
 		t.Fatalf("Rename: %v", err)
 	}
 	t.Log("Import *")
-	if n, err := c.ImportFiles([]string{filepath.Join(testdir, "*")}, "gallery"); err != nil {
+	if n, err := c.ImportFiles([]string{filepath.Join(testdir, "*")}, "gallery", true); err != nil {
 		t.Errorf("c.ImportFiles: %v", err)
 	} else if want, got := 2, n; want != got {
 		t.Errorf("Unexpected ImportFiles result. Want %d, got %d", want, got)
