@@ -495,7 +495,7 @@ func (a *App) shell(ctx *cli.Context) error {
 			if len(args) > 0 {
 				currentWord = args[len(args)-1]
 			}
-			if line == "" || (line[len(line)-1] == ' ' && currentWord[len(currentWord)-1] != ' ') {
+			if pos == 0 || (line[pos-1] == ' ' && currentWord[len(currentWord)-1] != ' ') {
 				args = append(args, "")
 				currentWord = ""
 			}
