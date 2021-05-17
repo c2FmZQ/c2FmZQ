@@ -121,7 +121,7 @@ func TestImportExportSync(t *testing.T) {
 		t.Fatalf("os.Mkdir: %v", err)
 	}
 	t.Log("CLIENT Export gallery/*")
-	if n, err := c.ExportFiles([]string{"gallery/*"}, exportDir); err != nil {
+	if n, err := c.ExportFiles([]string{"gallery/*"}, exportDir, true); err != nil {
 		t.Errorf("c.ExportFiles: %v", err)
 	} else if want, got := 10, n; want != got {
 		t.Errorf("Unexpected ExportFiles result. Want %d, got %d", want, got)

@@ -342,6 +342,14 @@ func New() *App {
 			ArgsUsage: `"<glob>" ... <output directory>`,
 			Action:    app.exportFiles,
 			Category:  "Import/Export",
+			Flags: []cli.Flag{
+				&cli.BoolFlag{
+					Name:    "recursive",
+					Aliases: []string{"R"},
+					Value:   true,
+					Usage:   "Export files recursively.",
+				},
+			},
 		},
 		&cli.Command{
 			Name:      "import",
@@ -1019,7 +1027,7 @@ func (a *App) exportFiles(ctx *cli.Context) error {
 	}
 	patterns := args[:len(args)-1]
 	dir := args[len(args)-1]
-	_, err := a.client.ExportFiles(patterns, dir)
+	_, err := a.client.ExportFiles(patterns, dir, ctx.Bool("recursive"))
 	return err
 }
 

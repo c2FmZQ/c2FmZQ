@@ -12,7 +12,7 @@ import (
 )
 
 // ExportFiles decrypts and exports files to dir. Returns the number of files exported.
-func (c *Client) ExportFiles(patterns []string, dir string) (int, error) {
+func (c *Client) ExportFiles(patterns []string, dir string, recursive bool) (int, error) {
 	if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
 		return 0, fmt.Errorf("%s is not a directory", dir)
 	}
@@ -20,19 +20,57 @@ func (c *Client) ExportFiles(patterns []string, dir string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	qCh := make(chan ListItem)
+
+	type srcdst struct {
+		src ListItem
+		dst string
+	}
+
+	var toExport []srcdst
+	for _, item := range li {
+		if !item.IsDir {
+			toExport = append(toExport, srcdst{item, dir})
+			continue
+		}
+		if !recursive {
+			continue
+		}
+		si, err := c.glob(filepath.Join(item.Filename, "*"), GlobOptions{ExactMatchExceptLast: true, Recursive: true})
+		if err != nil {
+			return 0, err
+		}
+		parent, _ := filepath.Split(item.Filename)
+		for _, item2 := range si {
+			if item2.IsDir {
+				continue
+			}
+			d, _ := filepath.Split(item2.Filename)
+			rel, err := filepath.Rel(parent, d)
+			if err != nil {
+				return 0, err
+			}
+			toExport = append(toExport, srcdst{item2, filepath.Join(dir, rel)})
+		}
+	}
+	qCh := make(chan srcdst)
 	eCh := make(chan error)
 	for i := 0; i < 5; i++ {
-		go c.exportWorker(qCh, eCh, dir)
+		go func() {
+			for i := range qCh {
+				_, fn := filepath.Split(string(i.src.Header.Filename))
+				c.Printf("Exporting %s -> %s\n", i.src.Filename, filepath.Join(i.dst, fn))
+				eCh <- c.exportFile(i.src, i.dst)
+			}
+		}()
 	}
 	go func() {
-		for _, item := range li {
-			qCh <- item
+		for _, i := range toExport {
+			qCh <- i
 		}
 		close(qCh)
 	}()
 	var errors []error
-	for range li {
+	for range toExport {
 		if err := <-eCh; err != nil {
 			errors = append(errors, err)
 		}
@@ -71,15 +109,10 @@ func (c *Client) catFile(item ListItem) error {
 	return err
 }
 
-func (c *Client) exportWorker(ch <-chan ListItem, out chan<- error, dir string) {
-	for i := range ch {
-		_, fn := filepath.Split(string(i.Header.Filename))
-		c.Printf("Exporting %s\n", filepath.Join(dir, fn))
-		out <- c.exportFile(i, dir)
-	}
-}
-
 func (c *Client) exportFile(item ListItem, dir string) (err error) {
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return err
+	}
 	var in io.ReadCloser
 	if in, err = os.Open(item.FilePath); errors.Is(err, os.ErrNotExist) {
 		in, err = c.download(item.FSFile.File, item.Set, "0")
@@ -97,7 +130,6 @@ func (c *Client) exportFile(item ListItem, dir string) (err error) {
 		fn = "decrypted-" + fn
 	}
 	fn = filepath.Join(dir, fn)
-
 	tmp := fmt.Sprintf("%s-tmp-%d", fn, time.Now().UnixNano())
 	out, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL|os.O_SYNC, 0600)
 	if err != nil {
