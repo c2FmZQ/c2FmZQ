@@ -166,7 +166,7 @@ func (f *filesys) newFileNode(label string) *fileNode {
 
 // node contains the information common to all nodes.
 type node struct {
-	// Used to debugging. It is set when the node is created, and never
+	// Used for debugging. It is set when the node is created, and never
 	// changed again.
 	label string
 	// Points to the filesys that owns this node.
@@ -221,12 +221,6 @@ type dirNode struct {
 	node
 
 	children map[string]fs.Node
-}
-
-var _ fs.Node = (*fileNode)(nil)
-
-type fileNode struct {
-	node
 }
 
 func (n *dirNode) child(name string) (fs.Node, bool) {
@@ -600,6 +594,10 @@ func (n *dirNode) Link(ctx context.Context, req *fuse.LinkRequest, old fs.Node) 
 	n.updateLocked()
 	nnn, _ := n.child(req.NewName)
 	return nnn, nil
+}
+
+type fileNode struct {
+	node
 }
 
 var _ fs.Node = (*fileNode)(nil)
