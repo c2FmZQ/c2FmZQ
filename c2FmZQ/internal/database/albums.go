@@ -23,6 +23,8 @@ const (
 type AlbumManifest struct {
 	Albums  map[string]*AlbumRef `json:"albums"`
 	Deletes []DeleteEvent        `json:"deletes"`
+	// The timestamp before which DeleteEvents were pruned.
+	DeleteHorizon int64 `json:"deleteHorizon,omitempty"`
 }
 
 // Contains a reference to an album, i.e. its ID and where it is stored.
@@ -382,6 +384,7 @@ func (d *Database) addAlbumRef(memberID int64, albumID, file string) (retErr err
 		AlbumID: albumID,
 		File:    file,
 	}
+	pruneDeleteEvents(&manifest.Deletes, &manifest.DeleteHorizon)
 	return nil
 }
 
@@ -410,6 +413,7 @@ func (d *Database) removeAlbumRef(memberID int64, albumID string) (retErr error)
 		Type:    stingle.DeleteEventAlbum,
 		Date:    nowInMS(),
 	})
+	pruneDeleteEvents(&manifest.Deletes, &manifest.DeleteHorizon)
 	return nil
 }
 

@@ -29,6 +29,8 @@ type FileSet struct {
 	Files map[string]*FileSpec `json:"files"`
 	// The deletion events for the file set.
 	Deletes []DeleteEvent `json:"deletes,omitempty"`
+	// The timestamp before which DeleteEvents were pruned.
+	DeleteHorizon int64 `json:"deleteHorizon,omitempty"`
 }
 
 // FileSpec encapsulates the information of a file.
@@ -345,6 +347,8 @@ func (d *Database) MoveFile(user User, p MoveFileParams) (retErr error) {
 			d.incRefCount(toFile.StoreThumb, refCountAdj)
 		}
 	}
+	pruneDeleteEvents(&fsFrom.Deletes, &fsFrom.DeleteHorizon)
+	pruneDeleteEvents(&fsTo.Deletes, &fsTo.DeleteHorizon)
 	return nil
 }
 
@@ -373,6 +377,7 @@ func (d *Database) EmptyTrash(user User, t int64) (retErr error) {
 			fs.Deletes = append(fs.Deletes, de)
 		}
 	}
+	pruneDeleteEvents(&fs.Deletes, &fs.DeleteHorizon)
 	return nil
 }
 
@@ -399,6 +404,7 @@ func (d *Database) DeleteFiles(user User, files []string) (retErr error) {
 		}
 		fs.Deletes = append(fs.Deletes, de)
 	}
+	pruneDeleteEvents(&fs.Deletes, &fs.DeleteHorizon)
 	return nil
 }
 

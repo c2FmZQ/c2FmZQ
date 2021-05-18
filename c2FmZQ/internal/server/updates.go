@@ -63,8 +63,11 @@ func (s *Server) handleGetUpdates(user database.User, req *http.Request) *stingl
 		log.Errorf("ContactUpdates() failed: %v", err)
 		return stingle.ResponseNOK()
 	}
+	outOfSync := false
 	deletes, err := s.db.DeleteUpdates(user, delST)
-	if err != nil {
+	if err == database.ErrUpdateTimestampTooOld {
+		outOfSync = true
+	} else if err != nil {
 		log.Errorf("DeleteUpdates() failed: %v", err)
 		return stingle.ResponseNOK()
 	}
@@ -76,7 +79,7 @@ func (s *Server) handleGetUpdates(user database.User, req *http.Request) *stingl
 	if err != nil {
 		log.Errorf("Quota() failed: %v", err)
 	}
-	return stingle.ResponseOK().
+	r := stingle.ResponseOK().
 		AddPart("files", files).
 		AddPart("trash", trash).
 		AddPart("albums", albums).
@@ -85,4 +88,8 @@ func (s *Server) handleGetUpdates(user database.User, req *http.Request) *stingl
 		AddPart("deletes", deletes).
 		AddPart("spaceUsed", fmt.Sprintf("%d", spaceUsed>>20)).
 		AddPart("spaceQuota", fmt.Sprintf("%d", spaceQuota>>20))
+	if outOfSync {
+		r.AddError("Your app is too far out of sync. Upload your changes, then wipe your data, and login again.")
+	}
+	return r
 }

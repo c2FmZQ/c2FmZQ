@@ -61,6 +61,8 @@ type ContactList struct {
 	In map[int64]bool `json:"in"`
 	// Delete events for contacts.
 	Deletes []DeleteEvent `json:"deletes"`
+	// The timestamp before which DeleteEvents were pruned.
+	DeleteHorizon int64 `json:"deleteHorizon,omitempty"`
 }
 
 // Encapsulates the information about a user's contact (another user).
@@ -315,6 +317,8 @@ func (d *Database) addContactToUser(user, contact User) (c *Contact, retErr erro
 	}
 	contactContacts.In[user.UserID] = true
 
+	pruneDeleteEvents(&contactLists[0].Deletes, &contactLists[0].DeleteHorizon)
+	pruneDeleteEvents(&contactLists[1].Deletes, &contactLists[1].DeleteHorizon)
 	return userContacts.Contacts[contact.UserID], nil
 }
 
@@ -378,6 +382,9 @@ func (d *Database) removeAllContacts(user User) (retErr error) {
 			Date: nowInMS(),
 			Type: stingle.DeleteEventContact,
 		})
+	}
+	for i := range contactListSlice {
+		pruneDeleteEvents(&contactListSlice[i].Deletes, &contactListSlice[i].DeleteHorizon)
 	}
 	return commit(true, nil)
 }

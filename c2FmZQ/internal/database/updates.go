@@ -1,11 +1,25 @@
 package database
 
 import (
+	"errors"
+	"fmt"
 	"sort"
 	"sync"
+	"time"
 
 	"c2FmZQ/internal/log"
 	"c2FmZQ/internal/stingle"
+)
+
+const (
+	deleteEventHorizon = 180 * 24 * time.Hour
+)
+
+var (
+	// Indicates that some delete events were pruned sinced the client's
+	// last update. This client can still upload its data, but they should
+	// wipe the app and login again.
+	ErrUpdateTimestampTooOld = errors.New("update timestamp is too old")
 )
 
 // DeleteEvent encapsulates a deletion event. The File and AlbumID fields are
@@ -15,6 +29,18 @@ type DeleteEvent struct {
 	AlbumID string `json:"albumId"`
 	Type    int    `json:"type"` // See stingle/types.go
 	Date    int64  `json:"date"` // The time of the deletion.
+}
+
+func pruneDeleteEvents(events *[]DeleteEvent, horizonTS *int64) {
+	ts := nowInMS() - int64(deleteEventHorizon/time.Millisecond)
+	off := 0
+	for off = 0; off < len(*events) && (*events)[off].Date < ts; off++ {
+		continue
+	}
+	if off > 0 {
+		*events = (*events)[off:]
+		*horizonTS = ts
+	}
 }
 
 // fileUpdatesForSet finds which files were added to the file set since ts.
@@ -83,11 +109,15 @@ func (d *Database) FileUpdates(user User, set string, ts int64) ([]stingle.File,
 
 // deleteUpdatesForSet finds which files were deleted from the file set since
 // ts.
-func (d *Database) deleteUpdatesForSet(user User, set, albumID string, ts int64, ch chan<- stingle.DeleteEvent, wg *sync.WaitGroup) {
-	defer wg.Done()
+func (d *Database) deleteUpdatesForSet(user User, set, albumID string, ts int64, ch chan<- stingle.DeleteEvent, eCh chan<- error) {
 	fs, err := d.FileSet(user, set, albumID)
 	if err != nil {
 		log.Errorf("d.FileSet(%q, %q, %q failed: %v", user.Email, set, albumID, err)
+		eCh <- err
+		return
+	}
+	if ts > 0 && ts < fs.DeleteHorizon {
+		eCh <- ErrUpdateTimestampTooOld
 		return
 	}
 	for _, d := range fs.Deletes {
@@ -100,6 +130,7 @@ func (d *Database) deleteUpdatesForSet(user User, set, albumID string, ts int64,
 			}
 		}
 	}
+	eCh <- nil
 }
 
 // DeleteUpdates returns all the files that were deleted from a file set since
@@ -112,6 +143,9 @@ func (d *Database) DeleteUpdates(user User, ts int64) ([]stingle.DeleteEvent, er
 	var manifest AlbumManifest
 	if err := d.storage.ReadDataFile(d.filePath(user.home(albumManifest)), &manifest); err != nil {
 		return nil, err
+	}
+	if ts > 0 && ts < manifest.DeleteHorizon {
+		return nil, ErrUpdateTimestampTooOld
 	}
 	for _, d := range manifest.Deletes {
 		if d.Date > ts {
@@ -127,6 +161,9 @@ func (d *Database) DeleteUpdates(user User, ts int64) ([]stingle.DeleteEvent, er
 	if err := d.storage.ReadDataFile(d.filePath(user.home(contactListFile)), &contactList); err != nil {
 		return nil, err
 	}
+	if ts > 0 && ts < contactList.DeleteHorizon {
+		return nil, ErrUpdateTimestampTooOld
+	}
 	for _, d := range contactList.Deletes {
 		if d.Date > ts {
 			out = append(out, stingle.DeleteEvent{
@@ -139,25 +176,39 @@ func (d *Database) DeleteUpdates(user User, ts int64) ([]stingle.DeleteEvent, er
 	}
 
 	ch := make(chan stingle.DeleteEvent)
-	var wg sync.WaitGroup
+	eCh := make(chan error)
+	count := 0
 	for _, set := range []string{stingle.GallerySet, stingle.TrashSet, stingle.AlbumSet} {
 		if set == stingle.AlbumSet {
 			for _, a := range manifest.Albums {
-				wg.Add(1)
-				go d.deleteUpdatesForSet(user, set, a.AlbumID, ts, ch, &wg)
+				count++
+				go d.deleteUpdatesForSet(user, set, a.AlbumID, ts, ch, eCh)
 			}
 		} else {
-			wg.Add(1)
-			go d.deleteUpdatesForSet(user, set, "", ts, ch, &wg)
+			count++
+			go d.deleteUpdatesForSet(user, set, "", ts, ch, eCh)
 		}
 	}
-	go func(ch chan<- stingle.DeleteEvent, wg *sync.WaitGroup) {
-		wg.Wait()
+	var errorList []error
+	go func() {
+		for i := 0; i < count; i++ {
+			if err := <-eCh; err != nil {
+				errorList = append(errorList, err)
+			}
+		}
 		close(ch)
-	}(ch, &wg)
+	}()
 
 	for de := range ch {
 		out = append(out, de)
+	}
+	for _, err := range errorList {
+		if err == ErrUpdateTimestampTooOld {
+			return nil, err
+		}
+	}
+	if errorList != nil {
+		return nil, fmt.Errorf("%w %v", errorList[0], errorList[1:])
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Date < out[j].Date })
 	return out, nil
