@@ -452,7 +452,7 @@ func (c *Client) renameDir(item ListItem, name string, recursive bool) (retErr e
 
 	oldPrefix := item.Filename + "/"
 	newPrefix := name + "/"
-	li, err := c.glob(oldPrefix+"*", GlobOptions{MatchDot: true, Recursive: true})
+	li, err := c.glob(oldPrefix+"*", GlobOptions{ExactMatchExceptLast: true, MatchDot: true, Recursive: true})
 	if err != nil {
 		return err
 	}

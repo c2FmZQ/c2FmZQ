@@ -286,10 +286,7 @@ func (n *dirNode) updateLocked() {
 		case *dirNode:
 			v.item = item
 		case *fileNode:
-			size := v.item.Header.DataSize
-			if v.item = item; v.item.Header.DataSize == 0 {
-				v.item.Header.DataSize = size
-			}
+			v.item = item
 		default:
 			log.Fatalf("unexpected node type: %T", nn)
 		}
@@ -620,7 +617,7 @@ func (n *fileNode) attrLocked(_ context.Context, a *fuse.Attr) error {
 	a.Mode = 0o400
 	a.Uid = uint32(os.Getuid())
 	a.Gid = uint32(os.Getgid())
-	a.Size = uint64(n.item.Header.DataSize)
+	a.Size = uint64(n.item.Size)
 	ctime, _ := n.item.FSFile.DateCreated.Int64()
 	a.Ctime = time.Unix(ctime/1000, ctime%1000)
 	mtime, _ := n.item.FSFile.DateModified.Int64()
@@ -702,7 +699,12 @@ func (n *fileNode) openRead() (io.ReadSeekCloser, error) {
 		f.Close()
 		return nil, syscall.EIO
 	}
-	return stingle.DecryptFile(f, n.item.Header), nil
+	hdr, err := n.item.Header(n.f.c.SecretKey())
+	if err != nil {
+		log.Errorf("Header(): %v", err)
+		return nil, syscall.EIO
+	}
+	return stingle.DecryptFile(f, *hdr), nil
 }
 
 // handle is a file handle for reading or writing.

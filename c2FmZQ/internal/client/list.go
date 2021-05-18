@@ -21,10 +21,10 @@ import (
 type ListItem struct {
 	Filename  string         // c2FmZQ representation, e.g. album/ or album/file.jpg
 	IsDir     bool           // Whether this is a directory, i.e. gallery, trash, or album.
-	Header    stingle.Header // The decrypted file header.
 	FilePath  string         // Path where the file content is stored.
 	FileSet   string         // Path where the FileSet is stored.
 	FSFile    stingle.File   // The stingle.File object for this item.
+	Size      int64          // The file size.
 	DirSize   int            // The number of items in the directory.
 	Set       string         // The Set value, i.e. "0" for gallery, "1" for trash, "2" for albums.
 	Album     *stingle.Album // Pointer to stingle.Album if this is part of an album.
@@ -67,7 +67,7 @@ type dir struct {
 
 type file struct {
 	f       *stingle.File
-	hdrs    []stingle.Header
+	size    int64
 	fileSet string
 	set     string
 	album   *stingle.Album
@@ -148,7 +148,7 @@ func (n *node) insertDir(name, fileSet, set string, sk stingle.SecretKey, album 
 	}
 }
 
-func (n *node) insertFile(name string, f *stingle.File, hdrs []stingle.Header, fileSet, set string, album *stingle.Album, local bool) {
+func (n *node) insertFile(name string, size int64, f *stingle.File, fileSet, set string, album *stingle.Album, local bool) {
 	var nn *node
 	for i := 0; ; i++ {
 		nodeName := name
@@ -163,7 +163,7 @@ func (n *node) insertFile(name string, f *stingle.File, hdrs []stingle.Header, f
 	nn.local = local
 	nn.file = &file{
 		f:       f,
-		hdrs:    hdrs,
+		size:    size,
 		fileSet: fileSet,
 		set:     set,
 		album:   album,
@@ -184,6 +184,21 @@ func sanitize(s string) string {
 		}
 		return r
 	}, s)
+}
+
+// Header returns the decrypted Header.
+func (i ListItem) Header(sk stingle.SecretKey) (*stingle.Header, error) {
+	if a := i.Album; a != nil {
+		var err error
+		if sk, err = a.SK(sk); err != nil {
+			return nil, err
+		}
+	}
+	hdrs, err := stingle.DecryptBase64Headers(i.FSFile.Headers, sk)
+	if err != nil {
+		return nil, err
+	}
+	return &hdrs[0], nil
 }
 
 // GlobFiles returns files that match the glob patterns.
@@ -277,7 +292,7 @@ func (c *Client) globStep(parent string, g *glob, n *node, li *[]ListItem) error
 				return err
 			}
 			fn := sanitize(string(hdrs[0].Filename))
-			n.insertFile(fn, f, hdrs, n.dir.fileSet, n.dir.set, n.dir.album, local)
+			n.insertFile(fn, hdrs[0].DataSize, f, n.dir.fileSet, n.dir.set, n.dir.album, local)
 		}
 	}
 	if len(g.elems) == 0 {
@@ -294,7 +309,7 @@ func (c *Client) globStep(parent string, g *glob, n *node, li *[]ListItem) error
 		} else if n.file != nil {
 			*li = append(*li, ListItem{
 				Filename:  path.Join(parent, n.name),
-				Header:    n.file.hdrs[0],
+				Size:      n.file.size,
 				FilePath:  c.blobPath(n.file.f.File, false),
 				FileSet:   n.file.fileSet,
 				FSFile:    *n.file.f,
@@ -346,7 +361,7 @@ func (c *Client) ListFiles(patterns []string, opt GlobOptions) error {
 		if len(fn) > maxFilenameWidth {
 			maxFilenameWidth = len(fn)
 		}
-		w := len(fmt.Sprintf("%d", item.Header.DataSize))
+		w := len(fmt.Sprintf("%d", item.Size))
 		if w > maxSizeWidth {
 			maxSizeWidth = w
 		}
@@ -400,17 +415,22 @@ func (c *Client) ListFiles(patterns []string, opt GlobOptions) error {
 			continue
 		}
 		fileCount++
+		hdr, err := item.Header(c.SecretKey())
+		if err != nil {
+			return err
+		}
+
 		if !opt.Long {
 			c.Print(strings.TrimPrefix(item.Filename, opt.trimPrefix))
 			continue
 		}
 		duration := ""
-		if item.Header.FileType == stingle.FileTypeVideo {
-			duration = fmt.Sprintf(" %s", time.Duration(item.Header.VideoDuration)*time.Second)
+		if hdr.FileType == stingle.FileTypeVideo {
+			duration = fmt.Sprintf(" %s", time.Duration(hdr.VideoDuration)*time.Second)
 		}
 
 		exifData := ""
-		if x, err := c.getExif(item); err == nil {
+		if x, err := c.getExif(item, hdr); err == nil {
 			sizeX, _ := x.Get("PixelXDimension")
 			sizeY, _ := x.Get("PixelYDimension")
 			if sizeX != nil && sizeY != nil {
@@ -426,8 +446,8 @@ func (c *Client) ListFiles(patterns []string, opt GlobOptions) error {
 		}
 		ms, _ := item.FSFile.DateCreated.Int64()
 		c.Printf("%*s %*d %s %s%s%s%s\n", -maxFilenameWidth,
-			strings.TrimPrefix(item.Filename, opt.trimPrefix), maxSizeWidth, item.Header.DataSize,
-			time.Unix(ms/1000, 0).Format("2006-01-02 15:04:05"), stingle.FileType(item.Header.FileType),
+			strings.TrimPrefix(item.Filename, opt.trimPrefix), maxSizeWidth, item.Size,
+			time.Unix(ms/1000, 0).Format("2006-01-02 15:04:05"), stingle.FileType(hdr.FileType),
 			exifData, duration, local)
 	}
 	if fileCount > 0 && len(expand) > 0 {
@@ -446,8 +466,8 @@ func (c *Client) ListFiles(patterns []string, opt GlobOptions) error {
 	return nil
 }
 
-func (c *Client) getExif(item ListItem) (x *exif.Exif, err error) {
-	if item.Header.FileType != stingle.FileTypePhoto {
+func (c *Client) getExif(item ListItem, hdr *stingle.Header) (x *exif.Exif, err error) {
+	if hdr.FileType != stingle.FileTypePhoto {
 		return nil, errors.New("not a photo")
 	}
 	var f io.ReadCloser
@@ -461,5 +481,5 @@ func (c *Client) getExif(item ListItem) (x *exif.Exif, err error) {
 	if err := stingle.SkipHeader(f); err != nil {
 		return nil, err
 	}
-	return exif.Decode(stingle.DecryptFile(f, item.Header))
+	return exif.Decode(stingle.DecryptFile(f, *hdr))
 }

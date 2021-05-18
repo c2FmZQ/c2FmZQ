@@ -258,7 +258,7 @@ func glob(c *client.Client) ([]string, error) {
 	}
 	var list []string
 	for _, item := range li {
-		list = append(list, fmt.Sprintf("%s %d", item.Filename, item.Header.DataSize))
+		list = append(list, fmt.Sprintf("%s %d", item.Filename, item.Size))
 	}
 	sort.Strings(list)
 	out = append(out, list...)
