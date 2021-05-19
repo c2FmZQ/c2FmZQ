@@ -444,6 +444,10 @@ func (n *dirNode) Mkdir(ctx context.Context, req *fuse.MkdirRequest) (fs.Node, e
 	path := n.childPath(req.Name)
 	if err := n.f.c.AddAlbums([]string{path}); err != nil {
 		log.Debugf("AddAlbums(%q) failed: %v", path, err)
+		var syserr syscall.Errno
+		if errors.As(err, &syserr) {
+			return nil, syserr
+		}
 		return nil, syscall.EINVAL
 	}
 	n.updateLocked()
@@ -471,6 +475,10 @@ func (n *dirNode) Remove(ctx context.Context, req *fuse.RemoveRequest) error {
 	path := n.childPath(req.Name)
 	if err := n.f.c.Delete([]string{path}, true); err != nil {
 		log.Debugf("Delete(%q) failed: %v", path, err)
+		var syserr syscall.Errno
+		if errors.As(err, &syserr) {
+			return syserr
+		}
 		return syscall.EINVAL
 	}
 	n.updateLocked()
@@ -510,6 +518,10 @@ func (n *dirNode) Rename(ctx context.Context, req *fuse.RenameRequest, newDir fs
 	dst := nn.childPath(req.NewName)
 	if err := n.f.c.Move([]string{src}, dst, true); err != nil {
 		log.Debugf("Move(%q, %q) failed: %v", src, dst, err)
+		var syserr syscall.Errno
+		if errors.As(err, &syserr) {
+			return syserr
+		}
 		return syscall.EINVAL
 	}
 	n.updateLocked()
@@ -535,6 +547,10 @@ func (n *dirNode) Create(ctx context.Context, req *fuse.CreateRequest, resp *fus
 	w, err := n.f.c.StreamImport(req.Name, n.item)
 	if err != nil {
 		log.Errorf("FuseImport(%q, %s) failed: %v", req.Name, n, err)
+		var syserr syscall.Errno
+		if errors.As(err, &syserr) {
+			return nil, nil, syserr
+		}
 		return nil, nil, syscall.EPERM
 	}
 	n.updateLocked()
@@ -586,6 +602,10 @@ func (n *dirNode) Link(ctx context.Context, req *fuse.LinkRequest, old fs.Node) 
 	dst := n.childPath(req.NewName)
 	if err := n.f.c.Copy([]string{src}, dst, true); err != nil {
 		log.Debugf("Copy(%q, %q) failed: %v", src, dst, err)
+		var syserr syscall.Errno
+		if errors.As(err, &syserr) {
+			return nil, syserr
+		}
 		return nil, syscall.EINVAL
 	}
 	n.updateLocked()
@@ -677,6 +697,10 @@ func (n *fileNode) Open(ctx context.Context, req *fuse.OpenRequest, resp *fuse.O
 	}
 	r, err := n.openRead()
 	if err != nil {
+		var syserr syscall.Errno
+		if errors.As(err, &syserr) {
+			return nil, syserr
+		}
 		return nil, err
 	}
 	h = &handle{name: n.item.Filename, n: n, r: r}
@@ -822,6 +846,10 @@ func (h *handle) Read(ctx context.Context, req *fuse.ReadRequest, resp *fuse.Rea
 		resp.Data = buf[:n]
 		return nil
 	}
+	var syserr syscall.Errno
+	if errors.As(err, &syserr) {
+		return syserr
+	}
 	return err
 }
 
@@ -857,6 +885,10 @@ func (h *handle) Write(ctx context.Context, req *fuse.WriteRequest, resp *fuse.W
 	n, err := h.w.Write(req.Data)
 	log.Debugf("Write returned n=%d, err=%v  len(data)=%d", n, err, len(req.Data))
 	if err != nil {
+		var syserr syscall.Errno
+		if errors.As(err, &syserr) {
+			return syserr
+		}
 		return err
 	}
 	h.size += int64(n)

@@ -8,6 +8,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"c2FmZQ/internal/stingle"
 )
@@ -30,8 +31,8 @@ func (c *Client) AddAlbums(names []string) error {
 }
 
 func (c *Client) addAlbum(name string) (*stingle.Album, error) {
-	if name == "" || name == "." {
-		return nil, fmt.Errorf("name is not allowed: %q", name)
+	if name == "" || name == "." || strings.ToLower(name) == "shared" || strings.HasPrefix(strings.ToLower(name), "shared/") {
+		return nil, fmt.Errorf("%s: %w", name, syscall.EPERM)
 	}
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
