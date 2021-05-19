@@ -21,6 +21,7 @@ import (
 	"c2FmZQ/internal/database"
 	"c2FmZQ/internal/log"
 	"c2FmZQ/internal/server"
+	"c2FmZQ/licenses"
 )
 
 var (
@@ -114,6 +115,10 @@ func main() {
 				EnvVars:     []string{"C2FMZQ_HTDIGEST_FILE"},
 				Destination: &flagHTDigestFile,
 			},
+			&cli.BoolFlag{
+				Name:  "licenses",
+				Usage: "Show the software licenses.",
+			},
 		},
 		Action: startServer,
 	}
@@ -123,6 +128,10 @@ func main() {
 }
 
 func startServer(c *cli.Context) error {
+	if c.Bool("licenses") {
+		licenses.Show()
+		return nil
+	}
 	if c.Args().Len() > 0 {
 		cli.ShowSubcommandHelp(c)
 		return nil

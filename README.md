@@ -106,6 +106,7 @@ GLOBAL OPTIONS:
    --encrypt-metadata             Encrypt the server metadata (strongly recommended). (default: true)
    --passphrase-file FILE         Read the database passphrase from FILE. [$C2FMZQ_PASSPHRASE_FILE]
    --htdigest-file FILE           The name of the htdigest FILE to use for basic auth for some endpoints, e.g. /metrics [$C2FMZQ_HTDIGEST_FILE]
+   --licenses                     Show the software licenses. (default: false)
 ```
 
 Or, build a docker image.
@@ -179,6 +180,8 @@ COMMANDS:
    Import/Export:
      export  Decrypt and export files.
      import  Encrypt and import files.
+   Misc:
+     licenses  Show the software licenses.
    Mode:
      mount  Mount as a fuse filesystem.
      shell  Run in shell mode.

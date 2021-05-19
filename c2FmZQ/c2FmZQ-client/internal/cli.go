@@ -19,6 +19,7 @@ import (
 	"c2FmZQ/internal/crypto"
 	"c2FmZQ/internal/log"
 	"c2FmZQ/internal/secure"
+	"c2FmZQ/licenses"
 )
 
 type App struct {
@@ -91,6 +92,12 @@ func New() *App {
 		},
 	}
 	app.cli.Commands = []*cli.Command{
+		&cli.Command{
+			Name:     "licenses",
+			Usage:    "Show the software licenses.",
+			Action:   app.licenses,
+			Category: "Misc",
+		},
 		&cli.Command{
 			Name:     "shell",
 			Usage:    "Run in shell mode.",
@@ -1125,4 +1132,9 @@ func (a *App) listContacts(ctx *cli.Context) error {
 		patterns = []string{"*"}
 	}
 	return a.client.Contacts(patterns)
+}
+
+func (a *App) licenses(ctx *cli.Context) error {
+	licenses.Show()
+	return nil
 }
