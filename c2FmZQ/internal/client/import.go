@@ -44,6 +44,7 @@ func (c *Client) ImportFiles(patterns []string, dest string, recursive bool) (in
 	dirs := make(map[string][]ListItem)
 	for _, f := range files {
 		dir, _ := filepath.Split(f.dst)
+		dir = strings.TrimSuffix(dir, "/")
 		dirs[dir] = nil
 	}
 	var sorted []string
@@ -98,7 +99,7 @@ func (c *Client) ImportFiles(patterns []string, dest string, recursive bool) (in
 			}
 		}
 		for _, f := range files {
-			if dd, _ := filepath.Split(f.dst); dir != dd {
+			if dd, _ := filepath.Split(f.dst); dir != strings.TrimSuffix(dd, "/") {
 				continue
 			}
 			c.Printf("Importing %s -> %s (not synced)\n", f.src, f.dst)
