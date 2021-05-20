@@ -6,21 +6,21 @@ files, including but not limited to pictures and videos.
 There is a command-line client application, and a server application.
 
 The server is the central repository where all the encrypted data can be stored.
-It has no access to the plaintext data.
+It has no way to access to the plaintext data.
 
 The command-line client is used to import, export, organize, and share files.
 
 They use an API that's compatible with the Stingle Photos app
 (https://github.com/stingle/stingle-photos-android) published by [stingle.org](https://stingle.org).
 
-This project is **not** associated with stingle.org. This is not the code used
+This project is **NOT** associated with stingle.org. This is not the code used
 by stingle.org. We have no knowledge of how their server is actually implemented.
 The code in this repo was developed by studying the client app's code and
 reverse engineering the API.
 
 ## Notes about security and privacy
 
-**This code has not been reviewed for security.** Review, comments, and
+**This software has not been reviewed for security.** Review, comments, and
 contributions are welcome.
 
 The server has no way to decrypt the files that are uploaded by the clients.
@@ -37,7 +37,7 @@ someone else's, and make the user think they're sharing with their friend while
 actually sharing with an attacker. The client application lets the user verify
 the contact's public key before sharing.
 
-When viewing a shared album, the app / user has to trust that the shared content is
+When viewing a shared album, the client has to trust that the shared content is
 "safe". Since the server can't decrypt the content, it has no way to sanitize it
 either. A malicious user _could_ share content that aims to exploit some unpatched
 vulnerability in the client's code.
@@ -50,7 +50,7 @@ exported, published to the New York Times, etc.
 ## c2FmZQ Server
 
 c2FmZQ-server is an API server with a relatively small footprint. It can run
-just about anywhere, as long as it has access to a lot of disk space, and a modern
+just about anywhere, as long as it has access to a lot of storage space, and a modern
 CPU. It must be reachable by the client(s) via HTTPS.
 
 The server needs at least two pieces of information: the name of the directory where
@@ -61,7 +61,7 @@ For TLS, the server also needs the TLS key, and certificates.
 
 ### Connecting the Stingle app to this server
 
-For the Stingle app to connect to this server, it has to the recompiled with api_server_url
+For the Stingle app to connect to this server, it has to the recompiled with `api_server_url`
 set to point to this server.
 See [this commit](https://github.com/rthellend/stingle-photos-android/commit/c6758758513f7b9d3cdf755085e4b57945f2494f) for an example.
 
@@ -124,7 +124,7 @@ With the default Dockerfile, the server expects the following files in ${SECRETD
 - **privkey.pem** contains the TLS private key in PEM format.
 - **fullchain.pem** contains the TLS certificates in PEM format.
 
-Or, build a binary for arm and run the server on a NAS, raspberry pi, etc.
+Or, build a binary for another platform, e.g. arm, and run the server on a NAS, raspberry pi, etc.
 
 ```
 $ cd c2FmZQ/c2FmZQ-server
@@ -214,7 +214,7 @@ write operations with some caveats.
 * Files can only be opened for writing when they are created, and all writes must
   append. The file content is encrypted as it is written.
 * Once a new file is closed, it is read-only (regardless of file permissions).
-  The only way to modify a file after that is to delete or replace it. Renames
+  The only way to modify a file after that is to delete it or replace it. Renames
   are OK.
 * While the fuse filesystem is mounted, data isn't automatically uploaded to the
   cloud/remote server, but remote content will be streamed for reading if a local
