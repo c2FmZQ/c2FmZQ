@@ -32,6 +32,26 @@ var (
 // A secret key used to encrypt tokens.
 type Key [chacha20poly1305.KeySize]byte
 
+func (k *Key) UnmarshalJSON(b []byte) error {
+	var s string
+	if err := json.Unmarshal(b, &s); err != nil {
+		return err
+	}
+	b, err := base64.RawURLEncoding.DecodeString(s)
+	if err != nil {
+		return err
+	}
+	if len(b) != chacha20poly1305.KeySize {
+		return errors.New("invalid key size")
+	}
+	copy((*k)[:], b)
+	return nil
+}
+
+func (k Key) MarshalJSON() ([]byte, error) {
+	return json.Marshal(base64.RawURLEncoding.EncodeToString(k[:]))
+}
+
 // Holds the information contained in the encrypted token.
 type Token struct {
 	// Who this token was issued to.
