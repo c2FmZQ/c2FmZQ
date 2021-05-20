@@ -1,4 +1,4 @@
-FROM golang:1.16.2-alpine3.13 AS build
+FROM golang:1.16.4-alpine3.13 AS build
 MAINTAINER rthellend@gmail.com
 RUN apk update && apk upgrade
 RUN apk add --no-cache libsodium-dev=1.0.18-r0 gcc=10.2.1_pre1-r3 musl-dev=1.2.2-r0
