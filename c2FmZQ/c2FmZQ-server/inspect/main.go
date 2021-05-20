@@ -107,6 +107,17 @@ func main() {
 				Usage:   "Edit quotas.",
 				Action:  editQuotas,
 			},
+			&cli.Command{
+				Name:   "orphans",
+				Usage:  "Find orphans files.",
+				Action: findOrphanFiles,
+				Flags: []cli.Flag{
+					&cli.BoolFlag{
+						Name:  "delete",
+						Usage: "Delete the orphan files.",
+					},
+				},
+			},
 		},
 	}
 
@@ -267,4 +278,12 @@ func editQuotas(c *cli.Context) error {
 		return err
 	}
 	return db.EditQuotas()
+}
+
+func findOrphanFiles(c *cli.Context) error {
+	db, err := initDB(c)
+	if err != nil {
+		return err
+	}
+	return db.FindOrphanFiles(c.Bool("delete"))
 }

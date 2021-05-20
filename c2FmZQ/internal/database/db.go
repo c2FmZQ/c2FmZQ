@@ -8,10 +8,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"time"
 
@@ -215,6 +217,7 @@ func (d Database) DumpUsers() {
 		user, err := d.UserByID(u.UserID)
 		if err != nil {
 			log.Errorf("User(%q): %v", u.Email, err)
+			continue
 		}
 		fmt.Printf("ID %d [%s]: %s\n", u.UserID, u.Email, d.filePath(user.home(userFile)))
 		fmt.Printf("  -contacts: %s\n", d.filePath(user.home(contactListFile)))
@@ -223,9 +226,92 @@ func (d Database) DumpUsers() {
 		albums, err := d.AlbumRefs(user)
 		if err != nil {
 			log.Errorf("AlbumRefs(%q): %v", u.Email, err)
+			continue
 		}
 		for k, v := range albums {
 			fmt.Printf("  -album %s: %s\n", k, v.File)
 		}
 	}
+}
+
+func (d Database) FindOrphanFiles(del bool) error {
+	exist := make(map[string]struct{})
+	err := filepath.WalkDir(d.Dir(), func(path string, de fs.DirEntry, err error) error {
+		if err != nil {
+			log.Errorf("%s: %s", path, err)
+			return err
+		}
+		if de.IsDir() {
+			return nil
+		}
+		rel, _ := filepath.Rel(d.Dir(), path)
+		exist[rel] = struct{}{}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	delete(exist, "master.key")
+	delete(exist, d.filePath(userListFile))
+	delete(exist, d.filePath(quotaFile))
+
+	var ul []userList
+	if err := d.storage.ReadDataFile(d.filePath(userListFile), &ul); err != nil {
+		log.Errorf("ReadDataFile: %v", err)
+		return err
+	}
+	for _, u := range ul {
+		user, err := d.UserByID(u.UserID)
+		if err != nil {
+			log.Errorf("User(%q): %v", u.Email, err)
+			return err
+		}
+		delete(exist, d.filePath(user.home(userFile)))
+		delete(exist, d.filePath(user.home(contactListFile)))
+		delete(exist, d.filePath(user.home(albumManifest)))
+		delete(exist, d.fileSetPath(user, stingle.TrashSet))
+		delete(exist, d.fileSetPath(user, stingle.GallerySet))
+		albums, err := d.AlbumRefs(user)
+		if err != nil {
+			log.Errorf("AlbumRefs(%q): %v", u.Email, err)
+			return err
+		}
+		fsList := []string{
+			d.fileSetPath(user, stingle.TrashSet),
+			d.fileSetPath(user, stingle.GallerySet),
+		}
+		for _, v := range albums {
+			delete(exist, v.File)
+			fsList = append(fsList, v.File)
+		}
+		for _, f := range fsList {
+			var fs FileSet
+			if err := d.storage.ReadDataFile(f, &fs); err != nil {
+				log.Errorf("FileSet: %v", err)
+				return err
+			}
+			for _, file := range fs.Files {
+				delete(exist, file.StoreFile)
+				delete(exist, file.StoreThumb)
+				delete(exist, file.StoreFile+".ref")
+				delete(exist, file.StoreThumb+".ref")
+			}
+		}
+	}
+	var sorted []string
+	for e := range exist {
+		sorted = append(sorted, e)
+	}
+	sort.Strings(sorted)
+	for _, e := range sorted {
+		if del {
+			log.Infof("Deleting orphan file: %s", e)
+			if err := os.Remove(filepath.Join(d.Dir(), e)); err != nil {
+				return err
+			}
+			continue
+		}
+		log.Infof("Orphan file: %s", e)
+	}
+	return nil
 }
