@@ -81,7 +81,7 @@ func (c *Client) Share(pattern string, shareWith []string, permissions []string)
 	for _, item := range li {
 		album := item.Album
 		sharingKeys := make(map[string]string)
-		sk, err := album.SK(c.SecretKey())
+		sk, err := c.SKForAlbum(album)
 		if err != nil {
 			return err
 		}
@@ -90,11 +90,13 @@ func (c *Client) Share(pattern string, shareWith []string, permissions []string)
 			id := m.UserID.String()
 			pk, err := m.PK()
 			if err != nil {
+				sk.Wipe()
 				return err
 			}
 			sharingKeys[id] = pk.SealBoxBase64(sk.ToBytes())
 			ids = append(ids, id)
 		}
+		sk.Wipe()
 		album.Members = strings.Join(ids, ",")
 		if album.Permissions, err = c.parsePermissions("1000", permissions); err != nil {
 			return err

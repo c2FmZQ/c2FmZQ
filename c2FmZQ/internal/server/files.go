@@ -333,9 +333,14 @@ func (s *Server) handleTokenDownload(w http.ResponseWriter, req *http.Request) {
 }
 
 // makeDownloadURL creates a signed URL to download a file.
-func (s *Server) makeDownloadURL(user database.User, host, file, set string, isThumb bool) string {
+func (s *Server) makeDownloadURL(user database.User, host, file, set string, isThumb bool) (string, error) {
+	tk, err := s.db.DecryptTokenKey(user.TokenKey)
+	if err != nil {
+		return "", err
+	}
+	defer tk.Wipe()
 	tok := token.Mint(
-		user.TokenKey,
+		tk,
 		token.Token{
 			Scope:   "download",
 			Subject: user.UserID,
@@ -349,7 +354,7 @@ func (s *Server) makeDownloadURL(user database.User, host, file, set string, isT
 	if b == "" {
 		b = fmt.Sprintf("https://%s/", host)
 	}
-	return fmt.Sprintf("%sv2/download/%s", b, tok)
+	return fmt.Sprintf("%sv2/download/%s", b, tok), nil
 }
 
 // handleGetDownloadUrls handles the /v2/sync/getDownloadUrls endpoint. It is
@@ -377,7 +382,11 @@ func (s *Server) handleGetDownloadUrls(user database.User, req *http.Request) *s
 			continue
 		}
 		set := req.PostFormValue(strings.Replace(k, "filename", "set", 1))
-		urls[v[0]] = s.makeDownloadURL(user, req.Host, v[0], set, isThumb)
+		url, err := s.makeDownloadURL(user, req.Host, v[0], set, isThumb)
+		if err != nil {
+			return stingle.ResponseNOK()
+		}
+		urls[v[0]] = url
 	}
 	return stingle.ResponseOK().AddPart("urls", urls)
 }
@@ -397,6 +406,9 @@ func (s *Server) handleGetDownloadUrls(user database.User, req *http.Request) *s
 //   - StringleResponse(ok).
 //        Parts("url", signed url)
 func (s *Server) handleGetURL(user database.User, req *http.Request) *stingle.Response {
-	return stingle.ResponseOK().
-		AddPart("url", s.makeDownloadURL(user, req.Host, req.PostFormValue("file"), req.PostFormValue("set"), false))
+	url, err := s.makeDownloadURL(user, req.Host, req.PostFormValue("file"), req.PostFormValue("set"), false)
+	if err != nil {
+		return stingle.ResponseNOK()
+	}
+	return stingle.ResponseOK().AddPart("url", url)
 }

@@ -13,42 +13,46 @@ import (
 	"golang.org/x/crypto/nacl/box"
 	"golang.org/x/crypto/nacl/secretbox"
 	"golang.org/x/crypto/nacl/sign"
+
+	"c2FmZQ/internal/log"
 )
 
 // MakeSecretKey returns a new SecretKey.
-func MakeSecretKey() SecretKey {
+func MakeSecretKey() *SecretKey {
 	sk := SecretKey{B: new([32]byte)}
 	if _, err := rand.Read(sk.B[:]); err != nil {
 		panic(err)
 	}
-	return sk
+	return &sk
+}
+
+func SecretKeyFromBytes(b []byte) *SecretKey {
+	sk := SecretKey{B: new([32]byte)}
+	copy(sk.B[:], b)
+	for i := 0; i < len(b); i++ {
+		b[i] = 0
+	}
+	return &sk
 }
 
 type SecretKey struct {
 	B *[32]byte
 }
-type PublicKey struct {
-	B *[32]byte
+
+func (k *SecretKey) Wipe() {
+	if k == nil {
+		return
+	}
+	for i := range *k.B {
+		(*k.B)[i] = 0
+	}
+	if log.Level > log.DebugLevel {
+		log.Debugf("Wiped %#v", *k)
+	}
 }
 
 func (k SecretKey) ToBytes() []byte {
 	return k.B[:]
-}
-
-func (k PublicKey) ToBytes() []byte {
-	return k.B[:]
-}
-
-func SecretKeyFromBytes(b []byte) SecretKey {
-	sk := SecretKey{B: new([32]byte)}
-	copy(sk.B[:], b)
-	return SecretKey(sk)
-}
-
-func PublicKeyFromBytes(b []byte) PublicKey {
-	pk := PublicKey{B: new([32]byte)}
-	copy(pk.B[:], b)
-	return PublicKey(pk)
 }
 
 func (k SecretKey) PublicKey() PublicKey {
@@ -73,6 +77,20 @@ func (k *SecretKey) UnmarshalJSON(b []byte) error {
 
 func (k SecretKey) MarshalJSON() ([]byte, error) {
 	return json.Marshal(base64.RawURLEncoding.EncodeToString(k.B[:]))
+}
+
+type PublicKey struct {
+	B *[32]byte
+}
+
+func PublicKeyFromBytes(b []byte) PublicKey {
+	pk := PublicKey{B: new([32]byte)}
+	copy(pk.B[:], b)
+	return PublicKey(pk)
+}
+
+func (k PublicKey) ToBytes() []byte {
+	return k.B[:]
 }
 
 func (k *PublicKey) UnmarshalJSON(b []byte) error {
@@ -140,7 +158,7 @@ func (k SignSecretKey) PublicKey() SignPublicKey {
 
 // EncryptMessage encrypts a message using Authenticated Public Key Encryption.
 // https://pkg.go.dev/github.com/jamesruan/sodium#hdr-Authenticated_Public_Key_Encryption
-func EncryptMessage(msg []byte, pk PublicKey, sk SecretKey) string {
+func EncryptMessage(msg []byte, pk PublicKey, sk *SecretKey) string {
 	nonce := new([24]byte)
 	if _, err := rand.Read(nonce[:]); err != nil {
 		panic(err)
@@ -153,7 +171,7 @@ func EncryptMessage(msg []byte, pk PublicKey, sk SecretKey) string {
 
 // DecryptMessage decrypts a message using Authenticated Public Key Encryption.
 // https://pkg.go.dev/github.com/jamesruan/sodium#hdr-Authenticated_Public_Key_Encryption
-func DecryptMessage(msg string, pk PublicKey, sk SecretKey) ([]byte, error) {
+func DecryptMessage(msg string, pk PublicKey, sk *SecretKey) ([]byte, error) {
 	b, err := base64.StdEncoding.DecodeString(msg)
 	if err != nil {
 		return nil, err

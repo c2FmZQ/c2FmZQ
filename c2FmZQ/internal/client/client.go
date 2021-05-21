@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"c2FmZQ/internal/crypto"
 	"c2FmZQ/internal/log"
 	"c2FmZQ/internal/secure"
 	"c2FmZQ/internal/stingle"
@@ -36,13 +37,14 @@ var (
 )
 
 // Create creates a new client configuration, if one doesn't exist already.
-func Create(s *secure.Storage) (*Client, error) {
+func Create(m *crypto.MasterKey, s *secure.Storage) (*Client, error) {
 	var c Client
 	c.hc = &http.Client{}
+	c.masterKey = m
 	c.storage = s
 	c.writer = os.Stdout
 	c.prompt = prompt
-	c.LocalSecretKey = stingle.MakeSecretKey()
+	c.LocalSecretKey = c.encryptSK(stingle.MakeSecretKey())
 
 	if err := s.CreateEmptyFile(c.cfgFile(), &c); err != nil {
 		return nil, err
@@ -54,8 +56,9 @@ func Create(s *secure.Storage) (*Client, error) {
 }
 
 // Load loads the existing client configuration.
-func Load(s *secure.Storage) (*Client, error) {
+func Load(m *crypto.MasterKey, s *secure.Storage) (*Client, error) {
 	var c Client
+	c.masterKey = m
 	c.storage = s
 	if err := s.ReadDataFile(c.cfgFile(), &c); err != nil {
 		return nil, err
@@ -69,14 +72,15 @@ func Load(s *secure.Storage) (*Client, error) {
 
 // Client contains the metadata for a user account.
 type Client struct {
-	Account        *AccountInfo      `json:"accountInfo"`
-	LocalSecretKey stingle.SecretKey `json:"localSecretKey"`
+	Account        *AccountInfo `json:"accountInfo"`
+	LocalSecretKey []byte       `json:"localSecretKey"`
 
 	hc *http.Client
 
-	storage *secure.Storage
-	writer  io.Writer
-	prompt  func(msg string) (string, error)
+	masterKey *crypto.MasterKey
+	storage   *secure.Storage
+	writer    io.Writer
+	prompt    func(msg string) (string, error)
 }
 
 // AccountInfo encapsulated the information for a logged in account.
@@ -84,7 +88,7 @@ type AccountInfo struct {
 	Email           string            `json:"email"`
 	Salt            []byte            `json:"salt"`
 	HashedPassword  string            `json:"hashedPassword"`
-	SecretKey       stingle.SecretKey `json:"secretKey"`
+	SecretKey       []byte            `json:"secretKey"`
 	IsBackedUp      bool              `json:"isBackedUp"`
 	ServerBaseURL   string            `json:"serverBaseURL"`
 	UserID          int64             `json:"userID"`
@@ -103,11 +107,38 @@ func (c *Client) cfgFile() string {
 }
 
 // SecretKey returns the current secret key.
-func (c *Client) SecretKey() stingle.SecretKey {
+func (c *Client) SecretKey() *stingle.SecretKey {
+	b := c.LocalSecretKey
 	if c.Account != nil {
-		return c.Account.SecretKey
+		b = c.Account.SecretKey
 	}
-	return c.LocalSecretKey
+	k, err := c.masterKey.Decrypt(b)
+	if err != nil {
+		panic(err)
+	}
+	return stingle.SecretKeyFromBytes(k)
+}
+
+// PublicKey returns the current secret key.
+func (c *Client) PublicKey() stingle.PublicKey {
+	sk := c.SecretKey()
+	defer sk.Wipe()
+	return sk.PublicKey()
+}
+
+// SKForAlbum returns the secret key for the album, or the main secret key if
+// a is nil.
+func (c *Client) SKForAlbum(a *stingle.Album) (*stingle.SecretKey, error) {
+	sk := c.SecretKey()
+	if a != nil {
+		ask, err := a.SK(sk)
+		if err != nil {
+			return nil, err
+		}
+		sk.Wipe()
+		sk = ask
+	}
+	return sk, nil
 }
 
 // Status returns the client's current status.
@@ -122,8 +153,17 @@ func (c *Client) Status() error {
 			c.Printf("Secret key is NOT backed up.\n")
 		}
 	}
-	c.Printf("Public key: % X\n", c.SecretKey().PublicKey().ToBytes())
+	c.Printf("Public key: % X\n", c.PublicKey().ToBytes())
 	return nil
+}
+
+func (c *Client) encryptSK(sk *stingle.SecretKey) []byte {
+	defer sk.Wipe()
+	b, err := c.masterKey.Encrypt(sk.ToBytes())
+	if err != nil {
+		panic(err)
+	}
+	return b
 }
 
 func (c *Client) SetWriter(w io.Writer) {
@@ -155,13 +195,17 @@ func nowJSON() json.Number {
 }
 
 func (c *Client) fileHash(fn string) string {
-	n := c.storage.HashString(hex.EncodeToString(c.SecretKey().ToBytes()) + "/" + fn)
+	sk := c.SecretKey()
+	defer sk.Wipe()
+	n := c.storage.HashString(hex.EncodeToString(sk.ToBytes()) + "/" + fn)
 	return filepath.Join(n[:2], n)
 }
 
 func (c *Client) encodeParams(params map[string]string) string {
 	j, _ := json.Marshal(params)
-	return stingle.EncryptMessage(j, c.Account.ServerPublicKey, c.Account.SecretKey)
+	sk := c.SecretKey()
+	defer sk.Wipe()
+	return stingle.EncryptMessage(j, c.Account.ServerPublicKey, sk)
 }
 
 func (c *Client) sendRequest(uri string, form url.Values, server string) (*stingle.Response, error) {

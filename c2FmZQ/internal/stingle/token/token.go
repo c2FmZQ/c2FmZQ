@@ -23,6 +23,8 @@ import (
 	"time"
 
 	"golang.org/x/crypto/chacha20poly1305"
+
+	"c2FmZQ/internal/log"
 )
 
 var (
@@ -31,6 +33,30 @@ var (
 
 // A secret key used to encrypt tokens.
 type Key [chacha20poly1305.KeySize]byte
+
+func KeyFromBytes(b []byte) *Key {
+	if len(b) != chacha20poly1305.KeySize {
+		panic("invalid token key size")
+	}
+	var k Key
+	copy(k[:], b)
+	for i := 0; i < chacha20poly1305.KeySize; i++ {
+		b[i] = 0
+	}
+	return &k
+}
+
+func (k *Key) Wipe() {
+	if k == nil {
+		return
+	}
+	for i := range k {
+		k[i] = 0
+	}
+	if log.Level > log.DebugLevel {
+		log.Debugf("Wiped %#v", *k)
+	}
+}
 
 func (k *Key) UnmarshalJSON(b []byte) error {
 	var s string

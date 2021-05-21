@@ -456,9 +456,9 @@ func (a *App) init(ctx *cli.Context, update bool) error {
 		}
 		storage := secure.NewStorage(a.flagDataDir, &masterKey.EncryptionKey)
 
-		c, err := client.Load(storage)
+		c, err := client.Load(masterKey, storage)
 		if err != nil {
-			if c, err = client.Create(storage); err != nil {
+			if c, err = client.Create(masterKey, storage); err != nil {
 				log.Fatalf("client.Create: %v", err)
 			}
 		}

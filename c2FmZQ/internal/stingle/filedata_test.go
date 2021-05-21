@@ -16,7 +16,7 @@ func TestFileEncryption(t *testing.T) {
 	sk := MakeSecretKey()
 	mk := sodium.MakeMasterKey()
 
-	header := Header{
+	header := &Header{
 		FileID:       []byte("ABCDEFGHIJKLMNOPQRSTUVWXYZ123456"),
 		Version:      1,
 		ChunkSize:    128,

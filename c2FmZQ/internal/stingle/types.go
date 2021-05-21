@@ -61,7 +61,7 @@ func (c Contact) PK() (pk PublicKey, err error) {
 }
 
 // Name returns the decrypted file name.
-func (f File) Name(sk SecretKey) (string, error) {
+func (f File) Name(sk *SecretKey) (string, error) {
 	hdrs, err := DecryptBase64Headers(f.Headers, sk)
 	if err != nil {
 		return "", err
@@ -70,13 +70,12 @@ func (f File) Name(sk SecretKey) (string, error) {
 }
 
 // SK returns the album's decrypted SecretKey.
-func (a Album) SK(sk SecretKey) (ask SecretKey, err error) {
+func (a Album) SK(sk *SecretKey) (*SecretKey, error) {
 	b, err := sk.SealBoxOpenBase64(a.EncPrivateKey)
 	if err != nil {
-		return
+		return nil, err
 	}
-	ask = SecretKeyFromBytes(b)
-	return
+	return SecretKeyFromBytes(b), nil
 }
 
 // PK returns the album's decoded PublicKey.
@@ -90,7 +89,7 @@ func (a Album) PK() (pk PublicKey, err error) {
 }
 
 // Name returns the decrypted album name.
-func (a Album) Name(sk SecretKey) (string, error) {
+func (a Album) Name(sk *SecretKey) (string, error) {
 	ask, err := a.SK(sk)
 	if err != nil {
 		return "", err
@@ -188,6 +187,30 @@ type Header struct {
 	FileType      uint8
 	Filename      []byte
 	VideoDuration int32
+}
+
+// Wipe zeros all the Header data.
+func (h *Header) Wipe() {
+	if h == nil {
+		return
+	}
+	h.Version = 0
+	h.ChunkSize = 0
+	h.DataSize = 0
+	h.FileType = 0
+	h.VideoDuration = 0
+	for i := range h.FileID {
+		h.FileID[i] = 0
+	}
+	for i := range h.SymmetricKey {
+		h.SymmetricKey[i] = 0
+	}
+	for i := range h.Filename {
+		h.Filename[i] = 0
+	}
+	if log.Level > log.DebugLevel {
+		log.Debugf("Wiped %#v", *h)
+	}
 }
 
 // ResponseOK returns a new Response with status OK.

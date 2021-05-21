@@ -212,7 +212,9 @@ func (c *Client) processAlbumFileUpdates(updates []stingle.File) (retErr error) 
 		if _, ok := al.Albums[a]; !ok {
 			al.Albums[a] = al.RemoteAlbums[a]
 			if album := al.Albums[a]; album != nil {
-				name, _ := album.Name(c.SecretKey())
+				sk := c.SecretKey()
+				name, _ := album.Name(sk)
+				sk.Wipe()
 				log.Debugf("Album recovered %q (%s)", name, a)
 			}
 		}
@@ -271,7 +273,9 @@ func (c *Client) processDeleteAlbums(deletes []stingle.DeleteEvent) (retErr erro
 		d, _ := del.Date.Int64()
 		if a, ok := al.Albums[del.AlbumID]; ok {
 			ad, _ := a.DateModified.Int64()
-			name, _ := a.Name(c.SecretKey())
+			sk := c.SecretKey()
+			name, _ := a.Name(sk)
+			sk.Wipe()
 			localChanges, err := c.albumHasLocalFileChanges(del.AlbumID)
 			if err != nil {
 				return err

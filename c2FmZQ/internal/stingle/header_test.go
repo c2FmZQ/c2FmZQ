@@ -9,7 +9,7 @@ import (
 func TestDecryptHeader(t *testing.T) {
 	sk := MakeSecretKey()
 
-	header := Header{
+	header := &Header{
 		FileID:        []byte("ABCDEFGHIJKLMNOPQRSTUVWXYZ123456"),
 		Version:       1,
 		ChunkSize:     1024,

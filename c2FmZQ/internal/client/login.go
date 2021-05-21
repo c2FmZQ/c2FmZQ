@@ -31,6 +31,7 @@ func (c *Client) CreateAccount(server, email, password string, doBackup bool) er
 		return err
 	}
 	sk := stingle.MakeSecretKey()
+	defer sk.Wipe()
 	bundle := stingle.MakeKeyBundle(sk.PublicKey())
 	if doBackup {
 		bundle = stingle.MakeSecretKeyBundle([]byte(password), sk)
@@ -56,7 +57,7 @@ func (c *Client) CreateAccount(server, email, password string, doBackup bool) er
 
 	c.Account = &AccountInfo{
 		Email:          email,
-		SecretKey:      sk,
+		SecretKey:      c.encryptSK(sk),
 		Salt:           salt,
 		HashedPassword: pw,
 		IsBackedUp:     doBackup,
@@ -91,7 +92,9 @@ func (c *Client) BackupPhrase(password string) error {
 	if err := c.checkPassword(password); err != nil {
 		return err
 	}
-	phr, err := bip39.NewMnemonic(c.SecretKey().ToBytes())
+	sk := c.SecretKey()
+	defer sk.Wipe()
+	phr, err := bip39.NewMnemonic(sk.ToBytes())
 	if err != nil {
 		return err
 	}
@@ -135,6 +138,7 @@ func (c *Client) Login(server, email, password string) error {
 		return fmt.Errorf("keyBundle has unexpected type: %T", sr.Part("keyBundle"))
 	}
 	sk, err := stingle.DecodeSecretKeyBundle([]byte(password), keyBundle)
+	defer sk.Wipe()
 	if err != nil {
 		c.Account.IsBackedUp = false
 		phr, err := c.prompt("Enter backup phrase: ")
@@ -151,7 +155,7 @@ func (c *Client) Login(server, email, password string) error {
 		}
 	}
 
-	c.Account.SecretKey = sk
+	c.Account.SecretKey = c.encryptSK(sk)
 	c.createEmptyFiles()
 
 	if err := c.Save(); err != nil {
@@ -240,6 +244,7 @@ func (c *Client) ChangePassword(password, newPassword string, doBackup bool) err
 		return err
 	}
 	sk := c.SecretKey()
+	defer sk.Wipe()
 	bundle := stingle.MakeKeyBundle(sk.PublicKey())
 	if doBackup {
 		bundle = stingle.MakeSecretKeyBundle([]byte(newPassword), sk)
@@ -273,7 +278,7 @@ func (c *Client) ChangePassword(password, newPassword string, doBackup bool) err
 	c.Account.Token = tok
 	c.Account.Salt = salt
 	c.Account.HashedPassword = pw
-	c.Account.SecretKey = sk
+	c.Account.SecretKey = c.encryptSK(sk)
 	c.Account.IsBackedUp = doBackup
 
 	if err := c.Save(); err != nil {
@@ -293,6 +298,7 @@ func (c *Client) RecoverAccount(server, email, newPassword, backupPhrase string,
 		return err
 	}
 	sk := stingle.SecretKeyFromBytes(b)
+	defer sk.Wipe()
 	if err := c.checkKey(server, email, sk); err != nil {
 		return err
 	}
@@ -329,7 +335,7 @@ func (c *Client) RecoverAccount(server, email, newPassword, backupPhrase string,
 		Email:          email,
 		Salt:           salt,
 		HashedPassword: pw,
-		SecretKey:      sk,
+		SecretKey:      c.encryptSK(sk),
 		IsBackedUp:     doBackup,
 		ServerBaseURL:  server,
 	}
@@ -388,6 +394,7 @@ func (c *Client) UploadKeys(password string, doBackup bool) error {
 		return err
 	}
 	sk := c.SecretKey()
+	defer sk.Wipe()
 	bundle := stingle.MakeKeyBundle(sk.PublicKey())
 	if doBackup {
 		bundle = stingle.MakeSecretKeyBundle([]byte(password), sk)
@@ -420,7 +427,7 @@ func (c *Client) UploadKeys(password string, doBackup bool) error {
 	return nil
 }
 
-func (c *Client) checkKey(server, email string, sk stingle.SecretKey) error {
+func (c *Client) checkKey(server, email string, sk *stingle.SecretKey) error {
 	form := url.Values{}
 	form.Set("email", email)
 	sr, err := c.sendRequest("/v2/login/checkKey", form, server)

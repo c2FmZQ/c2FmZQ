@@ -59,7 +59,7 @@ type client struct {
 	password        string
 	salt            string
 	isBackup        string
-	secretKey       stingle.SecretKey
+	secretKey       *stingle.SecretKey
 	serverPublicKey stingle.PublicKey
 	keyBundle       string
 	token           string

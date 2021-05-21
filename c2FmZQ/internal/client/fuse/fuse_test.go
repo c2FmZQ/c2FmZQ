@@ -195,7 +195,7 @@ func newClient(dir string) (*client.Client, error) {
 		return nil, err
 	}
 	storage := secure.NewStorage(dir, &masterKey.EncryptionKey)
-	c, err := client.Create(storage)
+	c, err := client.Create(masterKey, storage)
 	if err != nil {
 		return nil, err
 	}

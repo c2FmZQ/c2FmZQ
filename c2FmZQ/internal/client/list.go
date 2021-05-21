@@ -61,7 +61,6 @@ type node struct {
 type dir struct {
 	fileSet string
 	set     string
-	sk      stingle.SecretKey
 	album   *stingle.Album
 }
 
@@ -127,7 +126,7 @@ func (n *node) find(name string, create bool) *node {
 	}
 }
 
-func (n *node) insertDir(name, fileSet, set string, sk stingle.SecretKey, album *stingle.Album, local bool) {
+func (n *node) insertDir(name, fileSet, set string, album *stingle.Album, local bool) {
 	var nn *node
 	for i := 0; ; i++ {
 		nodeName := name
@@ -143,7 +142,6 @@ func (n *node) insertDir(name, fileSet, set string, sk stingle.SecretKey, album 
 	nn.dir = &dir{
 		fileSet: fileSet,
 		set:     set,
-		sk:      sk,
 		album:   album,
 	}
 }
@@ -187,18 +185,21 @@ func sanitize(s string) string {
 }
 
 // Header returns the decrypted Header.
-func (i ListItem) Header(sk stingle.SecretKey) (*stingle.Header, error) {
+func (i ListItem) Header(sk *stingle.SecretKey) (*stingle.Header, error) {
 	if a := i.Album; a != nil {
-		var err error
-		if sk, err = a.SK(sk); err != nil {
+		ask, err := a.SK(sk)
+		if err != nil {
 			return nil, err
 		}
+		sk.Wipe()
+		sk = ask
 	}
 	hdrs, err := stingle.DecryptBase64Headers(i.FSFile.Headers, sk)
 	if err != nil {
 		return nil, err
 	}
-	return &hdrs[0], nil
+	hdrs[1].Wipe()
+	return hdrs[0], nil
 }
 
 // GlobFiles returns files that match the glob patterns.
@@ -237,8 +238,8 @@ func (c *Client) glob(pattern string, opt GlobOptions) ([]ListItem, error) {
 	g.elems = strings.Split(pattern, "/")
 
 	root := newNode("")
-	root.insertDir("gallery", galleryFile, stingle.GallerySet, c.SecretKey(), nil, false)
-	root.insertDir(".trash", trashFile, stingle.TrashSet, c.SecretKey(), nil, false)
+	root.insertDir("gallery", galleryFile, stingle.GallerySet, nil, false)
+	root.insertDir(".trash", trashFile, stingle.TrashSet, nil, false)
 	var al AlbumList
 	if err := c.storage.ReadDataFile(c.fileHash(albumList), &al); err != nil {
 		return nil, fmt.Errorf("albumList: %w", err)
@@ -251,7 +252,7 @@ func (c *Client) glob(pattern string, opt GlobOptions) ([]ListItem, error) {
 	for _, albumID := range albumIDs {
 		album := al.Albums[albumID]
 		local := al.RemoteAlbums[albumID] == nil
-		ask, err := album.SK(c.SecretKey())
+		ask, err := c.SKForAlbum(album)
 		if err != nil {
 			return nil, err
 		}
@@ -263,7 +264,7 @@ func (c *Client) glob(pattern string, opt GlobOptions) ([]ListItem, error) {
 		if album.IsShared == "1" && album.IsOwner != "1" {
 			name = path.Join("shared", name)
 		}
-		root.insertDir(name, albumPrefix+album.AlbumID, stingle.AlbumSet, ask, album, local)
+		root.insertDir(name, albumPrefix+album.AlbumID, stingle.AlbumSet, album, local)
 	}
 
 	var out []ListItem
@@ -287,12 +288,18 @@ func (c *Client) globStep(parent string, g *glob, n *node, li *[]ListItem) error
 		for _, file := range files {
 			f := fs.Files[file]
 			local := fs.RemoteFiles[f.File] == nil
-			hdrs, err := stingle.DecryptBase64Headers(f.Headers, n.dir.sk)
+			sk, err := c.SKForAlbum(n.dir.album)
+			if err != nil {
+				return err
+			}
+			hdrs, err := stingle.DecryptBase64Headers(f.Headers, sk)
 			if err != nil {
 				return err
 			}
 			fn := sanitize(string(hdrs[0].Filename))
 			n.insertFile(fn, hdrs[0].DataSize, f, n.dir.fileSet, n.dir.set, n.dir.album, local)
+			hdrs[0].Wipe()
+			hdrs[1].Wipe()
 		}
 	}
 	if len(g.elems) == 0 {
@@ -415,13 +422,16 @@ func (c *Client) ListFiles(patterns []string, opt GlobOptions) error {
 			continue
 		}
 		fileCount++
-		hdr, err := item.Header(c.SecretKey())
+		sk := c.SecretKey()
+		hdr, err := item.Header(sk)
+		sk.Wipe()
 		if err != nil {
 			return err
 		}
 
 		if !opt.Long {
 			c.Print(strings.TrimPrefix(item.Filename, opt.trimPrefix))
+			hdr.Wipe()
 			continue
 		}
 		duration := ""
@@ -449,6 +459,7 @@ func (c *Client) ListFiles(patterns []string, opt GlobOptions) error {
 			strings.TrimPrefix(item.Filename, opt.trimPrefix), maxSizeWidth, item.Size,
 			time.Unix(ms/1000, 0).Format("2006-01-02 15:04:05"), stingle.FileType(hdr.FileType),
 			exifData, duration, local)
+		hdr.Wipe()
 	}
 	if fileCount > 0 && len(expand) > 0 {
 		c.Print()
@@ -481,5 +492,5 @@ func (c *Client) getExif(item ListItem, hdr *stingle.Header) (x *exif.Exif, err 
 	if err := stingle.SkipHeader(f); err != nil {
 		return nil, err
 	}
-	return exif.Decode(stingle.DecryptFile(f, *hdr))
+	return exif.Decode(stingle.DecryptFile(f, hdr))
 }

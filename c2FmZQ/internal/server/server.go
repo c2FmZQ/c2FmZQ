@@ -8,14 +8,14 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/NYTimes/gziphandler"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"c2FmZQ/internal/database"
 	"c2FmZQ/internal/log"
 	"c2FmZQ/internal/server/basicauth"
 	"c2FmZQ/internal/stingle"
 	"c2FmZQ/internal/stingle/token"
+	"github.com/NYTimes/gziphandler"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 var (
@@ -172,7 +172,12 @@ func (s *Server) Handler() http.Handler {
 // It is an encrypted json object representing key:value pairs.
 // Returns the decrypted key:value pairs as a map.
 func (s *Server) decodeParams(params string, user database.User) (map[string]string, error) {
-	m, err := stingle.DecryptMessage(params, user.PublicKey, user.ServerKey)
+	sk, err := s.db.DecryptSecretKey(user.ServerSecretKey)
+	if err != nil {
+		return nil, err
+	}
+	defer sk.Wipe()
+	m, err := stingle.DecryptMessage(params, user.PublicKey, sk)
 	if err != nil {
 		return nil, err
 	}
@@ -221,7 +226,12 @@ func (s *Server) checkToken(tok, scope string) (token.Token, database.User, erro
 	if err != nil {
 		return token.Token{}, database.User{}, err
 	}
-	t, err := token.Decrypt(user.TokenKey, tok)
+	tk, err := s.db.DecryptTokenKey(user.TokenKey)
+	if err != nil {
+		return token.Token{}, database.User{}, err
+	}
+	defer tk.Wipe()
+	t, err := token.Decrypt(tk, tok)
 	if err != nil {
 		return token.Token{}, database.User{}, err
 	}

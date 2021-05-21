@@ -12,8 +12,8 @@ import (
 )
 
 // DecryptBase64Headers decrypts base64-encoded headers.
-func DecryptBase64Headers(hdrs string, sk SecretKey) ([]Header, error) {
-	var out []Header
+func DecryptBase64Headers(hdrs string, sk *SecretKey) ([]*Header, error) {
+	var out []*Header
 	for _, hdr := range strings.Split(hdrs, "*") {
 		b, err := base64.RawURLEncoding.DecodeString(hdr)
 		if err != nil {
@@ -32,7 +32,7 @@ func DecryptBase64Headers(hdrs string, sk SecretKey) ([]Header, error) {
 }
 
 // EncryptBase64Headers encrypts headers and encodes them.
-func EncryptBase64Headers(hdrs []Header, pk PublicKey) (string, error) {
+func EncryptBase64Headers(hdrs []*Header, pk PublicKey) (string, error) {
 	var s []string
 	for _, hdr := range hdrs {
 		var buf bytes.Buffer
@@ -46,7 +46,9 @@ func EncryptBase64Headers(hdrs []Header, pk PublicKey) (string, error) {
 
 // NewHeaders returns a pair of Headers with FileID, SymmetricKey, and ChunkSize
 // set.
-func NewHeaders(filename string) (hdrs [2]Header) {
+func NewHeaders(filename string) (hdrs [2]*Header) {
+	hdrs[0] = &Header{}
+	hdrs[1] = &Header{}
 	for i := 0; i < 2; i++ {
 		hdrs[i].FileID = make([]byte, 32)
 		hdrs[i].Version = 1
@@ -70,68 +72,63 @@ func NewHeaders(filename string) (hdrs [2]Header) {
 }
 
 // DecryptHeader decrypts a file header from the reader.
-func DecryptHeader(in io.Reader, sk SecretKey) (hdr Header, err error) {
+func DecryptHeader(in io.Reader, sk *SecretKey) (*Header, error) {
+	hdr := &Header{}
 	b := make([]byte, 3)
-	if _, err = io.ReadFull(in, b); err != nil {
-		return
+	if _, err := io.ReadFull(in, b); err != nil {
+		return nil, err
 	}
 	// 2 bytes {'S','P'}
 	if b[0] != 'S' || b[1] != 'P' {
-		err = errors.New("unexpected file type")
-		return
+		return nil, errors.New("unexpected file type")
 	}
 	// 1 byte version
 	if b[2] != 1 {
-		err = errors.New("unexpected file version")
-		return
+		return nil, errors.New("unexpected file version")
 	}
 
 	// 32-byte file ID
 	hdr.FileID = make([]byte, 32)
-	if _, err = io.ReadFull(in, hdr.FileID); err != nil {
-		return
+	if _, err := io.ReadFull(in, hdr.FileID); err != nil {
+		return nil, err
 	}
 
 	// 4-byte header size
 	var headerSize int32
-	if err = binary.Read(in, binary.BigEndian, &headerSize); err != nil {
-		return
+	if err := binary.Read(in, binary.BigEndian, &headerSize); err != nil {
+		return nil, err
 	}
 	if headerSize < 0 || headerSize > 64*1024 {
-		err = errors.New("invalid header size")
-		return
+		return nil, errors.New("invalid header size")
 	}
 
 	// header-size bytes (encHeader)
 	encHeader := make([]byte, headerSize)
-	if _, err = io.ReadFull(in, encHeader); err != nil {
-		return
+	if _, err := io.ReadFull(in, encHeader); err != nil {
+		return nil, err
 	}
 
 	d, err := sk.SealBoxOpen(encHeader)
 	if err != nil {
-		return hdr, err
+		return nil, err
 	}
 	// 1-byte header.headerVersion
 	hdr.Version, d = d[0], d[1:]
 	// 4-byte header.chunkSize
 	hdr.ChunkSize, d = int32(binary.BigEndian.Uint32(d[:4])), d[4:]
 	if hdr.ChunkSize < 1 || hdr.ChunkSize > 64*1024*1024 {
-		err = errors.New("invalid chunk size")
-		return
+		return nil, errors.New("invalid chunk size")
 	}
 
 	// 8-byte header.dataSize
 	if len(d) < 8 {
-		err = errors.New("invalid data size")
-		return
+		return nil, errors.New("invalid data size")
 	}
 	hdr.DataSize, d = int64(binary.BigEndian.Uint64(d[:8])), d[8:]
 
 	// 32-byte SymmetricKey
 	if len(d) < 32 {
-		err = errors.New("invalid symmetric key")
-		return
+		return nil, errors.New("invalid symmetric key")
 	}
 	hdr.SymmetricKey = make([]byte, 32)
 	copy(hdr.SymmetricKey, d)
@@ -139,20 +136,17 @@ func DecryptHeader(in io.Reader, sk SecretKey) (hdr Header, err error) {
 
 	// 1-byte FileType
 	if len(d) == 0 {
-		err = errors.New("invalid file type")
-		return
+		return nil, errors.New("invalid file type")
 	}
 	hdr.FileType, d = d[0], d[1:]
 
 	// 1-byte filenameSize
 	if len(d) == 0 {
-		err = errors.New("invalid filename size")
-		return
+		return nil, errors.New("invalid filename size")
 	}
 	filenameSize, d := int(binary.BigEndian.Uint32(d[:4])), d[4:]
 	if filenameSize < 0 || int(filenameSize) > len(d) {
-		err = fmt.Errorf("invalid filename size: %d", filenameSize)
-		return
+		return nil, fmt.Errorf("invalid filename size: %d", filenameSize)
 	}
 
 	// filenameSize-byte Filename
@@ -160,17 +154,16 @@ func DecryptHeader(in io.Reader, sk SecretKey) (hdr Header, err error) {
 
 	// 4-byte VideoDuration
 	if len(d) < 4 {
-		err = errors.New("invalid video duration")
-		return
+		return nil, errors.New("invalid video duration")
 	}
 	hdr.VideoDuration = int32(binary.BigEndian.Uint32(d[:4]))
 	d = d[4:]
 
-	return
+	return hdr, nil
 }
 
 // EncryptHeader encrypts and write the file header to the writer.
-func EncryptHeader(out io.Writer, hdr Header, pk PublicKey) (err error) {
+func EncryptHeader(out io.Writer, hdr *Header, pk PublicKey) (err error) {
 	if len(hdr.FileID) != 32 {
 		return errors.New("invalid file id")
 	}

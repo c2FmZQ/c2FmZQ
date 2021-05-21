@@ -202,12 +202,16 @@ func (c *Client) applyFilesToMove(moves []MoveItem, al AlbumList, dryrun bool) e
 		for _, f := range i.files {
 			sk := c.SecretKey()
 			if i.key.AlbumIDTo != "" {
-				sk, err = al.Albums[i.key.AlbumIDTo].SK(sk)
+				ask, err := al.Albums[i.key.AlbumIDTo].SK(sk)
 				if err != nil {
+					sk.Wipe()
 					return err
 				}
+				sk.Wipe()
+				sk = ask
 			}
 			n, err := f.Name(sk)
+			sk.Wipe()
 			if err != nil {
 				n = f.File
 			}
@@ -262,7 +266,9 @@ func (c *Client) applyAlbumsToRemove(albums []*stingle.Album, dryrun bool) error
 func (c *Client) showAlbumsToSync(label string, albums []*stingle.Album) error {
 	c.Print(label)
 	for _, a := range albums {
-		name, err := a.Name(c.SecretKey())
+		sk := c.SecretKey()
+		name, err := a.Name(sk)
+		sk.Wipe()
 		if err != nil {
 			return err
 		}
@@ -279,18 +285,19 @@ func (c *Client) showFilesToSync(label string, files []FileLoc, al AlbumList) er
 			ask, err := album.SK(sk)
 			if err != nil {
 				return err
-			} else {
-				sk = ask
 			}
+			sk.Wipe()
+			sk = ask
 		} else if album, ok := al.RemoteAlbums[f.AlbumID]; ok {
 			ask, err := album.SK(sk)
 			if err != nil {
 				return err
-			} else {
-				sk = ask
 			}
+			sk.Wipe()
+			sk = ask
 		}
 		n, err := f.File.Name(sk)
+		sk.Wipe()
 		if err != nil {
 			n = f.File.File
 		}
@@ -310,11 +317,13 @@ func (c *Client) translateSetAlbumIDToName(set, albumID string, al AlbumList) (s
 	case stingle.TrashSet:
 		return ".trash", nil
 	case stingle.AlbumSet:
+		sk := c.SecretKey()
+		defer sk.Wipe()
 		if album, ok := al.Albums[albumID]; ok {
-			return album.Name(c.SecretKey())
+			return album.Name(sk)
 		}
 		if album, ok := al.RemoteAlbums[albumID]; ok {
-			return album.Name(c.SecretKey())
+			return album.Name(sk)
 		}
 		return "", fmt.Errorf("album not found: %s", albumID)
 	default:

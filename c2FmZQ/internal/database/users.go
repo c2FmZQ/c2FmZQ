@@ -45,12 +45,15 @@ type User struct {
 	KeyBundle string `json:"keyBundle"`
 	// Whether KeyBundle contains the encrypted secret key.
 	IsBackup string `json:"isBackup"`
-	// The server's secret key used with this user.
-	ServerKey stingle.SecretKey `json:"serverKey"`
+	// The server's secret key used with this user, encrypted with master key.
+	ServerSecretKey string `json:"serverSecretKey"`
+	// The server's public key used with this user.
+	ServerPublicKey stingle.PublicKey `json:"serverPublicKey"`
 	// The user's public key, extracted from the key bundle.
 	PublicKey stingle.PublicKey `json:"publicKey"`
-	// The server's secret key used for encrypting tokens for this user.
-	TokenKey *token.Key `json:"serverTokenKey"`
+	// The server's secret key used for encrypting tokens for this user,
+	// encrypted with master key.
+	TokenKey string `json:"serverTokenKey"`
 }
 
 // A user's contact list information.
@@ -84,7 +87,7 @@ type Contact struct {
 func (u User) ServerPublicKeyForExport() string {
 	defer recordLatency("ServerPublicKeyForExport")()
 
-	return base64.StdEncoding.EncodeToString(u.ServerKey.PublicKey().ToBytes())
+	return base64.StdEncoding.EncodeToString(u.ServerPublicKey.ToBytes())
 }
 
 func (u User) home(elems ...string) string {
@@ -131,8 +134,19 @@ func (d *Database) AddUser(u User) (retErr error) {
 
 	u.UserID = uid
 	u.HomeFolder = hex.EncodeToString(d.Hash([]byte(u.Email)))
-	u.ServerKey = stingle.MakeSecretKey()
-	u.TokenKey = token.MakeKey()
+	ssk := stingle.MakeSecretKey()
+	defer ssk.Wipe()
+	essk, err := d.EncryptSecretKey(ssk)
+	if err != nil {
+		return err
+	}
+	u.ServerSecretKey = essk
+	u.ServerPublicKey = ssk.PublicKey()
+	tk := token.MakeKey()
+	defer tk.Wipe()
+	if u.TokenKey, err = d.EncryptTokenKey(tk); err != nil {
+		return err
+	}
 	if err := d.storage.SaveDataFile(d.filePath(u.home(userFile)), u); err != nil {
 		return err
 	}
@@ -190,14 +204,78 @@ func (d *Database) User(email string) (User, error) {
 	return User{}, os.ErrNotExist
 }
 
+// NewEncryptedTokenKey returns a new encrypted TokenKey.
+func (d *Database) NewEncryptedTokenKey() (string, error) {
+	tk := token.MakeKey()
+	defer tk.Wipe()
+	return d.EncryptTokenKey(tk)
+}
+
+// EncryptTokenKey encrypts a TokenKey.
+func (d *Database) EncryptTokenKey(key *token.Key) (string, error) {
+	if d.masterKey == nil {
+		return base64.StdEncoding.EncodeToString(key[:]), nil
+	}
+	b, err := d.masterKey.Encrypt(key[:])
+	if err != nil {
+		return "", err
+	}
+	return base64.StdEncoding.EncodeToString(b), nil
+}
+
+// DecryptTokenKey decrypts an encrypted TokenKey.
+func (d *Database) DecryptTokenKey(key string) (*token.Key, error) {
+	b, err := base64.StdEncoding.DecodeString(key)
+	if err != nil {
+		return nil, err
+	}
+	if d.masterKey == nil {
+		return token.KeyFromBytes(b), nil
+	}
+	k, err := d.masterKey.Decrypt(b)
+	if err != nil {
+		return nil, err
+	}
+	return token.KeyFromBytes(k), nil
+}
+
+// EncryptSecretKey encrypts a SecretKey.
+func (d *Database) EncryptSecretKey(sk *stingle.SecretKey) (string, error) {
+	if d.masterKey == nil {
+		return base64.StdEncoding.EncodeToString(sk.ToBytes()), nil
+	}
+	b, err := d.masterKey.Encrypt(sk.ToBytes())
+	if err != nil {
+		return "", err
+	}
+	return base64.StdEncoding.EncodeToString(b), nil
+}
+
+// DecryptSecretKey decrypts an encrypted SecretKey.
+func (d *Database) DecryptSecretKey(key string) (*stingle.SecretKey, error) {
+	b, err := base64.StdEncoding.DecodeString(key)
+	if err != nil {
+		return nil, err
+	}
+	if d.masterKey == nil {
+		return stingle.SecretKeyFromBytes(b), nil
+	}
+	k, err := d.masterKey.Decrypt(b)
+	if err != nil {
+		return nil, err
+	}
+	return stingle.SecretKeyFromBytes(k), nil
+}
+
 // TokenKeyForUser returns the server's TokenKey associated with this user.
-func (d *Database) TokenKeyForUser(email string) *token.Key {
+func (d *Database) TokenKeyForUser(email string) (*token.Key, error) {
 	defer recordLatency("TokenKeyForUser")()
 
-	if u, err := d.User(email); err == nil {
-		return u.TokenKey
+	u, err := d.User(email)
+	if err != nil {
+		return nil, err
 	}
-	return nil
+	return d.DecryptTokenKey(u.TokenKey)
 }
 
 // DeleteUser deletes a user object and all resources attached to it.

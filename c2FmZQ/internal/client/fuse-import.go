@@ -38,7 +38,7 @@ func (c *Client) StreamImport(name string, dst ListItem) (*FuseImportWriter, err
 		dst.Album = album
 		dst.FileSet = albumPrefix + album.AlbumID
 	}
-	pk := c.SecretKey().PublicKey()
+	pk := c.PublicKey()
 	if dst.Album != nil {
 		if dst.Album.IsOwner != "1" && !stingle.Permissions(dst.Album.Permissions).AllowAdd() {
 			return nil, syscall.EPERM
@@ -141,21 +141,25 @@ func (iw *FuseImportWriter) Close() error {
 	return iw.processNewFile()
 }
 
-func (iw *FuseImportWriter) sk() (sk stingle.SecretKey, err error) {
+func (iw *FuseImportWriter) sk() (sk *stingle.SecretKey, err error) {
 	sk = iw.c.SecretKey()
 	if iw.albumID != "" {
 		var al AlbumList
 		if err := iw.c.storage.ReadDataFile(iw.c.fileHash(albumList), &al); err != nil {
-			return sk, err
+			sk.Wipe()
+			return nil, err
 		}
 		album, ok := al.Albums[iw.albumID]
 		if !ok {
-			return sk, fmt.Errorf("album doesn't exist anymore: %s", iw.albumID)
+			sk.Wipe()
+			return nil, fmt.Errorf("album doesn't exist anymore: %s", iw.albumID)
 		}
 		ask, err := album.SK(sk)
 		if err != nil {
-			return sk, err
+			sk.Wipe()
+			return nil, err
 		}
+		sk.Wipe()
 		sk = ask
 	}
 	return sk, nil
@@ -182,6 +186,8 @@ func (iw *FuseImportWriter) processNewFile() (retErr error) {
 	if err != nil {
 		return err
 	}
+	defer hdrs[0].Wipe()
+	defer hdrs[1].Wipe()
 	filename := string(hdrs[0].Filename)
 	log.Debugf("FuseImportWriter.Close: %s", filename)
 

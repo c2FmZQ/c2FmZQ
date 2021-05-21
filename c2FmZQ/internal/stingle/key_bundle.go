@@ -54,7 +54,7 @@ func DecodeKeyBundle(bundle string) (pk PublicKey, err error) {
 }
 
 // MakeKeyBundle creates a KeyBundle with the public key.
-func MakeSecretKeyBundle(password []byte, sk SecretKey) string {
+func MakeSecretKeyBundle(password []byte, sk *SecretKey) string {
 	pk := sk.PublicKey()
 	b := []byte{'S', 'P', 'K', 1, 0}
 	b = append(b, pk.ToBytes()...)
@@ -63,18 +63,18 @@ func MakeSecretKeyBundle(password []byte, sk SecretKey) string {
 }
 
 // DecodeSecretKeyBundle extracts the SecretKey from a KeyBundle.
-func DecodeSecretKeyBundle(password []byte, bundle string) (sk SecretKey, err error) {
+func DecodeSecretKeyBundle(password []byte, bundle string) (*SecretKey, error) {
 	b, err := base64.StdEncoding.DecodeString(bundle)
 	if err != nil {
-		return sk, err
+		return nil, err
 	}
 	if len(b) != 125 { // hdr(5) + pk(32) + esk(88)
-		return sk, fmt.Errorf("bundle is too short: %d", len(b))
+		return nil, fmt.Errorf("bundle is too short: %d", len(b))
 	}
 
 	// Header
 	if !bytes.Equal(b[:4], []byte{'S', 'P', 'K', 1}) {
-		return sk, fmt.Errorf("unexpected bundle header %v", b[:4])
+		return nil, fmt.Errorf("unexpected bundle header %v", b[:4])
 	}
 	b = b[4:]
 
@@ -83,23 +83,24 @@ func DecodeSecretKeyBundle(password []byte, bundle string) (sk SecretKey, err er
 	b = b[1:]
 
 	if kfType != 0 {
-		return sk, errors.New("secret key is not in bundle")
+		return nil, errors.New("secret key is not in bundle")
 	}
 	// public key.
 	pk := b[:32]
 	b = b[32:]
-	if sk, err = DecryptSecretKeyFromBundle(password, b); err != nil {
-		return sk, err
+	sk, err := DecryptSecretKeyFromBundle(password, b)
+	if err != nil {
+		return nil, err
 	}
 	// Sanity check that the public key and secret key match.
 	if bytes.Compare(sk.PublicKey().ToBytes(), pk) != 0 {
-		return sk, fmt.Errorf("encoded public key doesn't match secret key")
+		return nil, fmt.Errorf("encoded public key doesn't match secret key")
 	}
 	return sk, nil
 }
 
 // EncryptSecretKeyForExport encrypts the secret key with password.
-func EncryptSecretKeyForExport(password []byte, sk SecretKey) []byte {
+func EncryptSecretKeyForExport(password []byte, sk *SecretKey) []byte {
 	salt := make([]byte, 16)
 	if _, err := rand.Read(salt); err != nil {
 		panic(err)
@@ -116,16 +117,16 @@ func EncryptSecretKeyForExport(password []byte, sk SecretKey) []byte {
 }
 
 // DecryptSecretKeyFromBundle decrypts the secret key encoded in a bundle.
-func DecryptSecretKeyFromBundle(password, encryptedKey []byte) (sk SecretKey, err error) {
+func DecryptSecretKeyFromBundle(password, encryptedKey []byte) (*SecretKey, error) {
 	if len(encryptedKey) != 88 {
-		return sk, fmt.Errorf("expected encrypted key size 88, got %d", len(encryptedKey))
+		return nil, fmt.Errorf("expected encrypted key size 88, got %d", len(encryptedKey))
 	}
 	nonce := encryptedKey[len(encryptedKey)-24:]
 	salt := encryptedKey[len(encryptedKey)-40 : len(encryptedKey)-24]
 	key := pwhash.KeyFromPassword(password, salt, pwhash.Moderate, 32)
 	b, err := DecryptSymmetric(encryptedKey[:len(encryptedKey)-40], nonce, key)
 	if err != nil {
-		return sk, err
+		return nil, err
 	}
 	return SecretKeyFromBytes(b), nil
 }

@@ -116,10 +116,15 @@ func (s *Server) handleLogin(req *http.Request) *stingle.Response {
 	if err != nil || bcrypt.CompareHashAndPassword(hashed, []byte(pass)) != nil {
 		return stingle.ResponseNOK().AddError("Invalid credentials")
 	}
+	tk, err := s.db.DecryptTokenKey(u.TokenKey)
+	if err != nil {
+		return stingle.ResponseNOK()
+	}
+	defer tk.Wipe()
 	return stingle.ResponseOK().
 		AddPart("keyBundle", u.KeyBundle).
 		AddPart("serverPublicKey", u.ServerPublicKeyForExport()).
-		AddPart("token", token.Mint(u.TokenKey,
+		AddPart("token", token.Mint(tk,
 			token.Token{Scope: "session", Subject: u.UserID}, 180*24*time.Hour)).
 		AddPart("userId", fmt.Sprintf("%d", u.UserID)).
 		AddPart("isKeyBackedUp", u.IsBackup).
@@ -135,7 +140,12 @@ func (s *Server) handleLogin(req *http.Request) *stingle.Response {
 // Returns:
 //  - StringleResponse(ok)
 func (s *Server) handleLogout(user database.User, req *http.Request) *stingle.Response {
-	user.TokenKey = token.MakeKey()
+	etk, err := s.db.NewEncryptedTokenKey()
+	if err != nil {
+		log.Errorf("NewEncryptedTokenKey: %v", err)
+		return stingle.ResponseNOK()
+	}
+	user.TokenKey = etk
 	if err := s.db.UpdateUser(user); err != nil {
 		log.Errorf("UpdateUser: %v", err)
 		return stingle.ResponseNOK()
@@ -172,7 +182,12 @@ func (s *Server) handleChangePass(user database.User, req *http.Request) *stingl
 	user.HashedPassword = base64.StdEncoding.EncodeToString(hashed)
 	user.Salt = params["newSalt"]
 	user.KeyBundle = params["keyBundle"]
-	user.TokenKey = token.MakeKey()
+	etk, err := s.db.NewEncryptedTokenKey()
+	if err != nil {
+		log.Errorf("NewEncryptedTokenKey: %v", err)
+		return stingle.ResponseNOK()
+	}
+	user.TokenKey = etk
 	pk, err := stingle.DecodeKeyBundle(user.KeyBundle)
 	if err != nil {
 		log.Errorf("DecodeKeyBundle: %v", err)
@@ -184,9 +199,14 @@ func (s *Server) handleChangePass(user database.User, req *http.Request) *stingl
 		log.Errorf("UpdateUser: %v", err)
 		return stingle.ResponseNOK()
 	}
+	tk, err := s.db.DecryptTokenKey(user.TokenKey)
+	if err != nil {
+		log.Errorf("DecryptTokenKey: %v", err)
+		return stingle.ResponseNOK()
+	}
+	defer tk.Wipe()
 	return stingle.ResponseOK().
-		AddPart("token", token.Mint(s.db.TokenKeyForUser(user.Email),
-			token.Token{Scope: "session", Subject: user.UserID}, 180*24*time.Hour))
+		AddPart("token", token.Mint(tk, token.Token{Scope: "session", Subject: user.UserID}, 180*24*time.Hour))
 }
 
 // handleGetServerPK handles the /v2/keys/getServerPK endpoint. The server's
@@ -271,7 +291,12 @@ func (s *Server) handleRecoverAccount(req *http.Request) *stingle.Response {
 	user.HashedPassword = base64.StdEncoding.EncodeToString(hashed)
 	user.Salt = params["newSalt"]
 	user.KeyBundle = params["keyBundle"]
-	user.TokenKey = token.MakeKey()
+	etk, err := s.db.NewEncryptedTokenKey()
+	if err != nil {
+		log.Errorf("s.db.NewEncryptedTokenKey: %v", err)
+		return stingle.ResponseNOK()
+	}
+	user.TokenKey = etk
 	pk, err := stingle.DecodeKeyBundle(user.KeyBundle)
 	if err != nil {
 		log.Errorf("DecodeKeyBundle: %v", err)

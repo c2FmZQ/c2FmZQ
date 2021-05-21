@@ -18,13 +18,13 @@ const (
 
 // EncryptFile encrypts the plaintext from the reader using the SymmetricKey in
 // header, and writes the ciphertext to the writer.
-func EncryptFile(w io.Writer, header Header) *StreamWriter {
+func EncryptFile(w io.Writer, header *Header) *StreamWriter {
 	return &StreamWriter{hdr: header, w: w}
 }
 
 // DecryptFile decrypts the ciphertext from the reader using the SymmetricKey
 // in header, and write the plaintext to the writer.
-func DecryptFile(r io.Reader, header Header) *StreamReader {
+func DecryptFile(r io.Reader, header *Header) *StreamReader {
 	var start int64
 	if seeker, ok := r.(io.Seeker); ok {
 		off, err := seeker.Seek(0, io.SeekCurrent)
@@ -38,7 +38,7 @@ func DecryptFile(r io.Reader, header Header) *StreamReader {
 
 // StreamWriter encrypts a stream of data.
 type StreamWriter struct {
-	hdr Header
+	hdr *Header
 	w   io.Writer
 	c   uint64
 	buf []byte
@@ -77,6 +77,7 @@ func (w *StreamWriter) Close() (err error) {
 	if len(w.buf) > 0 {
 		_, err = w.writeChunk(w.buf)
 	}
+	w.hdr.Wipe()
 	if c, ok := w.w.(io.Closer); ok {
 		if e := c.Close(); err == nil {
 			err = e
@@ -87,7 +88,7 @@ func (w *StreamWriter) Close() (err error) {
 
 // StreamReader decrypts an input stream.
 type StreamReader struct {
-	hdr   Header
+	hdr   *Header
 	r     io.Reader
 	c     int64
 	start int64
@@ -195,6 +196,7 @@ func (r *StreamReader) Read(b []byte) (n int, err error) {
 }
 
 func (r *StreamReader) Close() error {
+	r.hdr.Wipe()
 	if c, ok := r.r.(io.Closer); ok {
 		return c.Close()
 	}

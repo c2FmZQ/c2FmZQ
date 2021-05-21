@@ -92,7 +92,7 @@ func (c *Client) ImportFiles(patterns []string, dest string, recursive bool) (in
 				return 0, err
 			}
 		}
-		pk := c.SecretKey().PublicKey()
+		pk := c.PublicKey()
 		if li[0].Album != nil {
 			if pk, err = li[0].Album.PK(); err != nil {
 				return 0, err
@@ -217,6 +217,8 @@ func (c *Client) importFile(file string, dst ListItem, pk stingle.PublicKey) err
 	creationTime := time.Now()
 
 	hdrs := stingle.NewHeaders(fn)
+	defer hdrs[0].Wipe()
+	defer hdrs[1].Wipe()
 	hdrs[0].DataSize = fi.Size()
 	hdrs[0].FileType = fileTypeForExt(strings.ToLower(filepath.Ext(file)))
 	if hdrs[0].FileType == stingle.FileTypeVideo {
@@ -407,7 +409,7 @@ func videoMetadata(file io.Reader) (duration int32, creationTime time.Time, err 
 	return
 }
 
-func (c *Client) encryptFile(in io.Reader, file string, hdr stingle.Header, pk stingle.PublicKey, thumb bool) error {
+func (c *Client) encryptFile(in io.Reader, file string, hdr *stingle.Header, pk stingle.PublicKey, thumb bool) error {
 	fn := c.blobPath(file, thumb)
 	dir, _ := filepath.Split(fn)
 	if err := os.MkdirAll(dir, 0700); err != nil {

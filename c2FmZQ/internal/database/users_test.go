@@ -28,7 +28,7 @@ func TestUsers(t *testing.T) {
 
 	// Add, lookup, modify users.
 	emails := []string{"alice@", "bob@", "charlie@"}
-	keys := make(map[string]stingle.SecretKey)
+	keys := make(map[string]*stingle.SecretKey)
 	users := make(map[string]database.User)
 	for _, e := range emails {
 		keys[e] = stingle.MakeSecretKey()

@@ -170,7 +170,7 @@ func userSK(db *database.Database, email string) (*stingle.SecretKey, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &sk, nil
+	return sk, nil
 }
 
 func showUsers(c *cli.Context) error {
@@ -220,7 +220,7 @@ func decryptHeader(c *cli.Context) error {
 	}
 	for _, h := range c.Args().Slice() {
 		log.Infof("Decoding %s", h)
-		hdrs, err := stingle.DecryptBase64Headers(h, *sk)
+		hdrs, err := stingle.DecryptBase64Headers(h, sk)
 		if err != nil {
 			return cli.Exit(err, 1)
 		}
@@ -246,10 +246,11 @@ func decryptFile(c *cli.Context) error {
 		if err != nil {
 			return err
 		}
-		hdr, err := stingle.DecryptHeader(in, *sk)
+		hdr, err := stingle.DecryptHeader(in, sk)
 		if err != nil {
 			return err
 		}
+		defer hdr.Wipe()
 		out, err := os.CreateTemp("", "decryptedfile-*")
 		if err != nil {
 			in.Close()

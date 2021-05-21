@@ -8,23 +8,27 @@ import (
 	"errors"
 
 	"github.com/jamesruan/sodium"
+
+	"c2FmZQ/internal/log"
 )
 
 // MakeSecretKey returns a new SecretKey.
-func MakeSecretKey() SecretKey {
+func MakeSecretKey() *SecretKey {
 	kp := sodium.MakeBoxKP()
-	return SecretKey(kp.SecretKey)
+	sk := SecretKey(kp.SecretKey)
+	return &sk
 }
 
 type SecretKey sodium.BoxSecretKey
-type PublicKey sodium.BoxPublicKey
 
-func SecretKeyFromBytes(b []byte) SecretKey {
-	return SecretKey(sodium.BoxSecretKey{Bytes: sodium.Bytes(b)})
-}
-
-func PublicKeyFromBytes(b []byte) PublicKey {
-	return PublicKey(sodium.BoxPublicKey{Bytes: sodium.Bytes(b)})
+func SecretKeyFromBytes(b []byte) *SecretKey {
+	c := make([]byte, len(b))
+	copy(c, b)
+	for i := 0; i < len(b); i++ {
+		b[i] = 0
+	}
+	sk := SecretKey(sodium.BoxSecretKey{Bytes: sodium.Bytes(c)})
+	return &sk
 }
 
 func (k SecretKey) ToBytes() []byte {
@@ -43,6 +47,18 @@ func (k SecretKey) PublicKey() PublicKey {
 	return PublicKey(sodium.BoxSecretKey(k).PublicKey())
 }
 
+func (k *SecretKey) Wipe() {
+	if k == nil {
+		return
+	}
+	for i := range k.Bytes {
+		k.Bytes[i] = 0
+	}
+	if log.Level > log.DebugLevel {
+		log.Debugf("Wiped %#v", *k)
+	}
+}
+
 func (k *SecretKey) UnmarshalJSON(b []byte) error {
 	var s string
 	if err := json.Unmarshal(b, &s); err != nil {
@@ -58,6 +74,12 @@ func (k *SecretKey) UnmarshalJSON(b []byte) error {
 
 func (k SecretKey) MarshalJSON() ([]byte, error) {
 	return json.Marshal(base64.RawURLEncoding.EncodeToString(k.Bytes))
+}
+
+type PublicKey sodium.BoxPublicKey
+
+func PublicKeyFromBytes(b []byte) PublicKey {
+	return PublicKey(sodium.BoxPublicKey{Bytes: sodium.Bytes(b)})
 }
 
 func (k *PublicKey) UnmarshalJSON(b []byte) error {
@@ -117,18 +139,18 @@ func (k SignSecretKey) Sign(msg []byte) []byte {
 
 // EncryptMessage encrypts a message using Authenticated Public Key Encryption.
 // https://pkg.go.dev/github.com/jamesruan/sodium#hdr-Authenticated_Public_Key_Encryption
-func EncryptMessage(msg []byte, pk PublicKey, sk SecretKey) string {
+func EncryptMessage(msg []byte, pk PublicKey, sk *SecretKey) string {
 	var n sodium.BoxNonce
 	sodium.Randomize(&n)
 
 	m := []byte(n.Bytes)
-	m = append(m, []byte(sodium.Bytes(msg).Box(n, sodium.BoxPublicKey(pk), sodium.BoxSecretKey(sk)))...)
+	m = append(m, []byte(sodium.Bytes(msg).Box(n, sodium.BoxPublicKey(pk), sodium.BoxSecretKey(*sk)))...)
 	return base64.StdEncoding.EncodeToString(m)
 }
 
 // DecryptMessage decrypts a message using Authenticated Public Key Encryption.
 // https://pkg.go.dev/github.com/jamesruan/sodium#hdr-Authenticated_Public_Key_Encryption
-func DecryptMessage(msg string, pk PublicKey, sk SecretKey) ([]byte, error) {
+func DecryptMessage(msg string, pk PublicKey, sk *SecretKey) ([]byte, error) {
 	b, err := base64.StdEncoding.DecodeString(msg)
 	if err != nil {
 		return nil, err
@@ -140,7 +162,7 @@ func DecryptMessage(msg string, pk PublicKey, sk SecretKey) ([]byte, error) {
 	n.Bytes = make([]byte, n.Size())
 	copy(n.Bytes, b[:n.Size()])
 	b = b[n.Size():]
-	m, err := sodium.Bytes(b).BoxOpen(n, sodium.BoxPublicKey(pk), sodium.BoxSecretKey(sk))
+	m, err := sodium.Bytes(b).BoxOpen(n, sodium.BoxPublicKey(pk), sodium.BoxSecretKey(*sk))
 	if err != nil {
 		return nil, err
 	}

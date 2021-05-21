@@ -40,9 +40,10 @@ func (c *Client) addAlbum(name string) (*stingle.Album, error) {
 	}
 	albumID := base64.RawURLEncoding.EncodeToString(b)
 	ask := stingle.MakeSecretKey()
-	encPrivateKey := c.SecretKey().PublicKey().SealBoxBase64(ask.ToBytes())
+	encPrivateKey := c.PublicKey().SealBoxBase64(ask.ToBytes())
 	metadata := stingle.EncryptAlbumMetadata(stingle.AlbumMetadata{Name: name}, ask.PublicKey())
 	publicKey := base64.StdEncoding.EncodeToString(ask.PublicKey().ToBytes())
+	ask.Wipe()
 
 	album := stingle.Album{
 		AlbumID:       albumID,
@@ -493,14 +494,19 @@ func (c *Client) moveFiles(fromItems []ListItem, toItem ListItem, rename string,
 		return fmt.Errorf("can only rename one file at a time: %s", rename)
 	}
 
-	sk, pk := c.SecretKey(), c.SecretKey().PublicKey()
+	sk, pk := c.SecretKey(), c.PublicKey()
+	defer sk.Wipe()
 	needHeaders := fromAlbum != nil || toAlbum != nil || rename != ""
 	if needHeaders {
 		var err error
 		if fromAlbum != nil {
-			if sk, err = fromAlbum.SK(sk); err != nil {
+			ask, err := fromAlbum.SK(sk)
+			if err != nil {
 				return err
 			}
+			defer ask.Wipe()
+			sk.Wipe()
+			sk = ask
 		}
 		if toAlbum != nil {
 			if pk, err = toAlbum.PK(); err != nil {
@@ -557,6 +563,8 @@ func (c *Client) moveFiles(fromItems []ListItem, toItem ListItem, rename string,
 				}
 			}
 			h, err := stingle.EncryptBase64Headers(hdrs, pk)
+			hdrs[0].Wipe()
+			hdrs[1].Wipe()
 			if err != nil {
 				return err
 			}

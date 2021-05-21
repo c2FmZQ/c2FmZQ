@@ -723,12 +723,14 @@ func (n *fileNode) openRead() (io.ReadSeekCloser, error) {
 		f.Close()
 		return nil, syscall.EIO
 	}
-	hdr, err := n.item.Header(n.f.c.SecretKey())
+	sk := n.f.c.SecretKey()
+	hdr, err := n.item.Header(sk)
+	sk.Wipe()
 	if err != nil {
 		log.Errorf("Header(): %v", err)
 		return nil, syscall.EIO
 	}
-	return stingle.DecryptFile(f, *hdr), nil
+	return stingle.DecryptFile(f, hdr), nil
 }
 
 // handle is a file handle for reading or writing.

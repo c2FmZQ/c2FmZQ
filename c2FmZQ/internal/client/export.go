@@ -57,7 +57,9 @@ func (c *Client) ExportFiles(patterns []string, dir string, recursive bool) (int
 	for i := 0; i < 5; i++ {
 		go func() {
 			for i := range qCh {
-				hdr, err := i.src.Header(c.SecretKey())
+				sk := c.SecretKey()
+				hdr, err := i.src.Header(sk)
+				sk.Wipe()
 				if err != nil {
 					eCh <- err
 					continue
@@ -65,6 +67,7 @@ func (c *Client) ExportFiles(patterns []string, dir string, recursive bool) (int
 				_, fn := filepath.Split(string(hdr.Filename))
 				c.Printf("Exporting %s -> %s\n", i.src.Filename, filepath.Join(i.dst, fn))
 				eCh <- c.exportFile(i.src, i.dst, hdr)
+				hdr.Wipe()
 			}
 		}()
 	}
@@ -110,11 +113,14 @@ func (c *Client) catFile(item ListItem) error {
 	if err := stingle.SkipHeader(f); err != nil {
 		return err
 	}
-	hdr, err := item.Header(c.SecretKey())
+	sk := c.SecretKey()
+	hdr, err := item.Header(sk)
+	sk.Wipe()
+	defer hdr.Wipe()
 	if err != nil {
 		return err
 	}
-	_, err = io.Copy(os.Stdout, stingle.DecryptFile(f, *hdr))
+	_, err = io.Copy(os.Stdout, stingle.DecryptFile(f, hdr))
 	return err
 }
 
@@ -144,7 +150,7 @@ func (c *Client) exportFile(item ListItem, dir string, hdr *stingle.Header) (err
 	if err != nil {
 		return err
 	}
-	r := stingle.DecryptFile(in, *hdr)
+	r := stingle.DecryptFile(in, hdr)
 	if _, err := io.Copy(out, r); err != nil {
 		out.Close()
 		return err

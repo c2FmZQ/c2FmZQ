@@ -11,7 +11,7 @@ type AlbumMetadata struct {
 }
 
 // DecryptAlbumMetadata decrypts an album's metadata.
-func DecryptAlbumMetadata(md string, sk SecretKey) (*AlbumMetadata, error) {
+func DecryptAlbumMetadata(md string, sk *SecretKey) (*AlbumMetadata, error) {
 	b, err := sk.SealBoxOpenBase64(md)
 	if err != nil {
 		return nil, err
