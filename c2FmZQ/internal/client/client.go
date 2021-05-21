@@ -210,6 +210,12 @@ func (c *Client) sendRequest(uri string, form url.Values, server string) (*sting
 		}
 		log.Debug(strings.Join(line, ""))
 	}
+	for _, info := range sr.Infos {
+		c.Printf("SERVER INFO: %s\n", info)
+	}
+	for _, err := range sr.Errors {
+		c.Printf("SERVER ERROR: %s\n", err)
+	}
 	return &sr, nil
 }
 
