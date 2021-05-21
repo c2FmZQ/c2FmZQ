@@ -8,9 +8,14 @@
 {{ template "prom_right_table_tail" }}
 
 {{ template "prom_content_head" . }}
+<style>
+#summary td { text-align: center; }
+#summary th { text-align: center; }
+</style>
+
 <h1>c2FmZQ-server</h1>
 
-<table class="table table-condensed table-striped table-bordered" style="width: 0%">
+<table id="summary" class="table table-condensed table-striped table-bordered" style="width: 0%">
 <tr>
   <th>Instance</th>
   <th>Up</th>
@@ -18,7 +23,7 @@
   <th>Memory (RSS)</th>
   <th>Goroutines</th>
   <th>Open FDs</th>
-  <th>RPS</th>
+  <th>QPS</th>
   <th>Errors/s</th>
 </tr>
 {{ range query "up{job='c2FmZQ-server'}" | sortByLabel "instance" }}
