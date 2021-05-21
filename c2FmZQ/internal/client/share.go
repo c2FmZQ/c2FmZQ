@@ -23,6 +23,9 @@ func (c *Client) Share(pattern string, shareWith []string, permissions []string)
 		return err
 	}
 	for _, item := range li {
+		if !item.IsDir {
+			continue
+		}
 		if item.Album == nil {
 			return fmt.Errorf("not an album: %s", item.Filename)
 		}
@@ -79,6 +82,9 @@ func (c *Client) Share(pattern string, shareWith []string, permissions []string)
 		return errors.New("not confirmed")
 	}
 	for _, item := range li {
+		if !item.IsDir {
+			continue
+		}
 		album := item.Album
 		sharingKeys := make(map[string]string)
 		sk, err := c.SKForAlbum(album)
@@ -120,6 +126,9 @@ func (c *Client) Unshare(patterns []string) error {
 		return err
 	}
 	for _, item := range li {
+		if !item.IsDir {
+			continue
+		}
 		if item.Album == nil {
 			return fmt.Errorf("not an album: %s", item.Filename)
 		}
@@ -128,6 +137,9 @@ func (c *Client) Unshare(patterns []string) error {
 		}
 	}
 	for _, item := range li {
+		if !item.IsDir {
+			continue
+		}
 		if err := c.sendUnshareAlbum(item.Album.AlbumID); err != nil {
 			return err
 		}
@@ -146,6 +158,9 @@ func (c *Client) Leave(patterns []string) error {
 		return err
 	}
 	for _, item := range li {
+		if !item.IsDir {
+			continue
+		}
 		if item.Album == nil {
 			return fmt.Errorf("not an album: %s", item.Filename)
 		}
@@ -154,6 +169,9 @@ func (c *Client) Leave(patterns []string) error {
 		}
 	}
 	for _, item := range li {
+		if !item.IsDir {
+			continue
+		}
 		if err := c.sendLeaveAlbum(item.Album.AlbumID); err != nil {
 			return err
 		}
@@ -172,6 +190,9 @@ func (c *Client) RemoveMembers(pattern string, toRemove []string) error {
 		return err
 	}
 	for _, item := range li {
+		if !item.IsDir {
+			continue
+		}
 		if item.Album == nil {
 			return fmt.Errorf("not an album: %s", item.Filename)
 		}
@@ -202,6 +223,9 @@ func (c *Client) RemoveMembers(pattern string, toRemove []string) error {
 	}
 
 	for _, item := range li {
+		if !item.IsDir {
+			continue
+		}
 		album := item.Album
 		members := make(map[string]bool)
 		for _, m := range strings.Split(album.Members, ",") {
@@ -231,6 +255,9 @@ func (c *Client) ChangePermissions(patterns, perms []string) (retErr error) {
 		return err
 	}
 	for _, item := range li {
+		if !item.IsDir {
+			continue
+		}
 		if item.Album == nil {
 			return fmt.Errorf("not an album: %s", item.Filename)
 		}
@@ -245,6 +272,9 @@ func (c *Client) ChangePermissions(patterns, perms []string) (retErr error) {
 	}
 	defer commit(false, &retErr)
 	for _, item := range li {
+		if !item.IsDir {
+			continue
+		}
 		p := item.Album.Permissions
 		if len(p) != 4 {
 			p = "1000"
