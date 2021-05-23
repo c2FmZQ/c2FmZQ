@@ -49,7 +49,9 @@ func TestRecovery(t *testing.T) {
 	if err := c.CreateAccount(url, "alice@", "pass", false); err != nil {
 		t.Fatalf("c.CreateAccount: %v", err)
 	}
-	phr, err := bip39.NewMnemonic(c.SecretKey().ToBytes())
+	sk := c.SecretKey()
+	defer sk.Wipe()
+	phr, err := bip39.NewMnemonic(sk.ToBytes())
 	if err != nil {
 		t.Fatalf("bip39.NewMnemonic: %v", err)
 	}

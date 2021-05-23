@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"runtime"
 
 	"github.com/jamesruan/sodium"
 
@@ -16,11 +17,22 @@ import (
 func MakeSecretKey() *SecretKey {
 	kp := sodium.MakeBoxKP()
 	sk := SecretKey(kp.SecretKey)
+	sk.setFinalizer()
 	return &sk
 }
 
+// MakeSecretKeyForTest returns a new SecretKey for tests. It should only be
+// called from a _test.go file.
+func MakeSecretKeyForTest() *SecretKey {
+	sk := MakeSecretKey()
+	runtime.SetFinalizer(sk, nil)
+	return sk
+}
+
+// A secret key for asymmetric key encryption.
 type SecretKey sodium.BoxSecretKey
 
+// SecretKeyFromBytes returns a SecretKey from raw bytes.
 func SecretKeyFromBytes(b []byte) *SecretKey {
 	c := make([]byte, len(b))
 	copy(c, b)
@@ -28,7 +40,25 @@ func SecretKeyFromBytes(b []byte) *SecretKey {
 		b[i] = 0
 	}
 	sk := SecretKey(sodium.BoxSecretKey{Bytes: sodium.Bytes(c)})
+	sk.setFinalizer()
 	return &sk
+}
+
+func (k *SecretKey) setFinalizer() {
+	stack := log.Stack()
+	runtime.SetFinalizer(k, func(obj interface{}) {
+		sk := obj.(*SecretKey)
+		for i := range sk.Bytes {
+			if sk.Bytes[i] != 0 {
+				if log.Level >= log.DebugLevel {
+					log.Panicf("WIPEME: SecretKey not wiped. Call stack: %s", stack)
+				}
+				log.Errorf("WIPEME: SecretKey not wiped. Call stack: %s", stack)
+				sk.Wipe()
+				return
+			}
+		}
+	})
 }
 
 func (k SecretKey) ToBytes() []byte {
@@ -54,9 +84,7 @@ func (k *SecretKey) Wipe() {
 	for i := range k.Bytes {
 		k.Bytes[i] = 0
 	}
-	if log.Level > log.DebugLevel {
-		log.Debugf("Wiped %#v", *k)
-	}
+	runtime.SetFinalizer(k, nil)
 }
 
 func (k *SecretKey) UnmarshalJSON(b []byte) error {
@@ -69,6 +97,7 @@ func (k *SecretKey) UnmarshalJSON(b []byte) error {
 		return err
 	}
 	k.Bytes = sodium.Bytes(b)
+	k.setFinalizer()
 	return nil
 }
 

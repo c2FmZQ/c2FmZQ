@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+	"runtime"
 	"strings"
 
 	"c2FmZQ/internal/log"
@@ -66,6 +67,8 @@ func (f File) Name(sk *SecretKey) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	defer hdrs[0].Wipe()
+	defer hdrs[1].Wipe()
 	return string(hdrs[0].Filename), nil
 }
 
@@ -94,6 +97,7 @@ func (a Album) Name(sk *SecretKey) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	defer ask.Wipe()
 	md, err := DecryptAlbumMetadata(a.Metadata, ask)
 	if err != nil {
 		return "", err
@@ -208,9 +212,7 @@ func (h *Header) Wipe() {
 	for i := range h.Filename {
 		h.Filename[i] = 0
 	}
-	if log.Level > log.DebugLevel {
-		log.Debugf("Wiped %#v", *h)
-	}
+	runtime.SetFinalizer(h, nil)
 }
 
 // ResponseOK returns a new Response with status OK.

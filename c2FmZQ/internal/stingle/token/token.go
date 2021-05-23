@@ -20,6 +20,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"errors"
+	"runtime"
 	"time"
 
 	"golang.org/x/crypto/chacha20poly1305"
@@ -43,6 +44,7 @@ func KeyFromBytes(b []byte) *Key {
 	for i := 0; i < chacha20poly1305.KeySize; i++ {
 		b[i] = 0
 	}
+	k.setFinalizer()
 	return &k
 }
 
@@ -53,9 +55,24 @@ func (k *Key) Wipe() {
 	for i := range k {
 		k[i] = 0
 	}
-	if log.Level > log.DebugLevel {
-		log.Debugf("Wiped %#v", *k)
-	}
+	runtime.SetFinalizer(k, nil)
+}
+
+func (k *Key) setFinalizer() {
+	stack := log.Stack()
+	runtime.SetFinalizer(k, func(obj interface{}) {
+		tk := obj.(*Key)
+		for i := range tk {
+			if tk[i] != 0 {
+				if log.Level >= log.DebugLevel {
+					log.Panicf("WIPEME: TokenKey not wiped. Call stack: %s", stack)
+				}
+				log.Errorf("WIPEME: TokenKey not wiped. Call stack: %s", stack)
+				tk.Wipe()
+				return
+			}
+		}
+	})
 }
 
 func (k *Key) UnmarshalJSON(b []byte) error {
@@ -71,6 +88,7 @@ func (k *Key) UnmarshalJSON(b []byte) error {
 		return errors.New("invalid key size")
 	}
 	copy((*k)[:], b)
+	k.setFinalizer()
 	return nil
 }
 

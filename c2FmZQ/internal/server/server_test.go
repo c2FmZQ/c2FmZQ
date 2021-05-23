@@ -44,7 +44,7 @@ func startServer(t *testing.T) (string, func()) {
 
 // newClient returns a new test client that uses sock to connect to the server.
 func newClient(sock string) *client {
-	sk := stingle.MakeSecretKey()
+	sk := stingle.MakeSecretKeyForTest()
 	return &client{
 		sock:      sock,
 		secretKey: sk,

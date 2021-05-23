@@ -26,6 +26,10 @@ func MakeSecretKey() *SecretKey {
 	return &sk
 }
 
+func MakeSecretKeyForTest() *SecretKey {
+	return MakeSecretKey()
+}
+
 func SecretKeyFromBytes(b []byte) *SecretKey {
 	sk := SecretKey{B: new([32]byte)}
 	copy(sk.B[:], b)

@@ -31,7 +31,7 @@ func TestUsers(t *testing.T) {
 	keys := make(map[string]*stingle.SecretKey)
 	users := make(map[string]database.User)
 	for _, e := range emails {
-		keys[e] = stingle.MakeSecretKey()
+		keys[e] = stingle.MakeSecretKeyForTest()
 		if err := addUser(db, e, keys[e].PublicKey()); err != nil {
 			t.Fatalf("addUser(%q, pk) failed: %v", e, err)
 		}

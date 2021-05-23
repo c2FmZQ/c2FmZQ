@@ -13,7 +13,7 @@ import (
 )
 
 func TestFileEncryption(t *testing.T) {
-	sk := MakeSecretKey()
+	sk := MakeSecretKeyForTest()
 	mk := sodium.MakeMasterKey()
 
 	header := &Header{
@@ -56,6 +56,7 @@ func TestFileEncryption(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DecryptHeader: %v", err)
 	}
+	defer header2.Wipe()
 
 	var decrypted bytes.Buffer
 	reader := DecryptFile(f, header2)

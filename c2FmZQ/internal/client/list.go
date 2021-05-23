@@ -191,7 +191,7 @@ func (i ListItem) Header(sk *stingle.SecretKey) (*stingle.Header, error) {
 		if err != nil {
 			return nil, err
 		}
-		sk.Wipe()
+		defer ask.Wipe()
 		sk = ask
 	}
 	hdrs, err := stingle.DecryptBase64Headers(i.FSFile.Headers, sk)
@@ -257,6 +257,7 @@ func (c *Client) glob(pattern string, opt GlobOptions) ([]ListItem, error) {
 			return nil, err
 		}
 		md, err := stingle.DecryptAlbumMetadata(album.Metadata, ask)
+		ask.Wipe()
 		if err != nil {
 			return nil, err
 		}
@@ -293,6 +294,7 @@ func (c *Client) globStep(parent string, g *glob, n *node, li *[]ListItem) error
 				return err
 			}
 			hdrs, err := stingle.DecryptBase64Headers(f.Headers, sk)
+			sk.Wipe()
 			if err != nil {
 				return err
 			}

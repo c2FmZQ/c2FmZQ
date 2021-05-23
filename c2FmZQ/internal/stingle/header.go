@@ -8,7 +8,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"runtime"
 	"strings"
+
+	"c2FmZQ/internal/log"
 )
 
 // DecryptBase64Headers decrypts base64-encoded headers.
@@ -68,6 +71,8 @@ func NewHeaders(filename string) (hdrs [2]*Header) {
 	if _, err := rand.Read(hdrs[1].SymmetricKey); err != nil {
 		panic(err)
 	}
+	hdrs[0].setFinalizer()
+	hdrs[1].setFinalizer()
 	return
 }
 
@@ -159,6 +164,7 @@ func DecryptHeader(in io.Reader, sk *SecretKey) (*Header, error) {
 	hdr.VideoDuration = int32(binary.BigEndian.Uint32(d[:4]))
 	d = d[4:]
 
+	hdr.setFinalizer()
 	return hdr, nil
 }
 
@@ -218,4 +224,21 @@ func SkipHeader(in io.Reader) (err error) {
 	encHeader := make([]byte, headerSize)
 	_, err = io.ReadFull(in, encHeader)
 	return
+}
+
+func (h *Header) setFinalizer() {
+	stack := log.Stack()
+	runtime.SetFinalizer(h, func(obj interface{}) {
+		hdr := obj.(*Header)
+		for i := range hdr.SymmetricKey {
+			if hdr.SymmetricKey[i] != 0 {
+				if log.Level >= log.DebugLevel {
+					log.Panicf("WIPEME: Header not wiped. Call stack: %s", stack)
+				}
+				log.Errorf("WIPEME: Header not wiped. Call stack: %s", stack)
+				hdr.Wipe()
+				return
+			}
+		}
+	})
 }

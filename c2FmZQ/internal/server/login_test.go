@@ -60,7 +60,7 @@ func TestLogin(t *testing.T) {
 	if err := c.changePass(); err == nil {
 		t.Error("c.changePass should have failed but succeeded")
 	}
-	c.secretKey = stingle.MakeSecretKey()
+	c.secretKey = stingle.MakeSecretKeyForTest()
 	if err := c.recoverAccount(); err == nil {
 		t.Error("c.recoverAccount should have failed but succeeded")
 	}

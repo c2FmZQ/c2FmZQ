@@ -7,8 +7,8 @@ import (
 )
 
 func TestEncryptDecrypt(t *testing.T) {
-	senderKey := MakeSecretKey()
-	receiverKey := MakeSecretKey()
+	senderKey := MakeSecretKeyForTest()
+	receiverKey := MakeSecretKeyForTest()
 
 	msg := []byte("blah blah blah 123")
 	encrypted := EncryptMessage(msg, receiverKey.PublicKey(), senderKey)
@@ -21,7 +21,7 @@ func TestEncryptDecrypt(t *testing.T) {
 }
 
 func TestSealBox(t *testing.T) {
-	key := MakeSecretKey()
+	key := MakeSecretKeyForTest()
 	msg := []byte("foo bar")
 	enc := key.PublicKey().SealBox(msg)
 

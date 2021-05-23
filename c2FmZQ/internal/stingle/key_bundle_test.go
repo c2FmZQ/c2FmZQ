@@ -7,7 +7,7 @@ import (
 )
 
 func TestPublicKeyBundle(t *testing.T) {
-	sk := MakeSecretKey()
+	sk := MakeSecretKeyForTest()
 
 	b := MakeKeyBundle(sk.PublicKey())
 	t.Logf("bundle: %s", b)
@@ -24,12 +24,13 @@ func TestPublicKeyBundle(t *testing.T) {
 
 func TestSecretKeyBundle(t *testing.T) {
 	pass := []byte("foobar")
-	want := MakeSecretKey()
+	want := MakeSecretKeyForTest()
 
 	b := MakeSecretKeyBundle(pass, want)
 	t.Logf("bundle: %s", b)
 
 	got, err := DecodeSecretKeyBundle(pass, b)
+	defer got.Wipe()
 	if err != nil {
 		t.Fatalf("DecodeKeyBundle: %v", err)
 	}
@@ -40,12 +41,13 @@ func TestSecretKeyBundle(t *testing.T) {
 }
 
 func TestEncryptSecretKey(t *testing.T) {
-	sk := MakeSecretKey()
+	sk := MakeSecretKeyForTest()
 	pass := []byte("foobar")
 
 	enc := EncryptSecretKeyForExport(pass, sk)
 
 	dec, err := DecryptSecretKeyFromBundle(pass, enc)
+	defer dec.Wipe()
 	if err != nil {
 		t.Fatalf("DecryptSecretKeyFromBundle: %v", err)
 	}

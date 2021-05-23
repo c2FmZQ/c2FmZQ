@@ -7,7 +7,7 @@ import (
 )
 
 func TestDecryptHeader(t *testing.T) {
-	sk := MakeSecretKey()
+	sk := MakeSecretKeyForTest()
 
 	header := &Header{
 		FileID:        []byte("ABCDEFGHIJKLMNOPQRSTUVWXYZ123456"),
@@ -25,6 +25,7 @@ func TestDecryptHeader(t *testing.T) {
 	}
 
 	dec, err := DecryptHeader(&enc, sk)
+	defer dec.Wipe()
 	if err != nil {
 		t.Fatalf("DecryptHeader: %v", err)
 	}

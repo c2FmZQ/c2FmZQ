@@ -5,7 +5,7 @@ import (
 )
 
 func TestAlbumMetadata(t *testing.T) {
-	sk := MakeSecretKey()
+	sk := MakeSecretKeyForTest()
 	md := AlbumMetadata{Name: "foobar"}
 	enc := EncryptAlbumMetadata(md, sk.PublicKey())
 

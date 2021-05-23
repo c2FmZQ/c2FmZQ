@@ -170,6 +170,7 @@ func (iw *FuseImportWriter) processNewFile() (retErr error) {
 	if err != nil {
 		return err
 	}
+	defer sk.Wipe()
 	pk := sk.PublicKey()
 
 	commit, fs, err := iw.c.fileSetForUpdate(iw.fs)

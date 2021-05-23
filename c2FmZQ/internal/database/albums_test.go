@@ -37,7 +37,7 @@ func TestAlbums(t *testing.T) {
 	dir := t.TempDir()
 	db := database.New(dir, "")
 	email := "alice@"
-	key := stingle.MakeSecretKey()
+	key := stingle.MakeSecretKeyForTest()
 	database.CurrentTimeForTesting = 10000
 
 	if err := addUser(db, email, key.PublicKey()); err != nil {
@@ -83,7 +83,7 @@ func TestAlbums(t *testing.T) {
 	}
 
 	// Add Bob.
-	bobKey := stingle.MakeSecretKey()
+	bobKey := stingle.MakeSecretKeyForTest()
 	if err := addUser(db, "bob@", bobKey.PublicKey()); err != nil {
 		t.Fatalf("addUser(%q, pk) failed: %v", "bob@", err)
 	}

@@ -23,6 +23,12 @@ var (
 	Record func(...interface{})
 )
 
+func Stack() string {
+	buf := make([]byte, 4096)
+	n := runtime.Stack(buf, false)
+	return string(buf[:n])
+}
+
 func log(l, s string) {
 	fl := "unknown"
 	if _, file, line, ok := runtime.Caller(2); ok {
