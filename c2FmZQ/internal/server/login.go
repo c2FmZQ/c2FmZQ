@@ -15,6 +15,12 @@ import (
 	"c2FmZQ/internal/stingle/token"
 )
 
+const (
+	// Login tokens are good for 10 years.
+	// Note: logout invalidates all tokens.
+	tokenDuration = 10 * 365 * 24 * time.Hour
+)
+
 // handleCreateAccount handles the /v2/register/createAccount endpoint.
 //
 // Argument:
@@ -125,7 +131,7 @@ func (s *Server) handleLogin(req *http.Request) *stingle.Response {
 		AddPart("keyBundle", u.KeyBundle).
 		AddPart("serverPublicKey", u.ServerPublicKeyForExport()).
 		AddPart("token", token.Mint(tk,
-			token.Token{Scope: "session", Subject: u.UserID}, 180*24*time.Hour)).
+			token.Token{Scope: "session", Subject: u.UserID}, tokenDuration)).
 		AddPart("userId", fmt.Sprintf("%d", u.UserID)).
 		AddPart("isKeyBackedUp", u.IsBackup).
 		AddPart("homeFolder", u.HomeFolder)
@@ -206,7 +212,7 @@ func (s *Server) handleChangePass(user database.User, req *http.Request) *stingl
 	}
 	defer tk.Wipe()
 	return stingle.ResponseOK().
-		AddPart("token", token.Mint(tk, token.Token{Scope: "session", Subject: user.UserID}, 180*24*time.Hour))
+		AddPart("token", token.Mint(tk, token.Token{Scope: "session", Subject: user.UserID}, tokenDuration))
 }
 
 // handleGetServerPK handles the /v2/keys/getServerPK endpoint. The server's
