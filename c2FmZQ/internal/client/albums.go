@@ -3,6 +3,7 @@ package client
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -10,6 +11,7 @@ import (
 	"strings"
 	"syscall"
 
+	"c2FmZQ/internal/log"
 	"c2FmZQ/internal/stingle"
 )
 
@@ -578,6 +580,10 @@ func (c *Client) moveFiles(fromItems []ListItem, toItem ListItem, rename string,
 }
 
 func (c *Client) deleteFiles(li []ListItem) (retErr error) {
+	refs, err := c.allFiles()
+	if err != nil {
+		return err
+	}
 	commit, fs, err := c.fileSetForUpdate(trashFile)
 	if err != nil {
 		return err
@@ -585,13 +591,41 @@ func (c *Client) deleteFiles(li []ListItem) (retErr error) {
 	defer commit(false, &retErr)
 
 	for _, item := range li {
-		if item.Album != nil && item.Album.IsOwner != "1" {
-			return fmt.Errorf("only the album owner can delete files: %s", item.Filename)
-		}
 		if _, ok := fs.Files[item.FSFile.File]; ok {
 			c.Printf("Deleting %s (not synced)\n", item.Filename)
 			delete(fs.Files, item.FSFile.File)
+			if refs[item.FSFile.File] {
+				continue
+			}
+			if err := os.Remove(c.blobPath(item.FSFile.File, true)); err != nil && !errors.Is(err, os.ErrNotExist) {
+				log.Errorf("os.Remove: %v", err)
+			}
+			if err := os.Remove(c.blobPath(item.FSFile.File, false)); err != nil && !errors.Is(err, os.ErrNotExist) {
+				log.Errorf("os.Remove: %v", err)
+			}
 		}
 	}
 	return commit(true, nil)
+}
+
+func (c *Client) allFiles() (map[string]bool, error) {
+	var al AlbumList
+	if err := c.storage.ReadDataFile(c.fileHash(albumList), &al); err != nil {
+		return nil, err
+	}
+	fileSets := []string{galleryFile}
+	for a := range al.Albums {
+		fileSets = append(fileSets, albumPrefix+a)
+	}
+	all := make(map[string]bool)
+	for _, f := range fileSets {
+		var fs FileSet
+		if err := c.storage.ReadDataFile(c.fileHash(f), &fs); err != nil {
+			return nil, err
+		}
+		for ff := range fs.Files {
+			all[ff] = true
+		}
+	}
+	return all, nil
 }

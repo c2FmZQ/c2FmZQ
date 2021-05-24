@@ -655,11 +655,10 @@ func (c *Client) Free(patterns []string, opt GlobOptions) (int, error) {
 		if item.IsDir || item.LocalOnly {
 			continue
 		}
-		fn := c.blobPath(item.FSFile.File, false)
-		if _, err := os.Stat(fn); errors.Is(err, os.ErrNotExist) {
-			continue
+		if err := os.Remove(c.blobPath(item.FSFile.File, false)); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return count, err
 		}
-		if err := os.Remove(fn); err != nil {
+		if err := os.Remove(c.blobPath(item.FSFile.File, true)); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return count, err
 		}
 		c.Printf("Freed %s\n", item.Filename)
