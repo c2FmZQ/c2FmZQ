@@ -169,6 +169,7 @@ func (n *node) insertFile(name string, size int64, f *stingle.File, fileSet, set
 }
 
 func sanitize(s string) string {
+	s = strings.TrimSpace(s)
 	if s == "" {
 		s = "(noname)"
 	} else if s == "." {

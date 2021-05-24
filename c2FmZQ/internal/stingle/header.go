@@ -58,8 +58,18 @@ func NewHeaders(filename string) (hdrs [2]*Header) {
 		hdrs[i].SymmetricKey = make([]byte, 32)
 		hdrs[i].ChunkSize = 1 << 20
 		hdrs[i].FileType = FileTypeGeneral
-		hdrs[i].Filename = make([]byte, len(filename))
-		copy(hdrs[i].Filename, []byte(filename))
+		// The Stingle App assumes the header size won't change. To allow
+		// renames, we make the filename fixed size and pad with leading
+		// spaces.
+		size := 64
+		fn := []byte(filename)
+		if l := len(fn); l > size {
+			size = l
+		} else if l < size {
+			fn = append(bytes.Repeat([]byte{' '}, size-l), fn...)
+		}
+		hdrs[i].Filename = make([]byte, len(fn))
+		copy(hdrs[i].Filename, fn)
 	}
 	if _, err := rand.Read(hdrs[0].FileID); err != nil {
 		panic(err)

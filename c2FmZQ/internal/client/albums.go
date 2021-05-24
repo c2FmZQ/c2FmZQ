@@ -1,6 +1,7 @@
 package client
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
@@ -559,9 +560,20 @@ func (c *Client) moveFiles(fromItems []ListItem, toItem ListItem, rename string,
 				return err
 			}
 			if rename != "" {
+				// The Stingle App assumes that the size of the header doesn't
+				// change. So, the filename size can't change.
+				// If the new name is the same length, no problem.
+				// If the new name is shorter, pad it with leading spaces.
+				// If the new name is longer, return an error.
 				for i := range hdrs {
-					hdrs[i].Filename = make([]byte, len(rename))
-					copy(hdrs[i].Filename, []byte(rename))
+					newName := []byte(rename)
+					oldSize := len(hdrs[i].Filename)
+					newSize := len(newName)
+					if newSize > oldSize {
+						return fmt.Errorf("new name cannot be longer than %d", oldSize)
+					}
+					newName = append(bytes.Repeat([]byte{' '}, oldSize-newSize), newName...)
+					copy(hdrs[i].Filename, newName)
 				}
 			}
 			h, err := stingle.EncryptBase64Headers(hdrs, pk)

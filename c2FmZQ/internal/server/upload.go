@@ -66,10 +66,10 @@ func receiveUpload(dir string, req *http.Request) (*upload, error) {
 				return nil, err
 			}
 		} else {
-			buf := make([]byte, 1024)
+			buf := make([]byte, 2048)
 			sz, err := io.ReadFull(p, buf)
 			if err != io.ErrUnexpectedEOF && err != io.EOF {
-				return nil, fmt.Errorf("received input is more than 1KB in size: sz=%d,%q=%q", sz, p.FormName(), string(buf[:sz]))
+				return nil, fmt.Errorf("received input is more than 2KB in size: sz=%d,%q=%q", sz, p.FormName(), string(buf[:sz]))
 			}
 			slurp := string(buf[:sz])
 
