@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -254,8 +255,8 @@ func (s *Server) handleDownload(w http.ResponseWriter, req *http.Request) {
 		reqStatus.WithLabelValues(req.Method, req.URL.String(), "nok").Inc()
 		return
 	}
-	if _, err := io.Copy(w, f); err != nil {
-		log.Errorf("Copy failed: %v", err)
+	if _, err := copyWithCtx(req.Context(), w, f); err != nil {
+		log.Debugf("Copy failed: %v", err)
 	}
 	if err := f.Close(); err != nil {
 		log.Errorf("Close failed: %v", err)
@@ -323,13 +324,44 @@ func (s *Server) handleTokenDownload(w http.ResponseWriter, req *http.Request) {
 	if r := req.Header.Get("Range"); r != "" {
 		s.tryToHandleRange(w, r, f)
 	}
-	if _, err := io.Copy(w, f); err != nil {
-		log.Errorf("Copy failed: %v", err)
+	if _, err := copyWithCtx(req.Context(), w, f); err != nil {
+		log.Debugf("Copy failed: %v", err)
 	}
 	if err := f.Close(); err != nil {
 		log.Errorf("Close failed: %v", err)
 	}
 	reqStatus.WithLabelValues(req.Method, baseURI, "ok").Inc()
+}
+
+func copyWithCtx(ctx context.Context, dst io.Writer, src io.Reader) (n int, err error) {
+	buf := make([]byte, 4096)
+	for {
+		select {
+		case <-ctx.Done():
+			log.Debugf("download: canceled after %d bytes", n)
+			return
+		default:
+		}
+		nr, err := src.Read(buf)
+		if nr > 0 {
+			nw, err := dst.Write(buf[:nr])
+			n += nw
+			if nw != nr {
+				log.Debugf("download: short write after %d bytes", n)
+				return n, nil
+			}
+			if err != nil {
+				return n, err
+			}
+		}
+		if err == io.EOF {
+			log.Debugf("download: finished: %d bytes", n)
+			return n, nil
+		}
+		if err != nil {
+			return n, err
+		}
+	}
 }
 
 // makeDownloadURL creates a signed URL to download a file.
