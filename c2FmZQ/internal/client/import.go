@@ -362,7 +362,7 @@ func (c *Client) videoThumbnail(file io.Reader) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	cmd := exec.Command(bin, "-i", "pipe:0", "-frames:v", "1", "-an", "-vf", "scale=320:240", "-f", "apng", "pipe:1")
+	cmd := exec.Command(bin, "-i", "pipe:0", "-frames:v", "1", "-an", "-vf", "thumbnail,scale=320:240", "-f", "apng", "pipe:1")
 	cmd.Stdin = file
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
@@ -402,7 +402,7 @@ func videoMetadata(file io.Reader) (duration int32, creationTime time.Time, err 
 	}
 	if len(streamInfo.Streams) > 0 {
 		d, _ := streamInfo.Streams[0].Duration.Float64()
-		duration = int32(math.Ceil(d))
+		duration = int32(math.Floor(d))
 		// Format: 2021-03-28T17:02:12.000000Z
 		creationTime, _ = time.Parse("2006-01-02T15:04:05.000000Z", streamInfo.Streams[0].Tags.CreationTime)
 	}
