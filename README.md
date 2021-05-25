@@ -101,8 +101,10 @@ GLOBAL OPTIONS:
    --path-prefix value            The API endpoints are <path-prefix>/v2/...
    --base-url value               The base URL of the generated download links. If empty, the links will generated using the Host headers of the incoming requests, i.e. https://HOST/.
    --redirect-404 value           Requests to unknown endpoints are redirected to this URL.
-   --tlscert FILE                 The name of the FILE containing the TLS cert to use. If neither -tlscert nor -tlskey is set, the server will not use TLS.
+   --tlscert FILE                 The name of the FILE containing the TLS cert to use.
    --tlskey FILE                  The name of the FILE containing the TLS private key to use.
+   --autocert-domain value        Use autocert (letsencrypt.org) to get TLS credentials for this domain. The credentials are saved in the database.
+   --autocert-address value       The autocert http server will listen on this address. It must be reachable externally on port 80. (default: ":http")
    --allow-new-accounts           Allow new account registrations. (default: true)
    --verbose value, -v value      The level of logging verbosity: 1:Error 2:Info 3:Debug (default: 2 (info))
    --encrypt-metadata             Encrypt the server metadata (strongly recommended). (default: true)

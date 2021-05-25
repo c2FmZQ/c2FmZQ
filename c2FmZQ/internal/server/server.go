@@ -3,20 +3,23 @@ package server
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"net"
 	"net/http"
 	"strconv"
 	"time"
 
+	"github.com/NYTimes/gziphandler"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"golang.org/x/crypto/acme/autocert"
+
 	"c2FmZQ/internal/database"
 	"c2FmZQ/internal/log"
 	"c2FmZQ/internal/server/basicauth"
 	"c2FmZQ/internal/stingle"
 	"c2FmZQ/internal/stingle/token"
-	"github.com/NYTimes/gziphandler"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 type ctxKey int
@@ -139,8 +142,7 @@ func (s *Server) wrapHandler() http.Handler {
 	return handler
 }
 
-// Run runs the HTTP server on the configured address.
-func (s *Server) Run() error {
+func (s *Server) httpServer() *http.Server {
 	s.srv = &http.Server{
 		Addr:              s.addr,
 		Handler:           s.wrapHandler(),
@@ -149,22 +151,41 @@ func (s *Server) Run() error {
 		ConnContext: func(ctx context.Context, c net.Conn) context.Context {
 			return context.WithValue(ctx, connKey, c)
 		},
+		ErrorLog: log.Logger(),
 	}
-	return s.srv.ListenAndServe()
+	return s.srv
+}
+
+// Run runs the HTTP server on the configured address.
+func (s *Server) Run() error {
+	return s.httpServer().ListenAndServe()
 }
 
 // RunWithTLS runs the HTTP server with TLS.
 func (s *Server) RunWithTLS(certFile, keyFile string) error {
-	s.srv = &http.Server{
-		Addr:              s.addr,
-		Handler:           s.wrapHandler(),
-		ReadHeaderTimeout: 30 * time.Second,
-		IdleTimeout:       10 * time.Second,
-		ConnContext: func(ctx context.Context, c net.Conn) context.Context {
-			return context.WithValue(ctx, connKey, c)
-		},
+	return s.httpServer().ListenAndServeTLS(certFile, keyFile)
+}
+
+// RunWithAutocert runs the HTTP server with TLS credentials provided by
+// letsencrypt.org.
+func (s *Server) RunWithAutocert(domain, addr string) error {
+	certManager := autocert.Manager{
+		Prompt:     autocert.AcceptTOS,
+		HostPolicy: autocert.HostWhitelist(domain),
+		Cache:      s.db.AutocertCache(),
 	}
-	return s.srv.ListenAndServeTLS(certFile, keyFile)
+	go func() {
+		if addr == "" {
+			addr = ":http"
+		}
+		log.Fatalf("autocert.Manager failed: %v", http.ListenAndServe(addr, certManager.HTTPHandler(nil)))
+	}()
+
+	s.srv = s.httpServer()
+	s.srv.TLSConfig = &tls.Config{
+		GetCertificate: certManager.GetCertificate,
+	}
+	return s.srv.ListenAndServeTLS("", "")
 }
 
 // RunWithListener runs the server using a pre-existing Listener. Used for testing.
@@ -302,7 +323,7 @@ func (s *Server) auth(f func(database.User, *http.Request) *stingle.Response) ht
 // handleNotFound handles requests for undefined endpoints.
 func (s *Server) handleNotFound(w http.ResponseWriter, req *http.Request) {
 	if log.Level >= log.DebugLevel {
-		log.Infof("!!! (404) %s %s", req.Method, req.URL)
+		log.Debugf("!!! (404) %s %s", req.Method, req.URL)
 		req.ParseForm()
 		if req.PostForm != nil {
 			for k, v := range req.PostForm {

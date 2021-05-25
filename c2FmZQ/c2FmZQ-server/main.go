@@ -37,6 +37,8 @@ var (
 	flagEncryptMetadata  bool
 	flagPassphraseFile   string
 	flagHTDigestFile     string
+	flagAutocertDomain   string
+	flagAutocertAddr     string
 )
 
 func main() {
@@ -85,7 +87,7 @@ func main() {
 			&cli.StringFlag{
 				Name:        "tlscert",
 				Value:       "",
-				Usage:       "The name of the `FILE` containing the TLS cert to use. If neither -tlscert nor -tlskey is set, the server will not use TLS.",
+				Usage:       "The name of the `FILE` containing the TLS cert to use.",
 				TakesFile:   true,
 				Destination: &flagTLSCert,
 			},
@@ -94,6 +96,18 @@ func main() {
 				Value:       "",
 				Usage:       "The name of the `FILE` containing the TLS private key to use.",
 				Destination: &flagTLSKey,
+			},
+			&cli.StringFlag{
+				Name:        "autocert-domain",
+				Value:       "",
+				Usage:       "Use autocert (letsencrypt.org) to get TLS credentials for this domain. The credentials are saved in the database.",
+				Destination: &flagAutocertDomain,
+			},
+			&cli.StringFlag{
+				Name:        "autocert-address",
+				Value:       ":http",
+				Usage:       "The autocert http server will listen on this address. It must be reachable externally on port 80.",
+				Destination: &flagAutocertAddr,
 			},
 			&cli.BoolFlag{
 				Name:        "allow-new-accounts",
@@ -184,15 +198,20 @@ func startServer(c *cli.Context) error {
 		close(done)
 	}()
 
-	if flagTLSCert == "" {
+	if flagTLSCert == "" && flagAutocertDomain == "" {
 		log.Info("Starting server WITHOUT TLS")
 		if err := s.Run(); err != http.ErrServerClosed {
 			log.Fatalf("s.Run: %v", err)
 		}
-	} else {
+	} else if flagAutocertDomain == "" {
 		log.Info("Starting server with TLS")
 		if err := s.RunWithTLS(flagTLSCert, flagTLSKey); err != http.ErrServerClosed {
 			log.Fatalf("s.RunWithTLS: %v", err)
+		}
+	} else {
+		log.Info("Starting server with Autocert")
+		if err := s.RunWithAutocert(flagAutocertDomain, flagAutocertAddr); err != http.ErrServerClosed {
+			log.Fatalf("s.RunWithAutocert: %v", err)
 		}
 	}
 	<-done
