@@ -38,7 +38,8 @@ import (
 // Returns:
 //  - stingle.Response("ok")
 func (s *Server) handleUpload(req *http.Request) *stingle.Response {
-	up, err := receiveUpload(filepath.Join(s.db.Dir(), "uploads"), req)
+	up, err := s.receiveUpload(filepath.Join(s.db.Dir(), "uploads"), req)
+	s.setDeadline(req.Context(), time.Now().Add(30*time.Second))
 	if err != nil {
 		log.Errorf("receiveUpload: %v", err)
 		return stingle.ResponseNOK()
@@ -255,7 +256,7 @@ func (s *Server) handleDownload(w http.ResponseWriter, req *http.Request) {
 		reqStatus.WithLabelValues(req.Method, req.URL.String(), "nok").Inc()
 		return
 	}
-	if _, err := copyWithCtx(req.Context(), w, f); err != nil {
+	if _, err := s.copyWithCtx(req.Context(), w, f); err != nil {
 		log.Debugf("Copy failed: %v", err)
 	}
 	if err := f.Close(); err != nil {
@@ -324,7 +325,7 @@ func (s *Server) handleTokenDownload(w http.ResponseWriter, req *http.Request) {
 	if r := req.Header.Get("Range"); r != "" {
 		s.tryToHandleRange(w, r, f)
 	}
-	if _, err := copyWithCtx(req.Context(), w, f); err != nil {
+	if _, err := s.copyWithCtx(req.Context(), w, f); err != nil {
 		log.Debugf("Copy failed: %v", err)
 	}
 	if err := f.Close(); err != nil {
@@ -333,7 +334,7 @@ func (s *Server) handleTokenDownload(w http.ResponseWriter, req *http.Request) {
 	reqStatus.WithLabelValues(req.Method, baseURI, "ok").Inc()
 }
 
-func copyWithCtx(ctx context.Context, dst io.Writer, src io.Reader) (n int, err error) {
+func (s *Server) copyWithCtx(ctx context.Context, dst io.Writer, src io.Reader) (n int64, err error) {
 	buf := make([]byte, 4096)
 	for {
 		select {
@@ -344,11 +345,12 @@ func copyWithCtx(ctx context.Context, dst io.Writer, src io.Reader) (n int, err 
 		}
 		nr, err := src.Read(buf)
 		if nr > 0 {
+			s.setDeadline(ctx, time.Now().Add(time.Minute))
 			nw, err := dst.Write(buf[:nr])
-			n += nw
+			n += int64(nw)
 			if nw != nr {
 				log.Debugf("download: short write after %d bytes", n)
-				return n, nil
+				return n, io.ErrShortWrite
 			}
 			if err != nil {
 				return n, err
@@ -384,7 +386,7 @@ func (s *Server) makeDownloadURL(user database.User, host, file, set string, isT
 	)
 	b := s.BaseURL
 	if b == "" {
-		b = fmt.Sprintf("https://%s/", host)
+		b = fmt.Sprintf("https://%s%s/", host, s.pathPrefix)
 	}
 	return fmt.Sprintf("%sv2/download/%s", b, tok), nil
 }

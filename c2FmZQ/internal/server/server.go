@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"time"
 
 	"c2FmZQ/internal/database"
 	"c2FmZQ/internal/log"
@@ -18,7 +19,11 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
+type ctxKey int
+
 var (
+	connKey ctxKey = 1
+
 	reqLatency = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Name:    "server_response_time",
@@ -63,19 +68,22 @@ func init() {
 type Server struct {
 	AllowCreateAccount bool
 	BaseURL            string
+	Redirect404        string
 	mux                *http.ServeMux
 	srv                *http.Server
 	db                 *database.Database
 	addr               string
 	basicAuth          *basicauth.BasicAuth
+	pathPrefix         string
 }
 
 // New returns an instance of Server that's fully initialized and ready to run.
-func New(db *database.Database, addr, htdigest string) *Server {
+func New(db *database.Database, addr, htdigest, pathPrefix string) *Server {
 	s := &Server{
-		mux:  http.NewServeMux(),
-		db:   db,
-		addr: addr,
+		mux:        http.NewServeMux(),
+		db:         db,
+		addr:       addr,
+		pathPrefix: pathPrefix,
 	}
 	if htdigest != "" {
 		var err error
@@ -84,41 +92,41 @@ func New(db *database.Database, addr, htdigest string) *Server {
 		}
 	}
 	if s.basicAuth != nil {
-		s.mux.HandleFunc("/metrics", s.basicAuth.Handler("Metrics", promhttp.Handler()))
+		s.mux.HandleFunc(pathPrefix+"/metrics", s.basicAuth.Handler("Metrics", promhttp.Handler()))
 	}
 
 	s.mux.HandleFunc("/", s.handleNotFound)
-	s.mux.HandleFunc("/v2/register/createAccount", s.noauth(s.handleCreateAccount))
-	s.mux.HandleFunc("/v2/login/preLogin", s.noauth(s.handlePreLogin))
-	s.mux.HandleFunc("/v2/login/login", s.noauth(s.handleLogin))
-	s.mux.HandleFunc("/v2/login/logout", s.auth(s.handleLogout))
-	s.mux.HandleFunc("/v2/login/changePass", s.auth(s.handleChangePass))
-	s.mux.HandleFunc("/v2/login/checkKey", s.noauth(s.handleCheckKey))
-	s.mux.HandleFunc("/v2/login/recoverAccount", s.noauth(s.handleRecoverAccount))
-	s.mux.HandleFunc("/v2/login/deleteUser", s.auth(s.handleDeleteUser))
-	s.mux.HandleFunc("/v2/keys/getServerPK", s.auth(s.handleGetServerPK))
-	s.mux.HandleFunc("/v2/keys/reuploadKeys", s.auth(s.handleReuploadKeys))
+	s.mux.HandleFunc(pathPrefix+"/v2/register/createAccount", s.noauth(s.handleCreateAccount))
+	s.mux.HandleFunc(pathPrefix+"/v2/login/preLogin", s.noauth(s.handlePreLogin))
+	s.mux.HandleFunc(pathPrefix+"/v2/login/login", s.noauth(s.handleLogin))
+	s.mux.HandleFunc(pathPrefix+"/v2/login/logout", s.auth(s.handleLogout))
+	s.mux.HandleFunc(pathPrefix+"/v2/login/changePass", s.auth(s.handleChangePass))
+	s.mux.HandleFunc(pathPrefix+"/v2/login/checkKey", s.noauth(s.handleCheckKey))
+	s.mux.HandleFunc(pathPrefix+"/v2/login/recoverAccount", s.noauth(s.handleRecoverAccount))
+	s.mux.HandleFunc(pathPrefix+"/v2/login/deleteUser", s.auth(s.handleDeleteUser))
+	s.mux.HandleFunc(pathPrefix+"/v2/keys/getServerPK", s.auth(s.handleGetServerPK))
+	s.mux.HandleFunc(pathPrefix+"/v2/keys/reuploadKeys", s.auth(s.handleReuploadKeys))
 
-	s.mux.HandleFunc("/v2/sync/getUpdates", s.auth(s.handleGetUpdates))
-	s.mux.HandleFunc("/v2/sync/upload", s.noauth(s.handleUpload))
-	s.mux.HandleFunc("/v2/sync/moveFile", s.auth(s.handleMoveFile))
-	s.mux.HandleFunc("/v2/sync/emptyTrash", s.auth(s.handleEmptyTrash))
-	s.mux.HandleFunc("/v2/sync/delete", s.auth(s.handleDelete))
-	s.mux.HandleFunc("/v2/sync/download", s.handleDownload)
-	s.mux.HandleFunc("/v2/download/", s.handleTokenDownload)
-	s.mux.HandleFunc("/v2/sync/getDownloadUrls", s.auth(s.handleGetDownloadUrls))
-	s.mux.HandleFunc("/v2/sync/getUrl", s.auth(s.handleGetURL))
+	s.mux.HandleFunc(pathPrefix+"/v2/sync/getUpdates", s.auth(s.handleGetUpdates))
+	s.mux.HandleFunc(pathPrefix+"/v2/sync/upload", s.noauth(s.handleUpload))
+	s.mux.HandleFunc(pathPrefix+"/v2/sync/moveFile", s.auth(s.handleMoveFile))
+	s.mux.HandleFunc(pathPrefix+"/v2/sync/emptyTrash", s.auth(s.handleEmptyTrash))
+	s.mux.HandleFunc(pathPrefix+"/v2/sync/delete", s.auth(s.handleDelete))
+	s.mux.HandleFunc(pathPrefix+"/v2/sync/download", s.handleDownload)
+	s.mux.HandleFunc(pathPrefix+"/v2/download/", s.handleTokenDownload)
+	s.mux.HandleFunc(pathPrefix+"/v2/sync/getDownloadUrls", s.auth(s.handleGetDownloadUrls))
+	s.mux.HandleFunc(pathPrefix+"/v2/sync/getUrl", s.auth(s.handleGetURL))
 
-	s.mux.HandleFunc("/v2/sync/addAlbum", s.auth(s.handleAddAlbum))
-	s.mux.HandleFunc("/v2/sync/deleteAlbum", s.auth(s.handleDeleteAlbum))
-	s.mux.HandleFunc("/v2/sync/changeAlbumCover", s.auth(s.handleChangeAlbumCover))
-	s.mux.HandleFunc("/v2/sync/renameAlbum", s.auth(s.handleRenameAlbum))
-	s.mux.HandleFunc("/v2/sync/getContact", s.auth(s.handleGetContact))
-	s.mux.HandleFunc("/v2/sync/share", s.auth(s.handleShare))
-	s.mux.HandleFunc("/v2/sync/editPerms", s.auth(s.handleEditPerms))
-	s.mux.HandleFunc("/v2/sync/removeAlbumMember", s.auth(s.handleRemoveAlbumMember))
-	s.mux.HandleFunc("/v2/sync/unshareAlbum", s.auth(s.handleUnshareAlbum))
-	s.mux.HandleFunc("/v2/sync/leaveAlbum", s.auth(s.handleLeaveAlbum))
+	s.mux.HandleFunc(pathPrefix+"/v2/sync/addAlbum", s.auth(s.handleAddAlbum))
+	s.mux.HandleFunc(pathPrefix+"/v2/sync/deleteAlbum", s.auth(s.handleDeleteAlbum))
+	s.mux.HandleFunc(pathPrefix+"/v2/sync/changeAlbumCover", s.auth(s.handleChangeAlbumCover))
+	s.mux.HandleFunc(pathPrefix+"/v2/sync/renameAlbum", s.auth(s.handleRenameAlbum))
+	s.mux.HandleFunc(pathPrefix+"/v2/sync/getContact", s.auth(s.handleGetContact))
+	s.mux.HandleFunc(pathPrefix+"/v2/sync/share", s.auth(s.handleShare))
+	s.mux.HandleFunc(pathPrefix+"/v2/sync/editPerms", s.auth(s.handleEditPerms))
+	s.mux.HandleFunc(pathPrefix+"/v2/sync/removeAlbumMember", s.auth(s.handleRemoveAlbumMember))
+	s.mux.HandleFunc(pathPrefix+"/v2/sync/unshareAlbum", s.auth(s.handleUnshareAlbum))
+	s.mux.HandleFunc(pathPrefix+"/v2/sync/leaveAlbum", s.auth(s.handleLeaveAlbum))
 
 	return s
 }
@@ -134,8 +142,13 @@ func (s *Server) wrapHandler() http.Handler {
 // Run runs the HTTP server on the configured address.
 func (s *Server) Run() error {
 	s.srv = &http.Server{
-		Addr:    s.addr,
-		Handler: s.wrapHandler(),
+		Addr:              s.addr,
+		Handler:           s.wrapHandler(),
+		ReadHeaderTimeout: 30 * time.Second,
+		IdleTimeout:       10 * time.Second,
+		ConnContext: func(ctx context.Context, c net.Conn) context.Context {
+			return context.WithValue(ctx, connKey, c)
+		},
 	}
 	return s.srv.ListenAndServe()
 }
@@ -143,8 +156,13 @@ func (s *Server) Run() error {
 // RunWithTLS runs the HTTP server with TLS.
 func (s *Server) RunWithTLS(certFile, keyFile string) error {
 	s.srv = &http.Server{
-		Addr:    s.addr,
-		Handler: s.wrapHandler(),
+		Addr:              s.addr,
+		Handler:           s.wrapHandler(),
+		ReadHeaderTimeout: 30 * time.Second,
+		IdleTimeout:       10 * time.Second,
+		ConnContext: func(ctx context.Context, c net.Conn) context.Context {
+			return context.WithValue(ctx, connKey, c)
+		},
 	}
 	return s.srv.ListenAndServeTLS(certFile, keyFile)
 }
@@ -199,11 +217,22 @@ func parseInt(s string, def int64) int64 {
 	return v
 }
 
+func (s *Server) setDeadline(ctx context.Context, t time.Time) {
+	c, ok := ctx.Value(connKey).(net.Conn)
+	if !ok {
+		log.Errorf("ctx doesn't have connKey")
+		return
+	}
+	c.SetDeadline(t)
+}
+
 // noauth wraps handlers that don't require authentication.
 func (s *Server) noauth(f func(*http.Request) *stingle.Response) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		timer := prometheus.NewTimer(reqLatency.WithLabelValues(req.Method, req.URL.String()))
 		defer timer.ObserveDuration()
+		s.setDeadline(req.Context(), time.Now().Add(30*time.Second))
+		defer s.setDeadline(req.Context(), time.Time{})
 		log.Infof("%s %s", req.Method, req.URL)
 		req.ParseForm()
 		sr := f(req)
@@ -247,6 +276,8 @@ func (s *Server) auth(f func(database.User, *http.Request) *stingle.Response) ht
 	return func(w http.ResponseWriter, req *http.Request) {
 		timer := prometheus.NewTimer(reqLatency.WithLabelValues(req.Method, req.URL.String()))
 		defer timer.ObserveDuration()
+		s.setDeadline(req.Context(), time.Now().Add(30*time.Second))
+		defer s.setDeadline(req.Context(), time.Time{})
 
 		req.ParseForm()
 
@@ -270,14 +301,18 @@ func (s *Server) auth(f func(database.User, *http.Request) *stingle.Response) ht
 
 // handleNotFound handles requests for undefined endpoints.
 func (s *Server) handleNotFound(w http.ResponseWriter, req *http.Request) {
-	log.Infof("!!! (404) %s %s", req.Method, req.URL)
 	if log.Level >= log.DebugLevel {
+		log.Infof("!!! (404) %s %s", req.Method, req.URL)
 		req.ParseForm()
 		if req.PostForm != nil {
 			for k, v := range req.PostForm {
 				log.Debugf("> %s: %v", k, v)
 			}
 		}
+	}
+	if s.Redirect404 != "" {
+		http.Redirect(w, req, s.Redirect404, http.StatusFound)
+		return
 	}
 	w.WriteHeader(http.StatusNotFound)
 }

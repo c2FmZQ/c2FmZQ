@@ -28,6 +28,8 @@ var (
 	flagDatabase         string
 	flagAddress          string
 	flagBaseURL          string
+	flagRedirect404      string
+	flagPathPrefix       string
 	flagTLSCert          string
 	flagTLSKey           string
 	flagAllowNewAccounts bool
@@ -63,10 +65,22 @@ func main() {
 				Destination: &flagAddress,
 			},
 			&cli.StringFlag{
+				Name:        "path-prefix",
+				Value:       "",
+				Usage:       "The API endpoints are <path-prefix>/v2/...",
+				Destination: &flagPathPrefix,
+			},
+			&cli.StringFlag{
 				Name:        "base-url",
 				Value:       "",
 				Usage:       "The base URL of the generated download links. If empty, the links will generated using the Host headers of the incoming requests, i.e. https://HOST/.",
 				Destination: &flagBaseURL,
+			},
+			&cli.StringFlag{
+				Name:        "redirect-404",
+				Value:       "",
+				Usage:       "Requests to unknown endpoints are redirected to this URL.",
+				Destination: &flagRedirect404,
 			},
 			&cli.StringFlag{
 				Name:        "tlscert",
@@ -152,9 +166,10 @@ func startServer(c *cli.Context) error {
 	}
 	db := database.New(flagDatabase, pp)
 
-	s := server.New(db, flagAddress, flagHTDigestFile)
+	s := server.New(db, flagAddress, flagHTDigestFile, flagPathPrefix)
 	s.AllowCreateAccount = flagAllowNewAccounts
 	s.BaseURL = flagBaseURL
+	s.Redirect404 = flagRedirect404
 
 	done := make(chan struct{})
 	go func() {

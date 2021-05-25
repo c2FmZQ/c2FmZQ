@@ -28,7 +28,7 @@ func startServer(t *testing.T) (*client.Client, string, func()) {
 	log.Record = t.Log
 	log.Level = 2
 	db := database.New(filepath.Join(testdir, "data"), "")
-	s := server.New(db, "", "")
+	s := server.New(db, "", "", "")
 	s.AllowCreateAccount = true
 
 	srv := httptest.NewServer(s.Handler())

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"time"
 
 	"c2FmZQ/internal/database"
 	"c2FmZQ/internal/log"
@@ -21,7 +22,9 @@ type upload struct {
 }
 
 // receiveUpload processes a multipart/form-data.
-func receiveUpload(dir string, req *http.Request) (*upload, error) {
+func (s *Server) receiveUpload(dir string, req *http.Request) (*upload, error) {
+	ctx := req.Context()
+
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return nil, err
 	}
@@ -33,6 +36,7 @@ func receiveUpload(dir string, req *http.Request) (*upload, error) {
 	var upload upload
 
 	for {
+		s.setDeadline(ctx, time.Now().Add(time.Minute))
 		p, err := mr.NextPart()
 		if err == io.EOF {
 			break
@@ -45,7 +49,7 @@ func receiveUpload(dir string, req *http.Request) (*upload, error) {
 			if err != nil {
 				return nil, err
 			}
-			size, err := io.Copy(f, p)
+			size, err := s.copyWithCtx(ctx, f, p)
 			if err != nil {
 				return nil, err
 			}

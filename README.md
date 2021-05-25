@@ -98,7 +98,9 @@ USAGE:
 GLOBAL OPTIONS:
    --database DIR, --db DIR       Use the database in DIR [$C2FMZQ_DATABASE]
    --address value, --addr value  The local address to use. (default: "127.0.0.1:8080")
+   --path-prefix value            The API endpoints are <path-prefix>/v2/...
    --base-url value               The base URL of the generated download links. If empty, the links will generated using the Host headers of the incoming requests, i.e. https://HOST/.
+   --redirect-404 value           Requests to unknown endpoints are redirected to this URL.
    --tlscert FILE                 The name of the FILE containing the TLS cert to use. If neither -tlscert nor -tlskey is set, the server will not use TLS.
    --tlskey FILE                  The name of the FILE containing the TLS private key to use.
    --allow-new-accounts           Allow new account registrations. (default: true)
