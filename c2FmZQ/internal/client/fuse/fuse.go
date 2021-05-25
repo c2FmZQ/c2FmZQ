@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -508,6 +509,9 @@ func (n *dirNode) Rename(ctx context.Context, req *fuse.RenameRequest, newDir fs
 	if _, ok := n.child(req.OldName); !ok {
 		return syscall.ENOENT
 	}
+	if req.NewName != strings.TrimSpace(req.NewName) {
+		return syscall.EINVAL
+	}
 	v := n.f.nodeByID(req.NewDir)
 	nn, ok := v.(*dirNode)
 	if !ok || nn == nil {
@@ -543,6 +547,9 @@ func (n *dirNode) Create(ctx context.Context, req *fuse.CreateRequest, resp *fus
 	if !req.Flags.IsWriteOnly() && !req.Flags.IsReadWrite() {
 		log.Debugf("Create can only open a file WRONLY or RDWR: %s", req.Flags)
 		return nil, nil, syscall.ENOTSUP
+	}
+	if req.Name != strings.TrimSpace(req.Name) {
+		return nil, nil, syscall.EINVAL
 	}
 	w, err := n.f.c.StreamImport(req.Name, n.item)
 	if err != nil {
