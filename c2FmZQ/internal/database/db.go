@@ -106,7 +106,7 @@ func (d *Database) Hash(in []byte) []byte {
 func (d *Database) filePath(elems ...string) string {
 	if d.masterKey != nil {
 		name := d.masterKey.Hash([]byte(path.Join(elems...)))
-		dir := filepath.Join("metadata", fmt.Sprintf("%02X", name[0]), fmt.Sprintf("%02X", name[1]))
+		dir := filepath.Join("metadata", fmt.Sprintf("%02X", name[0]))
 		return filepath.Join(dir, base64.RawURLEncoding.EncodeToString(name))
 	}
 	return filepath.Join("metadata", filepath.Join(elems...))
