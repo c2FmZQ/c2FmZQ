@@ -65,16 +65,13 @@ func (k SecretKey) ToBytes() []byte {
 	return []byte(sodium.BoxSecretKey(k).Bytes)
 }
 
-func (k PublicKey) ToBytes() []byte {
-	return []byte(sodium.BoxPublicKey(k).Bytes)
-}
-
 func (k SecretKey) Empty() bool {
 	return sodium.BoxSecretKey(k).Bytes == nil
 }
 
 func (k SecretKey) PublicKey() PublicKey {
-	return PublicKey(sodium.BoxSecretKey(k).PublicKey())
+	pk := sodium.BoxSecretKey(k).PublicKey()
+	return PublicKeyFromBytes(pk.Bytes)
 }
 
 func (k *SecretKey) Wipe() {
@@ -105,27 +102,8 @@ func (k SecretKey) MarshalJSON() ([]byte, error) {
 	return json.Marshal(base64.RawURLEncoding.EncodeToString(k.Bytes))
 }
 
-type PublicKey sodium.BoxPublicKey
-
-func PublicKeyFromBytes(b []byte) PublicKey {
-	return PublicKey(sodium.BoxPublicKey{Bytes: sodium.Bytes(b)})
-}
-
-func (k *PublicKey) UnmarshalJSON(b []byte) error {
-	var s string
-	if err := json.Unmarshal(b, &s); err != nil {
-		return err
-	}
-	b, err := base64.RawURLEncoding.DecodeString(s)
-	if err != nil {
-		return err
-	}
-	k.Bytes = sodium.Bytes(b)
-	return nil
-}
-
-func (k PublicKey) MarshalJSON() ([]byte, error) {
-	return json.Marshal(base64.RawURLEncoding.EncodeToString(k.Bytes))
+func (k PublicKey) sodium() sodium.BoxPublicKey {
+	return sodium.BoxPublicKey{Bytes: sodium.Bytes(k.B[:])}
 }
 
 // MakeSignSecretKey returns a new SignSecretKey.
@@ -173,7 +151,7 @@ func EncryptMessage(msg []byte, pk PublicKey, sk *SecretKey) string {
 	sodium.Randomize(&n)
 
 	m := []byte(n.Bytes)
-	m = append(m, []byte(sodium.Bytes(msg).Box(n, sodium.BoxPublicKey(pk), sodium.BoxSecretKey(*sk)))...)
+	m = append(m, []byte(sodium.Bytes(msg).Box(n, pk.sodium(), sodium.BoxSecretKey(*sk)))...)
 	return base64.StdEncoding.EncodeToString(m)
 }
 
@@ -191,7 +169,7 @@ func DecryptMessage(msg string, pk PublicKey, sk *SecretKey) ([]byte, error) {
 	n.Bytes = make([]byte, n.Size())
 	copy(n.Bytes, b[:n.Size()])
 	b = b[n.Size():]
-	m, err := sodium.Bytes(b).BoxOpen(n, sodium.BoxPublicKey(pk), sodium.BoxSecretKey(*sk))
+	m, err := sodium.Bytes(b).BoxOpen(n, pk.sodium(), sodium.BoxSecretKey(*sk))
 	if err != nil {
 		return nil, err
 	}
@@ -215,12 +193,13 @@ func (sk SecretKey) SealBoxOpenBase64(msg string) ([]byte, error) {
 // SealBox encrypts a message using Anonymous Public Key Encryption.
 func (pk PublicKey) SealBox(msg []byte) []byte {
 	b := sodium.Bytes(msg)
-	return []byte(b.SealedBox(sodium.BoxPublicKey(pk)))
+	return []byte(b.SealedBox(pk.sodium()))
 }
 
 // SealBoxOpen decrypts a message encrypted by SealBox.
 func (sk SecretKey) SealBoxOpen(msg []byte) ([]byte, error) {
-	kp := sodium.BoxKP{PublicKey: sodium.BoxPublicKey(sk.PublicKey()), SecretKey: sodium.BoxSecretKey(sk)}
+	ssk := sodium.BoxSecretKey(sk)
+	kp := sodium.BoxKP{PublicKey: ssk.PublicKey(), SecretKey: ssk}
 	d, err := sodium.Bytes(msg).SealedBoxOpen(kp)
 	if err != nil {
 		return nil, err

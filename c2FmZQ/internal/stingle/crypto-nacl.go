@@ -59,10 +59,9 @@ func (k SecretKey) ToBytes() []byte {
 	return k.B[:]
 }
 
-func (k SecretKey) PublicKey() PublicKey {
-	pk := PublicKey{B: new([32]byte)}
-	curve25519.ScalarBaseMult(pk.B, k.B)
-	return pk
+func (k SecretKey) PublicKey() (pk PublicKey) {
+	curve25519.ScalarBaseMult(&pk.B, k.B)
+	return
 }
 
 func (k *SecretKey) UnmarshalJSON(b []byte) error {
@@ -83,36 +82,8 @@ func (k SecretKey) MarshalJSON() ([]byte, error) {
 	return json.Marshal(base64.RawURLEncoding.EncodeToString(k.B[:]))
 }
 
-type PublicKey struct {
-	B *[32]byte
-}
-
-func PublicKeyFromBytes(b []byte) PublicKey {
-	pk := PublicKey{B: new([32]byte)}
-	copy(pk.B[:], b)
-	return PublicKey(pk)
-}
-
-func (k PublicKey) ToBytes() []byte {
-	return k.B[:]
-}
-
-func (k *PublicKey) UnmarshalJSON(b []byte) error {
-	var s string
-	if err := json.Unmarshal(b, &s); err != nil {
-		return err
-	}
-	b, err := base64.RawURLEncoding.DecodeString(s)
-	if err != nil {
-		return err
-	}
-	k.B = new([32]byte)
-	copy(k.B[:], b)
-	return nil
-}
-
-func (k PublicKey) MarshalJSON() ([]byte, error) {
-	return json.Marshal(base64.RawURLEncoding.EncodeToString(k.B[:]))
+func (k PublicKey) nacl() *[32]byte {
+	return &k.B
 }
 
 // MakeSignSecretKey returns a new SignSecretKey.
@@ -169,7 +140,7 @@ func EncryptMessage(msg []byte, pk PublicKey, sk *SecretKey) string {
 	}
 	out := make([]byte, len(nonce))
 	copy(out, nonce[:])
-	ret := box.Seal(out, msg, nonce, pk.B, sk.B)
+	ret := box.Seal(out, msg, nonce, pk.nacl(), sk.B)
 	return base64.StdEncoding.EncodeToString(ret)
 }
 
@@ -183,7 +154,7 @@ func DecryptMessage(msg string, pk PublicKey, sk *SecretKey) ([]byte, error) {
 	nonce := new([24]byte)
 	copy((*nonce)[:], b[:24])
 
-	ret, ok := box.Open(nil, b[len(nonce):], nonce, pk.B, sk.B)
+	ret, ok := box.Open(nil, b[len(nonce):], nonce, pk.nacl(), sk.B)
 	if !ok {
 		return nil, errors.New("box.Open failed")
 	}
@@ -206,7 +177,7 @@ func (sk SecretKey) SealBoxOpenBase64(msg string) ([]byte, error) {
 
 // SealBox encrypts a message using Anonymous Public Key Encryption.
 func (pk PublicKey) SealBox(msg []byte) []byte {
-	ret, err := box.SealAnonymous(nil, msg, pk.B, rand.Reader)
+	ret, err := box.SealAnonymous(nil, msg, pk.nacl(), rand.Reader)
 	if err != nil {
 		panic(err)
 	}
@@ -215,7 +186,7 @@ func (pk PublicKey) SealBox(msg []byte) []byte {
 
 // SealBoxOpen decrypts a message encrypted by SealBox.
 func (sk SecretKey) SealBoxOpen(msg []byte) ([]byte, error) {
-	ret, ok := box.OpenAnonymous(nil, msg, sk.PublicKey().B, sk.B)
+	ret, ok := box.OpenAnonymous(nil, msg, sk.PublicKey().nacl(), sk.B)
 	if !ok {
 		return nil, errors.New("box.OpenAnonymous failed")
 	}
