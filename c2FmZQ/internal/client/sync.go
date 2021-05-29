@@ -655,14 +655,24 @@ func (c *Client) Free(patterns []string, opt GlobOptions) (int, error) {
 		if item.IsDir || item.LocalOnly {
 			continue
 		}
-		if err := os.Remove(c.blobPath(item.FSFile.File, false)); err != nil && !errors.Is(err, os.ErrNotExist) {
+		deleted := false
+		err := os.Remove(c.blobPath(item.FSFile.File, false))
+		if err == nil {
+			deleted = true
+		}
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
 			return count, err
 		}
-		if err := os.Remove(c.blobPath(item.FSFile.File, true)); err != nil && !errors.Is(err, os.ErrNotExist) {
+		if err = os.Remove(c.blobPath(item.FSFile.File, true)); err == nil {
+			deleted = true
+		}
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
 			return count, err
 		}
-		c.Printf("Freed %s\n", item.Filename)
-		count++
+		if deleted {
+			c.Printf("Freed %s\n", item.Filename)
+			count++
+		}
 	}
 	if count == 0 {
 		fmt.Fprintln(c.writer, "There are no files to free.")
