@@ -4,7 +4,6 @@ package stingle
 
 import (
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"runtime"
 
@@ -84,64 +83,8 @@ func (k *SecretKey) Wipe() {
 	runtime.SetFinalizer(k, nil)
 }
 
-func (k *SecretKey) UnmarshalJSON(b []byte) error {
-	var s string
-	if err := json.Unmarshal(b, &s); err != nil {
-		return err
-	}
-	b, err := base64.RawURLEncoding.DecodeString(s)
-	if err != nil {
-		return err
-	}
-	k.Bytes = sodium.Bytes(b)
-	k.setFinalizer()
-	return nil
-}
-
-func (k SecretKey) MarshalJSON() ([]byte, error) {
-	return json.Marshal(base64.RawURLEncoding.EncodeToString(k.Bytes))
-}
-
 func (k PublicKey) sodium() sodium.BoxPublicKey {
 	return sodium.BoxPublicKey{Bytes: sodium.Bytes(k.B[:])}
-}
-
-// MakeSignSecretKey returns a new SignSecretKey.
-func MakeSignSecretKey() SignSecretKey {
-	kp := sodium.MakeSignKP()
-	return SignSecretKey(kp.SecretKey)
-}
-
-type SignSecretKey sodium.SignSecretKey
-type SignPublicKey sodium.SignPublicKey
-
-func (k SignSecretKey) Empty() bool {
-	return sodium.SignSecretKey(k).Bytes == nil
-}
-
-func (k *SignSecretKey) UnmarshalJSON(b []byte) error {
-	var s string
-	if err := json.Unmarshal(b, &s); err != nil {
-		return err
-	}
-	b, err := base64.RawURLEncoding.DecodeString(s)
-	if err != nil {
-		return err
-	}
-	k.Bytes = sodium.Bytes(b)
-	return nil
-}
-
-func (k SignSecretKey) MarshalJSON() ([]byte, error) {
-	return json.Marshal(base64.RawURLEncoding.EncodeToString(k.Bytes))
-}
-
-func (k SignSecretKey) PublicKey() SignPublicKey {
-	return SignPublicKey(sodium.SignSecretKey(k).PublicKey())
-}
-
-func (k SignSecretKey) Sign(msg []byte) []byte {
-	return sodium.Bytes(msg).SignDetached(sodium.SignSecretKey(k)).Bytes
 }
 
 // EncryptMessage encrypts a message using Authenticated Public Key Encryption.

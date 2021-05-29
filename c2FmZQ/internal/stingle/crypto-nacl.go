@@ -5,14 +5,11 @@ package stingle
 import (
 	"crypto/rand"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 
 	"golang.org/x/crypto/curve25519"
-	"golang.org/x/crypto/ed25519"
 	"golang.org/x/crypto/nacl/box"
 	"golang.org/x/crypto/nacl/secretbox"
-	"golang.org/x/crypto/nacl/sign"
 
 	"c2FmZQ/internal/log"
 )
@@ -64,71 +61,8 @@ func (k SecretKey) PublicKey() (pk PublicKey) {
 	return
 }
 
-func (k *SecretKey) UnmarshalJSON(b []byte) error {
-	var s string
-	if err := json.Unmarshal(b, &s); err != nil {
-		return err
-	}
-	b, err := base64.RawURLEncoding.DecodeString(s)
-	if err != nil {
-		return err
-	}
-	k.B = new([32]byte)
-	copy(k.B[:], b)
-	return nil
-}
-
-func (k SecretKey) MarshalJSON() ([]byte, error) {
-	return json.Marshal(base64.RawURLEncoding.EncodeToString(k.B[:]))
-}
-
 func (k PublicKey) nacl() *[32]byte {
 	return &k.B
-}
-
-// MakeSignSecretKey returns a new SignSecretKey.
-func MakeSignSecretKey() SignSecretKey {
-	_, sk, err := sign.GenerateKey(rand.Reader)
-	if err != nil {
-		panic(err)
-	}
-	return SignSecretKey{B: sk}
-}
-
-type SignSecretKey struct {
-	B *[64]byte
-}
-
-func (k SignSecretKey) Sign(msg []byte) []byte {
-	return ed25519.Sign(ed25519.PrivateKey((*k.B)[:]), msg)
-}
-
-func (k *SignSecretKey) UnmarshalJSON(b []byte) error {
-	var s string
-	if err := json.Unmarshal(b, &s); err != nil {
-		return err
-	}
-	b, err := base64.RawURLEncoding.DecodeString(s)
-	if err != nil {
-		return err
-	}
-	k.B = new([64]byte)
-	copy(k.B[:], b)
-	return nil
-}
-
-func (k SignSecretKey) MarshalJSON() ([]byte, error) {
-	return json.Marshal(base64.RawURLEncoding.EncodeToString(k.B[:]))
-}
-
-type SignPublicKey struct {
-	B *[32]byte
-}
-
-func (k SignSecretKey) PublicKey() SignPublicKey {
-	pk := new([32]byte)
-	copy((*pk)[:], k.B[32:])
-	return SignPublicKey{B: pk}
 }
 
 // EncryptMessage encrypts a message using Authenticated Public Key Encryption.
