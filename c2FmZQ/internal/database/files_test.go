@@ -43,7 +43,7 @@ func numFilesInSet(t *testing.T, db *database.Database, user database.User, set,
 
 func TestFiles(t *testing.T) {
 	dir := t.TempDir()
-	db := database.New(dir, "")
+	db := database.New(dir, nil)
 	email := "alice@"
 	key := stingle.MakeSecretKeyForTest()
 	database.CurrentTimeForTesting = 10000

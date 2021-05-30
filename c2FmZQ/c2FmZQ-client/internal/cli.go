@@ -31,6 +31,7 @@ type App struct {
 	flagDataDir        string
 	flagLogLevel       int
 	flagPassphraseFile string
+	flagPassphraseCmd  string
 	flagAPIServer      string
 	flagAutoUpdate     bool
 }
@@ -69,6 +70,13 @@ func New() *App {
 			DefaultText: "2 (info)",
 			Usage:       "The level of logging verbosity: 1:Error 2:Info 3:Debug",
 			Destination: &app.flagLogLevel,
+		},
+		&cli.StringFlag{
+			Name:        "passphrase-command",
+			Value:       "",
+			Usage:       "Read the database passphrase from the standard output of `COMMAND`.",
+			EnvVars:     []string{"C2FMZQ_PASSPHRASE_CMD"},
+			Destination: &app.flagPassphraseCmd,
 		},
 		&cli.StringFlag{
 			Name:        "passphrase-file",
@@ -437,9 +445,8 @@ func (a *App) Run(args []string) error {
 func (a *App) init(ctx *cli.Context, update bool) error {
 	if a.client == nil {
 		log.Level = a.flagLogLevel
-		var pp string
-		var err error
-		if pp, err = a.passphrase(ctx); err != nil {
+		pp, err := crypto.Passphrase(a.flagPassphraseCmd, a.flagPassphraseFile)
+		if err != nil {
 			return err
 		}
 
@@ -603,17 +610,6 @@ func (a *App) mount(ctx *cli.Context) error {
 		return nil
 	}
 	return fuse.Mount(a.client, ctx.Args().Get(0))
-}
-
-func (a *App) passphrase(ctx *cli.Context) (string, error) {
-	if f := a.flagPassphraseFile; f != "" {
-		p, err := os.ReadFile(f)
-		if err != nil {
-			return "", cli.Exit(err, 1)
-		}
-		return string(p), nil
-	}
-	return a.promptPass("Enter database passphrase: ")
 }
 
 func (a *App) promptPass(msg string) (string, error) {

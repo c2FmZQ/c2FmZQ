@@ -6,18 +6,16 @@
 package main
 
 import (
-	"fmt"
 	"math/rand"
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"time"
 
 	"github.com/urfave/cli/v2" // cli
 	"golang.org/x/sys/unix"
-	"golang.org/x/term"
 
+	"c2FmZQ/internal/crypto"
 	"c2FmZQ/internal/database"
 	"c2FmZQ/internal/log"
 	"c2FmZQ/internal/server"
@@ -36,6 +34,7 @@ var (
 	flagLogLevel         int
 	flagEncryptMetadata  bool
 	flagPassphraseFile   string
+	flagPassphraseCmd    string
 	flagHTDigestFile     string
 	flagAutocertDomain   string
 	flagAutocertAddr     string
@@ -130,6 +129,13 @@ func main() {
 				Destination: &flagEncryptMetadata,
 			},
 			&cli.StringFlag{
+				Name:        "passphrase-command",
+				Value:       "",
+				Usage:       "Read the database passphrase from the standard output of `COMMAND`.",
+				EnvVars:     []string{"C2FMZQ_PASSPHRASE_CMD"},
+				Destination: &flagPassphraseCmd,
+			},
+			&cli.StringFlag{
 				Name:        "passphrase-file",
 				Value:       "",
 				Usage:       "Read the database passphrase from `FILE`.",
@@ -168,14 +174,14 @@ func startServer(c *cli.Context) error {
 	if (flagTLSCert == "") != (flagTLSKey == "") {
 		log.Fatal("--tlscert and --tlskey must either both be set or unset.")
 	}
-	var pp string
+	var pp []byte
 	if flagEncryptMetadata {
 		var err error
-		if pp, err = passphrase(c); err != nil {
+		if pp, err = crypto.Passphrase(flagPassphraseCmd, flagPassphraseFile); err != nil {
 			return err
 		}
 	}
-	if pp == "" {
+	if pp == nil {
 		log.Info("WARNING: Metadata encryption is DISABLED")
 	}
 	db := database.New(flagDatabase, pp)
@@ -217,20 +223,4 @@ func startServer(c *cli.Context) error {
 	<-done
 	log.Info("Server exited cleanly.")
 	return nil
-}
-
-func passphrase(c *cli.Context) (string, error) {
-	if f := flagPassphraseFile; f != "" {
-		p, err := os.ReadFile(f)
-		if err != nil {
-			return "", cli.Exit(err, 1)
-		}
-		return string(p), nil
-	}
-	fmt.Print("Enter database passphrase: ")
-	passphrase, err := term.ReadPassword(int(os.Stdin.Fd()))
-	if err != nil {
-		return "", cli.Exit(err, 1)
-	}
-	return strings.TrimSpace(string(passphrase)), nil
 }

@@ -27,7 +27,7 @@ func startServer(t *testing.T) (string, func()) {
 	sock := filepath.Join(testdir, "server.sock")
 	log.Record = t.Log
 	log.Level = 3
-	db := database.New(filepath.Join(testdir, "data"), "")
+	db := database.New(filepath.Join(testdir, "data"), nil)
 	s := server.New(db, "", "", "")
 	s.AllowCreateAccount = true
 	s.BaseURL = "http://unix/"

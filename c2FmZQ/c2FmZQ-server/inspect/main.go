@@ -5,11 +5,11 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/urfave/cli/v2" // cli
 	"golang.org/x/term"
 
+	"c2FmZQ/internal/crypto"
 	"c2FmZQ/internal/database"
 	"c2FmZQ/internal/log"
 	"c2FmZQ/internal/stingle"
@@ -20,6 +20,7 @@ var (
 	flagLogLevel        int
 	flagEncryptMetadata bool
 	flagPassphraseFile  string
+	flagPassphraseCmd   string
 )
 
 func main() {
@@ -51,6 +52,13 @@ func main() {
 				Value:       true,
 				Usage:       "Whether the metadata is encrypted.",
 				Destination: &flagEncryptMetadata,
+			},
+			&cli.StringFlag{
+				Name:        "passphrase-command",
+				Value:       "",
+				Usage:       "Read the database passphrase from the standard output of `COMMAND`.",
+				EnvVars:     []string{"C2FMZQ_PASSPHRASE_CMD"},
+				Destination: &flagPassphraseCmd,
 			},
 			&cli.StringFlag{
 				Name:        "passphrase-file",
@@ -128,31 +136,14 @@ func main() {
 
 func initDB(c *cli.Context) (*database.Database, error) {
 	log.Level = flagLogLevel
-	var pp string
+	var pp []byte
 	if flagEncryptMetadata {
 		var err error
-		if pp, err = passphrase(c); err != nil {
+		if pp, err = crypto.Passphrase(flagPassphraseCmd, flagPassphraseFile); err != nil {
 			return nil, err
 		}
 	}
 	return database.New(flagDatabase, pp), nil
-}
-
-func passphrase(c *cli.Context) (string, error) {
-	if f := flagPassphraseFile; f != "" {
-		p, err := os.ReadFile(f)
-		if err != nil {
-			return "", cli.Exit(err, 1)
-		}
-		return string(p), nil
-	}
-	fmt.Print("Enter database passphrase: ")
-	passphrase, err := term.ReadPassword(int(os.Stdin.Fd()))
-	fmt.Println()
-	if err != nil {
-		return "", cli.Exit(err, 1)
-	}
-	return strings.TrimSpace(string(passphrase)), nil
 }
 
 func userSK(db *database.Database, email string) (*stingle.SecretKey, error) {

@@ -50,10 +50,10 @@ func recordLatency(name string) func() time.Duration {
 }
 
 // New returns an initialized database that uses dir for storage.
-func New(dir, passphrase string) *Database {
+func New(dir string, passphrase []byte) *Database {
 	db := &Database{dir: dir}
 	mkFile := filepath.Join(dir, "master.key")
-	if passphrase != "" {
+	if len(passphrase) > 0 {
 		if _, err := os.Stat(filepath.Join(dir, "metadata", "users.dat")); err == nil {
 			log.Fatal("Passphrase is set, but metadata/users.dat exists.")
 		}

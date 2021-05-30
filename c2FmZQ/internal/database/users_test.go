@@ -23,7 +23,7 @@ func addUser(db *database.Database, email string, pk stingle.PublicKey) error {
 
 func TestUsers(t *testing.T) {
 	dir := t.TempDir()
-	db := database.New(dir, "")
+	db := database.New(dir, nil)
 	database.CurrentTimeForTesting = 10000
 
 	// Add, lookup, modify users.

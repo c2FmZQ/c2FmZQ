@@ -35,7 +35,7 @@ func addAlbum(db *database.Database, user database.User, albumID string) error {
 
 func TestAlbums(t *testing.T) {
 	dir := t.TempDir()
-	db := database.New(dir, "")
+	db := database.New(dir, nil)
 	email := "alice@"
 	key := stingle.MakeSecretKeyForTest()
 	database.CurrentTimeForTesting = 10000

@@ -57,7 +57,7 @@ func CreateMasterKey() (*MasterKey, error) {
 }
 
 // ReadMasterKey reads an encrypted master key from file and decrypts it.
-func ReadMasterKey(passphrase, file string) (*MasterKey, error) {
+func ReadMasterKey(passphrase []byte, file string) (*MasterKey, error) {
 	b, err := os.ReadFile(file)
 	if err != nil {
 		return nil, err
@@ -69,7 +69,7 @@ func ReadMasterKey(passphrase, file string) (*MasterKey, error) {
 	}
 	salt, b := b[:16], b[16:]
 	numIter, b := int(binary.BigEndian.Uint32(b[:4])), b[4:]
-	dk := pbkdf2.Key([]byte(passphrase), salt, numIter, 32, sha256.New)
+	dk := pbkdf2.Key(passphrase, salt, numIter, 32, sha256.New)
 	block, err := aes.NewCipher(dk)
 	if err != nil {
 		log.Debugf("aes.NewCipher: %v", err)
@@ -91,18 +91,18 @@ func ReadMasterKey(passphrase, file string) (*MasterKey, error) {
 }
 
 // Save encrypts the key with passphrase and saves it to file.
-func (mk MasterKey) Save(passphrase, file string) error {
+func (mk MasterKey) Save(passphrase []byte, file string) error {
 	salt := make([]byte, 16)
 	if _, err := rand.Read(salt); err != nil {
 		return err
 	}
 	numIter := 200000
-	if passphrase == "" {
+	if len(passphrase) == 0 {
 		numIter = 10
 	}
 	numIterBin := make([]byte, 4)
 	binary.BigEndian.PutUint32(numIterBin, uint32(numIter))
-	dk := pbkdf2.Key([]byte(passphrase), salt, numIter, 32, sha256.New)
+	dk := pbkdf2.Key(passphrase, salt, numIter, 32, sha256.New)
 	block, err := aes.NewCipher(dk)
 	if err != nil {
 		log.Debugf("aes.NewCipher: %v", err)

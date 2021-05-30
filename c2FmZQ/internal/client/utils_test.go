@@ -27,7 +27,7 @@ func startServer(t *testing.T) (*client.Client, string, func()) {
 	testdir := t.TempDir()
 	log.Record = t.Log
 	log.Level = 2
-	db := database.New(filepath.Join(testdir, "data"), "")
+	db := database.New(filepath.Join(testdir, "data"), nil)
 	s := server.New(db, "", "", "")
 	s.AllowCreateAccount = true
 
