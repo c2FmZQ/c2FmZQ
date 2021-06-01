@@ -1,4 +1,4 @@
-// +build nacl arm windows darwin
+// +build !sodium
 
 package stingle
 
@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
+	"runtime"
 
 	"golang.org/x/crypto/curve25519"
 	"golang.org/x/crypto/nacl/box"
@@ -16,57 +17,85 @@ import (
 
 // MakeSecretKey returns a new SecretKey.
 func MakeSecretKey() *SecretKey {
-	sk := SecretKey{B: new([32]byte)}
+	sk := &SecretKey{B: new([32]byte)}
 	if _, err := rand.Read(sk.B[:]); err != nil {
 		panic(err)
 	}
-	return &sk
+	sk.setFinalizer()
+	return sk
 }
 
+// MakeSecretKey returns a new SecretKey for tests.
 func MakeSecretKeyForTest() *SecretKey {
-	return MakeSecretKey()
+	sk := MakeSecretKey()
+	runtime.SetFinalizer(sk, nil)
+	return sk
 }
 
+// SecretKeyFromBytes returns a SecretKey from raw bytes.
 func SecretKeyFromBytes(b []byte) *SecretKey {
-	sk := SecretKey{B: new([32]byte)}
+	sk := &SecretKey{B: new([32]byte)}
 	copy(sk.B[:], b)
 	for i := 0; i < len(b); i++ {
 		b[i] = 0
 	}
-	return &sk
+	sk.setFinalizer()
+	return sk
 }
 
+// A secret key for asymmetric key encryption.
 type SecretKey struct {
 	B *[32]byte
 }
 
-func (k *SecretKey) Wipe() {
-	if k == nil {
+// Wipe zeros the secret key.
+func (sk *SecretKey) Wipe() {
+	if sk == nil {
 		return
 	}
-	for i := range *k.B {
-		(*k.B)[i] = 0
+	for i := range *sk.B {
+		(*sk.B)[i] = 0
 	}
 	if log.Level > log.DebugLevel {
-		log.Debugf("Wiped %#v", *k)
+		log.Debugf("Wiped %#v", *sk)
 	}
+	runtime.SetFinalizer(sk, nil)
 }
 
-func (k SecretKey) ToBytes() []byte {
-	return k.B[:]
+func (k *SecretKey) setFinalizer() {
+	stack := log.Stack()
+	runtime.SetFinalizer(k, func(obj interface{}) {
+		sk := obj.(*SecretKey)
+		for i := range *sk.B {
+			if (*sk.B)[i] != 0 {
+				if log.Level >= log.DebugLevel {
+					log.Panicf("WIPEME: SecretKey not wiped. Call stack: %s", stack)
+				}
+				log.Errorf("WIPEME: SecretKey not wiped. Call stack: %s", stack)
+				sk.Wipe()
+				return
+			}
+		}
+	})
 }
 
-func (k SecretKey) PublicKey() (pk PublicKey) {
-	curve25519.ScalarBaseMult(&pk.B, k.B)
+// ToBytes returns the raw bytes of the secret key.
+func (sk SecretKey) ToBytes() []byte {
+	return sk.B[:]
+}
+
+// PublicKey returns the public key associated with this secret key.
+func (sk SecretKey) PublicKey() (pk PublicKey) {
+	curve25519.ScalarBaseMult(&pk.B, sk.B)
 	return
 }
 
-func (k PublicKey) nacl() *[32]byte {
-	return &k.B
+// nacl returns the public key in nacl format.
+func (pk PublicKey) nacl() *[32]byte {
+	return &pk.B
 }
 
 // EncryptMessage encrypts a message using Authenticated Public Key Encryption.
-// https://pkg.go.dev/github.com/jamesruan/sodium#hdr-Authenticated_Public_Key_Encryption
 func EncryptMessage(msg []byte, pk PublicKey, sk *SecretKey) string {
 	nonce := new([24]byte)
 	if _, err := rand.Read(nonce[:]); err != nil {
@@ -79,7 +108,6 @@ func EncryptMessage(msg []byte, pk PublicKey, sk *SecretKey) string {
 }
 
 // DecryptMessage decrypts a message using Authenticated Public Key Encryption.
-// https://pkg.go.dev/github.com/jamesruan/sodium#hdr-Authenticated_Public_Key_Encryption
 func DecryptMessage(msg string, pk PublicKey, sk *SecretKey) ([]byte, error) {
 	b, err := base64.StdEncoding.DecodeString(msg)
 	if err != nil {
@@ -127,6 +155,7 @@ func (sk SecretKey) SealBoxOpen(msg []byte) ([]byte, error) {
 	return ret, nil
 }
 
+// EncryptSymmetric encrypts a message using symmetric key encryption.
 func EncryptSymmetric(msg, nonce, key []byte) []byte {
 	if len(nonce) != 24 || len(key) != 32 {
 		panic("invalid arguments")
@@ -139,6 +168,7 @@ func EncryptSymmetric(msg, nonce, key []byte) []byte {
 	return secretbox.Seal(out, msg, n, k)
 }
 
+// DecryptSymmetric decrypts a message using symmetric key encryption.
 func DecryptSymmetric(box, nonce, key []byte) ([]byte, error) {
 	if len(nonce) != 24 || len(key) != 32 {
 		panic("invalid arguments")

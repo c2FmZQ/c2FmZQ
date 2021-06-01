@@ -1,4 +1,4 @@
-// +build !nacl,!arm,!windows,!darwin
+// +build sodium
 
 package stingle
 

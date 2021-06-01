@@ -1,5 +1,3 @@
-// +build !nacl,!arm
-
 package client_test
 
 import (

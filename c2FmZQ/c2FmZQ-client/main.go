@@ -1,5 +1,3 @@
-// +build !nacl,!arm
-
 // The c2FmZQ-client binary can securely encrypt, store, and share files,
 // including but not limited to pictures and videos.
 //

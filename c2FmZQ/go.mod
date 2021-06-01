@@ -9,6 +9,7 @@ require (
 	github.com/go-test/deep v1.0.7
 	github.com/jamesruan/sodium v0.0.0-20181216154042-9620b83ffeae
 	github.com/mattn/go-shellwords v1.0.11
+	github.com/minio/blake2b-simd v0.0.0-20160723061019-3f5f724cb5b1
 	github.com/prometheus/client_golang v1.10.0
 	github.com/rwcarlsen/goexif v0.0.0-20190401172101-9e8deecbddbd
 	github.com/tyler-smith/go-bip39 v1.1.0
