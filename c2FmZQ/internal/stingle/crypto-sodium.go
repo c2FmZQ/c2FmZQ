@@ -1,4 +1,4 @@
-// +build !nacl,!arm
+// +build !nacl,!arm,!windows,!darwin
 
 package stingle
 

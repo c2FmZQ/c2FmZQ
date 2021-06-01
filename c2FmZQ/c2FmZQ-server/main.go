@@ -10,10 +10,11 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"syscall"
 	"time"
 
 	"github.com/urfave/cli/v2" // cli
-	"golang.org/x/sys/unix"
 
 	"c2FmZQ/internal/crypto"
 	"c2FmZQ/internal/database"
@@ -42,7 +43,10 @@ var (
 
 func main() {
 	rand.Seed(int64(time.Now().Nanosecond()))
-
+	var defaultDB string
+	if home, err := os.UserHomeDir(); err == nil {
+		defaultDB = filepath.Join(home, "c2FmZQ-server", "data")
+	}
 	app := &cli.App{
 		Name:      "c2FmZQ-server",
 		Usage:     "Runs the c2FmZQ server",
@@ -52,9 +56,8 @@ func main() {
 			&cli.StringFlag{
 				Name:        "database",
 				Aliases:     []string{"db"},
-				Value:       "",
+				Value:       defaultDB,
 				Usage:       "Use the database in `DIR`",
-				Required:    true,
 				EnvVars:     []string{"C2FMZQ_DATABASE"},
 				Destination: &flagDatabase,
 			},
@@ -194,8 +197,8 @@ func startServer(c *cli.Context) error {
 	done := make(chan struct{})
 	go func() {
 		ch := make(chan os.Signal, 1)
-		signal.Notify(ch, unix.SIGINT)
-		signal.Notify(ch, unix.SIGTERM)
+		signal.Notify(ch, syscall.SIGINT)
+		signal.Notify(ch, syscall.SIGTERM)
 		sig := <-ch
 		log.Infof("Received signal %d (%s)", sig, sig)
 		if err := s.Shutdown(); err != nil {

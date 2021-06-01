@@ -8,6 +8,7 @@ import (
 	"math"
 	"math/big"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 
@@ -97,7 +98,7 @@ func (u User) home(elems ...string) string {
 func homeByUserID(userID int64, elems ...string) string {
 	e := []string{"home", fmt.Sprintf("%d", userID)}
 	e = append(e, elems...)
-	return filepath.Join(e...)
+	return path.Join(e...)
 }
 
 // AddUser creates a new user account for u.

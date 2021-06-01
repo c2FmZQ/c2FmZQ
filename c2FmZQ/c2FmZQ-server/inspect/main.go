@@ -24,6 +24,10 @@ var (
 )
 
 func main() {
+	var defaultDB string
+	if home, err := os.UserHomeDir(); err == nil {
+		defaultDB = filepath.Join(home, "c2FmZQ-server", "data")
+	}
 	app := &cli.App{
 		Name:     "inspect",
 		Usage:    "Access internal information from the c2FmZQ database.",
@@ -32,9 +36,8 @@ func main() {
 			&cli.StringFlag{
 				Name:        "database",
 				Aliases:     []string{"db"},
-				Value:       "",
+				Value:       defaultDB,
 				Usage:       "Use the database in `DIR`",
-				Required:    true,
 				EnvVars:     []string{"C2FMZQ_DATABASE"},
 				TakesFile:   true,
 				Destination: &flagDatabase,

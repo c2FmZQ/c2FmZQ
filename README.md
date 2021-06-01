@@ -55,9 +55,11 @@ CPU. It must be reachable by the client(s) via HTTPS.
 
 The server needs at least two pieces of information: the name of the directory where
 its data will be stored, and a passphrase to protect the data. The passphrase
-_can_ be read from a file, otherwise the server will prompt for it when it starts.
+can be read from a file or retrieved with an external command, otherwise the server
+will prompt for it when it starts.
 
-For TLS, the server also needs the TLS key, and certificates.
+For TLS, the server also needs the TLS key, and certificates. They can be read from
+files, or directly from letsencrypt.org.
 
 ### Connecting the Stingle app to this server
 
@@ -75,8 +77,7 @@ files per album, while maintaining a response time well under a second (excludin
 network I/O).
 
 On a small device, e.g. a raspberry pi, it scales to a handful of concurrent
-users with a few thousand files each, and still maintain a response time ~ 5
-seconds depending on storage type.
+users with a few thousand files per album, and still maintain an acceptable response time.
 
 ### How to run the server
 
@@ -96,7 +97,7 @@ USAGE:
    c2FmZQ-server [global options]  
 
 GLOBAL OPTIONS:
-   --database DIR, --db DIR       Use the database in DIR [$C2FMZQ_DATABASE]
+   --database DIR, --db DIR       Use the database in DIR (default: "$HOME/c2FmZQ-server/data") [$C2FMZQ_DATABASE]
    --address value, --addr value  The local address to use. (default: "127.0.0.1:8080")
    --path-prefix value            The API endpoints are <path-prefix>/v2/...
    --base-url value               The base URL of the generated download links. If empty, the links will generated using the Host headers of the incoming requests, i.e. https://HOST/.
@@ -108,6 +109,7 @@ GLOBAL OPTIONS:
    --allow-new-accounts           Allow new account registrations. (default: true)
    --verbose value, -v value      The level of logging verbosity: 1:Error 2:Info 3:Debug (default: 2 (info))
    --encrypt-metadata             Encrypt the server metadata (strongly recommended). (default: true)
+   --passphrase-command COMMAND   Read the database passphrase from the standard output of COMMAND. [$C2FMZQ_PASSPHRASE_CMD]
    --passphrase-file FILE         Read the database passphrase from FILE. [$C2FMZQ_PASSPHRASE_FILE]
    --htdigest-file FILE           The name of the htdigest FILE to use for basic auth for some endpoints, e.g. /metrics [$C2FMZQ_HTDIGEST_FILE]
    --licenses                     Show the software licenses. (default: false)
@@ -128,12 +130,13 @@ With the default Dockerfile, the server expects the following files in ${SECRETD
 - **privkey.pem** contains the TLS private key in PEM format.
 - **fullchain.pem** contains the TLS certificates in PEM format.
 
-Or, build a binary for another platform, e.g. arm, and run the server on a NAS, raspberry pi, etc.
+Or, build a binary for another platform, e.g. windows, raspberry pi, or a NAS:
 
 ```
 $ cd c2FmZQ/c2FmZQ-server
+$ GOOS=windows GOARCH=amd64 go build -o c2FmZQ-server.exe
 $ GOOS=linux GOARCH=arm go build -o c2FmZQ-server-arm
-$ scp c2FmZQ-server-arm root@NAS:.
+$ GOOS=darwin GOARCH=arm64 go build -o c2FmZQ-server-darwin
 ```
 
 
