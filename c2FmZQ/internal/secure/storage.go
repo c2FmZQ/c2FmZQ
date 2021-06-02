@@ -571,7 +571,11 @@ func (s *Storage) EditDataFile(filename string, obj interface{}) (retErr error) 
 	}
 	defer commit(false, &retErr)
 
-	dir, err := ioutil.TempDir("/dev/shm", "edit-*")
+	tmpdir := os.TempDir()
+	if _, err := os.Stat("/dev/shm"); err == nil {
+		tmpdir = "/dev/shm"
+	}
+	dir, err := ioutil.TempDir(tmpdir, "edit-*")
 	if err != nil {
 		return err
 	}
