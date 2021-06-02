@@ -193,6 +193,9 @@ func (s *Server) RunWithListener(l net.Listener) error {
 	s.srv = &http.Server{
 		Addr:    s.addr,
 		Handler: s.wrapHandler(),
+		ConnContext: func(ctx context.Context, c net.Conn) context.Context {
+			return context.WithValue(ctx, connKey, c)
+		},
 	}
 	return s.srv.Serve(l)
 }
