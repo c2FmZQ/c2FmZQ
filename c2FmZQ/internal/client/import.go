@@ -113,6 +113,15 @@ func (c *Client) ImportFiles(patterns []string, dest string, recursive bool) (in
 	return count, nil
 }
 
+func importedFileName(s string) string {
+	s = strings.ReplaceAll(s, "\\", "/")
+	parts := strings.Split(s, "/")
+	for i := range parts {
+		parts[i] = sanitize(parts[i])
+	}
+	return filepath.Join(parts...)
+}
+
 func (c *Client) findFilesToImport(patterns []string, dest string, recursive bool) ([]toImport, error) {
 	dest = strings.TrimSuffix(dest, "/")
 	li, err := c.glob(dest, GlobOptions{})
@@ -149,7 +158,7 @@ func (c *Client) findFilesToImport(patterns []string, dest string, recursive boo
 			}
 			if !fi.IsDir() {
 				_, file := filepath.Split(f)
-				df := filepath.Join(dest, file)
+				df := filepath.Join(dest, importedFileName(file))
 				if exist[df] {
 					c.Printf("Skipping %s (already exists)\n", df)
 					continue
@@ -161,25 +170,25 @@ func (c *Client) findFilesToImport(patterns []string, dest string, recursive boo
 				continue
 			}
 			baseDir, _ := filepath.Split(f)
-			filepath.WalkDir(f, func(path string, d fs.DirEntry, err error) error {
+			filepath.WalkDir(f, func(p string, d fs.DirEntry, err error) error {
 				if err != nil {
-					log.Errorf("%s: %v", path, err)
+					log.Errorf("%s: %v", p, err)
 					return nil
 				}
 				if d.IsDir() {
 					return nil
 				}
-				rel, err := filepath.Rel(baseDir, path)
+				rel, err := filepath.Rel(baseDir, p)
 				if err != nil {
-					log.Errorf("%s: %v", path, err)
+					log.Errorf("%s: %v", p, err)
 					return nil
 				}
-				df := filepath.Join(dest, rel)
+				df := filepath.Join(dest, importedFileName(rel))
 				if exist[df] {
 					c.Printf("Skipping %s (already exists)\n", df)
 					return nil
 				}
-				files = append(files, toImport{src: path, dst: df})
+				files = append(files, toImport{src: p, dst: df})
 				return nil
 			})
 		}

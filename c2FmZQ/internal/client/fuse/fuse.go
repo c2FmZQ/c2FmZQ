@@ -9,7 +9,6 @@ import (
 	"io"
 	"os"
 	"os/signal"
-	"path"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -266,7 +265,7 @@ func (n *dirNode) updateLocked() {
 
 	newList := make(map[string]struct{})
 	for _, item := range li {
-		_, name := path.Split(item.Filename)
+		_, name := filepath.Split(item.Filename)
 		newList[name] = struct{}{}
 
 		nn := n.children[name]
@@ -441,6 +440,9 @@ func (n *dirNode) Mkdir(ctx context.Context, req *fuse.MkdirRequest) (fs.Node, e
 	if err := n.checkHeader(ctx, n, req.Header); err != nil {
 		return nil, err
 	}
+	if req.Name != strings.TrimSpace(req.Name) || strings.ContainsAny(req.Name, "/\\") {
+		return nil, syscall.EINVAL
+	}
 	if _, ok := n.child(req.Name); ok {
 		return nil, syscall.EEXIST
 	}
@@ -511,7 +513,7 @@ func (n *dirNode) Rename(ctx context.Context, req *fuse.RenameRequest, newDir fs
 	if _, ok := n.child(req.OldName); !ok {
 		return syscall.ENOENT
 	}
-	if req.NewName != strings.TrimSpace(req.NewName) {
+	if req.NewName != strings.TrimSpace(req.NewName) || strings.ContainsAny(req.NewName, "/\\") {
 		return syscall.EINVAL
 	}
 	v := n.f.nodeByID(req.NewDir)
@@ -550,7 +552,7 @@ func (n *dirNode) Create(ctx context.Context, req *fuse.CreateRequest, resp *fus
 		log.Debugf("Create can only open a file WRONLY or RDWR: %s", req.Flags)
 		return nil, nil, syscall.ENOTSUP
 	}
-	if req.Name != strings.TrimSpace(req.Name) {
+	if req.Name != strings.TrimSpace(req.Name) || strings.ContainsAny(req.Name, "/\\") {
 		return nil, nil, syscall.EINVAL
 	}
 	w, err := n.f.c.StreamImport(req.Name, n.item)

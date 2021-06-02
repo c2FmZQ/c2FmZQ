@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -34,6 +33,7 @@ func (c *Client) AddAlbums(names []string) error {
 }
 
 func (c *Client) addAlbum(name string) (*stingle.Album, error) {
+	name = strings.ReplaceAll(name, "\\", "/")
 	if name == "" || name == "." || strings.ToLower(name) == "shared" || strings.HasPrefix(strings.ToLower(name), "shared/") {
 		return nil, fmt.Errorf("%s: %w", name, syscall.EPERM)
 	}
@@ -131,8 +131,9 @@ func (c *Client) removeAlbum(item ListItem) (retErr error) {
 
 // RenameAlbum renames an album.
 func (c *Client) RenameAlbum(patterns []string, dest string) error {
+	dest = strings.ReplaceAll(dest, "\\", "/")
 	dest = strings.TrimSuffix(dest, "/")
-	di, err := c.glob(dest, GlobOptions{})
+	di, err := c.glob(dest, GlobOptions{ExactMatch: true})
 	if err != nil {
 		return err
 	}
@@ -202,7 +203,7 @@ func (c *Client) Copy(patterns []string, dest string, exact bool) error {
 	// The destination directory is the parent of the new file name.
 	var rename string
 	if len(si) == 1 && !si[0].IsDir && len(di) == 0 {
-		dir, file := path.Split(dest)
+		dir, file := filepath.Split(dest)
 		if di, err = c.glob(dir, GlobOptions{}); err != nil {
 			return err
 		}
@@ -277,6 +278,7 @@ func (c *Client) Copy(patterns []string, dest string, exact bool) error {
 //
 // A file can't exist with different names in the same directory.
 func (c *Client) Move(patterns []string, dest string, exact bool) error {
+	dest = strings.ReplaceAll(dest, "\\", "/")
 	dest = strings.TrimSuffix(dest, "/")
 	si, err := c.GlobFiles(patterns, GlobOptions{ExactMatch: exact})
 	if err != nil {
@@ -312,7 +314,7 @@ func (c *Client) Move(patterns []string, dest string, exact bool) error {
 			}
 			di = nil
 		}
-		dir, file := path.Split(dest)
+		dir, file := filepath.Split(dest)
 		if di, err = c.glob(dir, GlobOptions{ExactMatch: true}); err != nil {
 			return err
 		}
@@ -347,8 +349,8 @@ func (c *Client) Move(patterns []string, dest string, exact bool) error {
 		if !item.IsDir {
 			continue
 		}
-		_, n := path.Split(item.Filename)
-		newName := path.Join(dst.Filename, n)
+		_, n := filepath.Split(item.Filename)
+		newName := filepath.Join(dst.Filename, n)
 		di, err := c.glob(newName, GlobOptions{ExactMatch: true})
 		if err != nil {
 			return err
@@ -424,6 +426,7 @@ func (c *Client) Delete(patterns []string, exact bool) error {
 }
 
 func (c *Client) renameDir(item ListItem, name string, recursive bool) (retErr error) {
+	name = strings.ReplaceAll(name, "\\", "/")
 	name = strings.TrimSuffix(name, "/")
 	if name == "" {
 		return fmt.Errorf("illegal name: %q", name)
@@ -467,6 +470,7 @@ func (c *Client) renameDir(item ListItem, name string, recursive bool) (retErr e
 			continue
 		}
 		newName := newPrefix + item.Filename[len(oldPrefix):]
+		newName = strings.ReplaceAll(newName, "\\", "/")
 		if err := c.renameDir(item, newName, false); err != nil {
 			errList = append(errList, err)
 		}
@@ -542,7 +546,7 @@ func (c *Client) moveFiles(fromItems []ListItem, toItem ListItem, rename string,
 		}
 		d := toItem.Filename
 		if rename != "" {
-			d = path.Join(d, rename)
+			d = filepath.Join(d, rename)
 		}
 		if moving {
 			if item.Album != nil && item.Album.IsOwner != "1" {

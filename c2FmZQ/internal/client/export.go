@@ -65,7 +65,7 @@ func (c *Client) ExportFiles(patterns []string, dir string, recursive bool) (int
 					continue
 				}
 				_, fn := filepath.Split(string(hdr.Filename))
-				c.Printf("Exporting %s -> %s\n", i.src.Filename, filepath.Join(i.dst, fn))
+				c.Printf("Exporting %s -> %s\n", i.src.Filename, filepath.Join(i.dst, sanitize(fn)))
 				eCh <- c.exportFile(i.src, i.dst, hdr)
 				hdr.Wipe()
 			}

@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -102,6 +103,7 @@ func newNode(name string) *node {
 }
 
 func (n *node) find(name string, create bool) *node {
+	name = strings.ReplaceAll(name, "\\", "/")
 	elems := strings.Split(name, "/")
 	for {
 		if len(elems) == 0 {
@@ -230,11 +232,14 @@ func (c *Client) GlobFiles(patterns []string, opt GlobOptions) ([]ListItem, erro
 
 // glob returns files that match the glob pattern.
 func (c *Client) glob(pattern string, opt GlobOptions) ([]ListItem, error) {
-	// Sanity check the pattern.
-	if _, err := path.Match(pattern, ""); err != nil {
-		return nil, err
+	if filepath.Separator == '\\' {
+		pattern = strings.ReplaceAll(pattern, "\\", "/")
 	}
 	pattern = strings.TrimSuffix(pattern, "/")
+	// Sanity check the pattern.
+	if _, err := path.Match(pattern, ""); err != nil {
+		return nil, fmt.Errorf("%s: %w", pattern, err)
+	}
 	g := &glob{opt: opt}
 	g.elems = strings.Split(pattern, "/")
 
@@ -264,7 +269,7 @@ func (c *Client) glob(pattern string, opt GlobOptions) ([]ListItem, error) {
 		}
 		name := sanitize(md.Name)
 		if album.IsShared == "1" && album.IsOwner != "1" {
-			name = path.Join("shared", name)
+			name = filepath.Join("shared", name)
 		}
 		root.insertDir(name, albumPrefix+album.AlbumID, stingle.AlbumSet, album, local)
 	}
@@ -308,7 +313,7 @@ func (c *Client) globStep(parent string, g *glob, n *node, li *[]ListItem) error
 	if len(g.elems) == 0 {
 		if n.dir != nil {
 			*li = append(*li, ListItem{
-				Filename:  path.Join(parent, n.name),
+				Filename:  filepath.Join(parent, n.name),
 				FileSet:   n.dir.fileSet,
 				IsDir:     true,
 				DirSize:   len(n.children),
@@ -318,7 +323,7 @@ func (c *Client) globStep(parent string, g *glob, n *node, li *[]ListItem) error
 			})
 		} else if n.file != nil {
 			*li = append(*li, ListItem{
-				Filename:  path.Join(parent, n.name),
+				Filename:  filepath.Join(parent, n.name),
 				Size:      n.file.size,
 				FilePath:  c.blobPath(n.file.f.File, false),
 				FileSet:   n.file.fileSet,
@@ -329,7 +334,7 @@ func (c *Client) globStep(parent string, g *glob, n *node, li *[]ListItem) error
 			})
 		} else {
 			*li = append(*li, ListItem{
-				Filename:  path.Join(parent, n.name),
+				Filename:  filepath.Join(parent, n.name),
 				IsDir:     true,
 				LocalOnly: true,
 			})
@@ -345,12 +350,16 @@ func (c *Client) globStep(parent string, g *glob, n *node, li *[]ListItem) error
 	}
 	for _, child := range n.children {
 		if g.matchFirstElem(child.name) {
-			if err := c.globStep(path.Join(parent, n.name), gg, child, li); err != nil {
+			if err := c.globStep(filepath.Join(parent, n.name), gg, child, li); err != nil {
 				return err
 			}
 		}
 	}
 	return nil
+}
+
+func addSlash(filename string) string {
+	return fmt.Sprintf("%s%c", filename, filepath.Separator)
 }
 
 func (c *Client) ListFiles(patterns []string, opt GlobOptions) error {
@@ -367,7 +376,7 @@ func (c *Client) ListFiles(patterns []string, opt GlobOptions) error {
 	}
 	maxFilenameWidth, maxSizeWidth := 0, 0
 	for _, item := range li {
-		fn := strings.TrimPrefix(item.Filename+"/", opt.trimPrefix)
+		fn := strings.TrimPrefix(addSlash(item.Filename), opt.trimPrefix)
 		if len(fn) > maxFilenameWidth {
 			maxFilenameWidth = len(fn)
 		}
@@ -388,11 +397,11 @@ func (c *Client) ListFiles(patterns []string, opt GlobOptions) error {
 			if !opt.Directory && !opt.Recursive {
 				expand = append(expand, item.Filename)
 			} else if !opt.Long {
-				c.Print(strings.TrimPrefix(item.Filename+"/", opt.trimPrefix))
+				c.Print(strings.TrimPrefix(addSlash(item.Filename), opt.trimPrefix))
 			} else if item.Set == "" {
-				c.Printf("%*s %*s -\n", -maxFilenameWidth, strings.TrimPrefix(item.Filename+"/", opt.trimPrefix), maxSizeWidth, "")
+				c.Printf("%*s %*s -\n", -maxFilenameWidth, strings.TrimPrefix(addSlash(item.Filename), opt.trimPrefix), maxSizeWidth, "")
 			} else {
-				s := fmt.Sprintf("%*s %*d file", -maxFilenameWidth, strings.TrimPrefix(item.Filename+"/", opt.trimPrefix), maxSizeWidth, item.DirSize)
+				s := fmt.Sprintf("%*s %*d file", -maxFilenameWidth, strings.TrimPrefix(addSlash(item.Filename), opt.trimPrefix), maxSizeWidth, item.DirSize)
 				if item.DirSize != 1 {
 					s += "s"
 				}
@@ -473,9 +482,9 @@ func (c *Client) ListFiles(patterns []string, opt GlobOptions) error {
 		if i > 0 {
 			c.Print()
 		}
-		opt.trimPrefix = d + "/"
+		opt.trimPrefix = addSlash(d)
 		c.Printf("%s:\n", d)
-		c.ListFiles([]string{path.Join(d, "*")}, opt)
+		c.ListFiles([]string{filepath.Join(d, "*")}, opt)
 	}
 	return nil
 }
