@@ -170,9 +170,11 @@ func (s *Server) RunWithTLS(certFile, keyFile string) error {
 // letsencrypt.org.
 func (s *Server) RunWithAutocert(domain, addr string) error {
 	certManager := autocert.Manager{
-		Prompt:     autocert.AcceptTOS,
-		HostPolicy: autocert.HostWhitelist(domain),
-		Cache:      s.db.AutocertCache(),
+		Prompt: autocert.AcceptTOS,
+		Cache:  s.db.AutocertCache(),
+	}
+	if domain != "any" && domain != "*" {
+		certManager.HostPolicy = autocert.HostWhitelist(domain)
 	}
 	go func() {
 		if addr == "" {

@@ -49,7 +49,7 @@ func main() {
 	}
 	app := &cli.App{
 		Name:      "c2FmZQ-server",
-		Usage:     "Runs the c2FmZQ server",
+		Usage:     "Run the c2FmZQ server",
 		HideHelp:  true,
 		ArgsUsage: " ",
 		Flags: []cli.Flag{
@@ -102,7 +102,8 @@ func main() {
 			&cli.StringFlag{
 				Name:        "autocert-domain",
 				Value:       "",
-				Usage:       "Use autocert (letsencrypt.org) to get TLS credentials for this domain. The credentials are saved in the database.",
+				Usage:       "Use autocert (letsencrypt.org) to get TLS credentials for this `domain`. The special value 'any' means accept any domain. The credentials are saved in the database.",
+				EnvVars:     []string{"C2FMZQ_DOMAIN"},
 				Destination: &flagAutocertDomain,
 			},
 			&cli.StringFlag{

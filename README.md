@@ -117,12 +117,14 @@ go build
 ```
 ```txt
 NAME:
-   c2FmZQ-server - Runs the c2FmZQ server
+   c2FmZQ-server - Run the c2FmZQ server
 
 USAGE:
-   c2FmZQ-server [global options]  
+   c2FmZQ-server command [command options]  
 
-GLOBAL OPTIONS:
+COMMANDS:
+
+OPTIONS:
    --database DIR, --db DIR       Use the database in DIR (default: "$HOME/c2FmZQ-server/data") [$C2FMZQ_DATABASE]
    --address value, --addr value  The local address to use. (default: "127.0.0.1:8080")
    --path-prefix value            The API endpoints are <path-prefix>/v2/...
@@ -130,7 +132,7 @@ GLOBAL OPTIONS:
    --redirect-404 value           Requests to unknown endpoints are redirected to this URL.
    --tlscert FILE                 The name of the FILE containing the TLS cert to use.
    --tlskey FILE                  The name of the FILE containing the TLS private key to use.
-   --autocert-domain value        Use autocert (letsencrypt.org) to get TLS credentials for this domain. The credentials are saved in the database.
+   --autocert-domain domain       Use autocert (letsencrypt.org) to get TLS credentials for this domain. The special value 'any' means accept any domain. The credentials are saved in the database. [$C2FMZQ_DOMAIN]
    --autocert-address value       The autocert http server will listen on this address. It must be reachable externally on port 80. (default: ":http")
    --allow-new-accounts           Allow new account registrations. (default: true)
    --verbose value, -v value      The level of logging verbosity: 1:Error 2:Info 3:Debug (default: 2 (info))
@@ -145,16 +147,19 @@ Or, build a docker image.
 
 ```bash
 docker build -t c2fmzq-server .
-docker run -u ${USER} -v ${DATABASEDIR}:/data -v ${SECRETSDIR}:/secrets:ro c2fmzq-server
+docker run -u ${USER} -e C2FMZQ_DOMAIN=${DOMAIN} -v ${DATABASEDIR}:/data -v ${SECRETSDIR}:/secrets:ro c2fmzq-server
 ```
-${DATABASEDIR} is where all the data will be stored, and ${SECRETSDIR} is where the
-database encryption passphrase, the TLS key, and TLS cert are stored.
+With the default Dockerfile, TLS credentials are fetched from [letsencrypt.org](https://letsencrypt.org)
+automatically.
 
-With the default Dockerfile, the server expects the following files in ${SECRETDDIR}:
+`${DATABASEDIR}` is where all the encrypted data will be stored, `${SECRETSDIR}`
+is where the database encryption passphrase is stored (${SECRETSDIR}/passphrase),
+and `${DOMAIN}` is the domain or hostname to use.
 
-- **passphrase** contains the passphrase used to encrypt the metadata.
-- **privkey.pem** contains the TLS private key in PEM format.
-- **fullchain.pem** contains the TLS certificates in PEM format.
+The domain or hostname must resolve to the IP address where the server will be running,
+and firwall and/or port forwarding rules must be in place to allow TCP connections to
+ports 80 and 443. A dynamic hostname is fine (DDNS, Dynamic DNS, ...). The clients will
+connect to `https://${DOMAIN}/`.
 
 Or, build a binary for another platform, e.g. windows, raspberry pi, or a NAS:
 

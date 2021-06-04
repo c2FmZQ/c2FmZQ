@@ -27,7 +27,11 @@ ENV C2FMZQ_DATABASE=/data
 ENV PATH=/app/bin:$PATH
 
 ENTRYPOINT ["/app/bin/c2FmZQ-server"]
-# For HTTPS
-CMD ["-address=:443", "-tlskey=/secrets/privkey.pem", "-tlscert=/secrets/fullchain.pem"]
-# For HTTP
+# For HTTPS with TLS certs fetched directly from letencrypt.org. Pass the
+# domain in env variable DOMAIN.
+CMD ["-address=:443", "--redirect-404=https://c2FmZQ.org/"]
+# For HTTP:
 #CMD ["-address=:80"]
+# For HTTPS with existing key and certs:
+#CMD ["-address=:443", "-tlskey=/secrets/privkey.pem", "-tlscert=/secrets/fullchain.pem"]
+
