@@ -258,12 +258,6 @@ write operations with some caveats.
   cloud/remote server, but remote content will be streamed for reading if a local
   copy doesn't exist.
 
-Bulk copy in and out of the fuse filesystem should work as expected with:
-
-* cp, cp -r, mv
-* tar
-* rsync, with --no-times
-
 ```bash
 mkdir -p 0700 /dev/shm/$USER
 echo -n "<INSERT DATABASE PASSPHRASE HERE>" > /dev/shm/$USER/.c2fmzq-passphrase
@@ -284,8 +278,13 @@ ls -a $HOME/mnt
 ```txt
 gallery  .trash
 ```
+Bulk copy in and out of the fuse filesystem should work as expected with:
 
-When you're done, hit `CTRL-C` where the `mount` command it running to close and unmount the fuse filesystem.
+* cp, cp -r, mv
+* tar
+* rsync, with --no-times
+
+When you're done, hit `CTRL-C` where the `mount` command is running to close and unmount the fuse filesystem.
 
 ---
 
