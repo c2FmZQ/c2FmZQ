@@ -1,5 +1,17 @@
 # c2FmZQ
 
+* [Overview](#overview)
+* [Notes about security and privacy](#security)
+* [c2FmZQ Server](#c2FmZQ-server)
+  * [Connecting the Stingle Photos app to this server](#stingle)
+  * [Scale and performance](#scale)
+  * [How to run the server](#run-server)
+* [c2FmZQ Client](#c2FmZQ-client)
+  * [Mount as fuse filesystem](#fuse)
+
+
+# <a name="overview"></a>Overview
+
 This repo contains an application that can securely encrypt, store, and share
 files, including but not limited to pictures and videos.
 
@@ -18,7 +30,9 @@ by stingle.org. We have no knowledge of how their server is actually implemented
 The code in this repo was developed by studying the client app's code and
 reverse engineering the API.
 
-## Notes about security and privacy
+---
+
+# <a name="security"></a>Notes about security and privacy
 
 **This software has not been reviewed for security.** Review, comments, and
 contributions are welcome.
@@ -47,7 +61,9 @@ permissions on the album can be changed, but it is impossible to control what
 happens to the files that were previously shared. They could have been downloaded,
 exported, published to the New York Times, etc.
 
-## c2FmZQ Server
+---
+
+# <a name="c2FmZQ-server"></a>c2FmZQ Server
 
 c2FmZQ-server is an API server with a relatively small footprint. It can run
 just about anywhere, as long as it has access to a lot of storage space, and a modern
@@ -61,15 +77,19 @@ will prompt for it when it starts.
 For TLS, the server also needs the TLS key, and certificates. They can be read from
 files, or directly from letsencrypt.org.
 
-### Connecting the Stingle app to this server
+---
 
-For the Stingle app to connect to this server, it has to the recompiled with `api_server_url`
+## <a name="stingle"></a>Connecting the Stingle Photos app to this server
+
+For the Stingle Photos app to connect to this server, it has to the recompiled with `api_server_url`
 set to point to this server.
 See [this commit](https://github.com/rthellend/stingle-photos-android/commit/c6758758513f7b9d3cdf755085e4b57945f2494f) for an example.
 
 Note: build the F-Droid version with: `gradlew installFdroidRelease`
 
-### Scale and performance
+---
+
+## <a name="scale"></a>Scale and performance
 
 The server was designed for personal use, not for large scale deployment or speed.
 On a modern CPU and SSD, it scales to 10+ concurrent users with tens of thousands of
@@ -79,17 +99,21 @@ network I/O).
 On a small device, e.g. a raspberry pi, it scales to a handful of concurrent
 users with a few thousand files per album, and still maintain an acceptable response time.
 
-### How to run the server
+---
+
+## <a name="run-server"></a>How to run the server
 
 The server is self-contained. It doesn't depend on any external resources. It
 stores all its data on a local filesystem.
 
 Simply build it, and run it.
 
+```bash
+cd c2FmZQ/c2FmZQ-server
+go build
+./c2FmZQ-server help
 ```
-$ cd c2FmZQ/c2FmZQ-server
-$ go build
-$ ./c2FmZQ-server help
+```txt
 NAME:
    c2FmZQ-server - Runs the c2FmZQ server
 
@@ -132,15 +156,16 @@ With the default Dockerfile, the server expects the following files in ${SECRETD
 
 Or, build a binary for another platform, e.g. windows, raspberry pi, or a NAS:
 
-```
-$ cd c2FmZQ/c2FmZQ-server
-$ GOOS=windows GOARCH=amd64 go build -o c2FmZQ-server.exe
-$ GOOS=linux GOARCH=arm go build -o c2FmZQ-server-arm
-$ GOOS=darwin GOARCH=arm64 go build -o c2FmZQ-server-darwin
+```bash
+cd c2FmZQ/c2FmZQ-server
+GOOS=windows GOARCH=amd64 go build -o c2FmZQ-server.exe
+GOOS=linux GOARCH=arm go build -o c2FmZQ-server-arm
+GOOS=darwin GOARCH=arm64 go build -o c2FmZQ-server-darwin
 ```
 
+---
 
-## c2FmZQ Client
+# <a name="c2FmZQ-client"></a>c2FmZQ Client
 
 The c2FmZQ client can be used by itself, or with a remote ("cloud") server very
 similarly.
@@ -152,10 +177,12 @@ server when _create-account_, _login_, or _recover-account_ is used.
 
 To run it:
 
+```bash
+cd c2FmZQ/c2FmZQ-client
+go build
+./c2FmZQ-client
 ```
-$ cd c2FmZQ/c2FmZQ-client
-$ go build
-$ ./c2FmZQ-client
+```txt
 NAME:
    c2FmZQ - Keep your files away from prying eyes.
 
@@ -213,7 +240,9 @@ GLOBAL OPTIONS:
    --auto-update              Automatically fetch metadata updates from the remote server before each command. (default: true)
 ```
 
-### Mount as fuse filesystem
+---
+
+## <a name="fuse"></a>Mount as fuse filesystem
 
 The c2FmZQ client can mount itself as a fuse filesystem. It supports read and
 write operations with some caveats.
@@ -233,3 +262,4 @@ Bulk copy in and out of the fuse filesystem should work as expected with:
 * tar
 * rsync, with --no-times
 
+---
