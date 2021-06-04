@@ -1,3 +1,5 @@
+`echo -n safe | base64`
+
 # c2FmZQ
 
 * [Overview](#overview)
@@ -8,7 +10,7 @@
   * [How to run the server](#run-server)
 * [c2FmZQ Client](#c2FmZQ-client)
   * [Mount as fuse filesystem](#fuse)
-
+  * [Connect to stingle.org account](#connect-to-stingle)
 
 # <a name="overview"></a>Overview
 
@@ -141,9 +143,9 @@ GLOBAL OPTIONS:
 
 Or, build a docker image.
 
-```
-$ docker build -t c2fmzq-server .
-$ docker run -u ${USER} -v ${DATABASEDIR}:/data -v ${SECRETSDIR}:/secrets:ro c2fmzq-server
+```bash
+docker build -t c2fmzq-server .
+docker run -u ${USER} -v ${DATABASEDIR}:/data -v ${SECRETSDIR}:/secrets:ro c2fmzq-server
 ```
 ${DATABASEDIR} is where all the data will be stored, and ${SECRETSDIR} is where the
 database encryption passphrase, the TLS key, and TLS cert are stored.
@@ -262,4 +264,51 @@ Bulk copy in and out of the fuse filesystem should work as expected with:
 * tar
 * rsync, with --no-times
 
+```bash
+mkdir -p 0700 /dev/shm/$USER
+echo -n "<INSERT DATABASE PASSPHRASE HERE>" > /dev/shm/$USER/.c2fmzq-passphrase
+export C2FMZQ_PASSPHRASE_FILE=/dev/shm/$USER/.c2fmzq-passphrase
+```
+```bash
+mkdir $HOME/mnt
+./c2FmZQ-client mount $HOME/mnt
+```
+```txt
+I0604 144921.460 fuse/fuse.go:43] Mounted $HOME/mnt
+```
+
+Open a different terminal. You can now access all your files. They will be decrypted on demand as they are read.
+```bash
+ls -a $HOME/mnt
+```
+```txt
+gallery  .trash
+```
+
+When you're done, hit `CTRL-C` where the `mount` command it running to close and unmount the fuse filesystem.
+
 ---
+
+## <a name="connect-to-stingle"></a>Connect to stingle.org account
+
+To connect to your stingle.org account, `--server=https://api.stingle.org/` with _login_ or _recover-account_.
+
+```bash
+mkdir -p 0700 /dev/shm/$USER
+echo -n "<INSERT DATABASE PASSPHRASE HERE>" > /dev/shm/$USER/.c2fmzq-passphrase
+export C2FMZQ_PASSPHRASE_FILE=/dev/shm/$USER/.c2fmzq-passphrase
+```
+```bash
+./c2FmZQ-client --server=https://api.stingle.org/ login <email>
+```
+```txt
+Enter password: 
+Logged in successfully.
+```
+```bash
+./c2FmZQ-client ls -a
+```
+```txt
+.trash/
+gallery/
+```
