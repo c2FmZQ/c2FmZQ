@@ -108,7 +108,9 @@ users with a few thousand files per album, and still maintain an acceptable resp
 The server is self-contained. It doesn't depend on any external resources. It
 stores all its data on a local filesystem.
 
-Simply build it, and run it.
+--- 
+
+### Build it, and run it
 
 ```bash
 cd c2FmZQ/c2FmZQ-server
@@ -143,7 +145,9 @@ OPTIONS:
    --licenses                     Show the software licenses. (default: false)
 ```
 
-Or, build a docker image.
+---
+
+### Or, build a docker image
 
 ```bash
 docker build -t c2fmzq-server .
@@ -153,7 +157,7 @@ With the default Dockerfile, TLS credentials are fetched from [letsencrypt.org](
 automatically.
 
 `${DATABASEDIR}` is where all the encrypted data will be stored, `${SECRETSDIR}`
-is where the database encryption passphrase is stored (${SECRETSDIR}/passphrase),
+is where the database encryption passphrase is stored (`${SECRETSDIR}/passphrase`),
 and `${DOMAIN}` is the domain or hostname to use.
 
 The domain or hostname must resolve to the IP address where the server will be running,
@@ -161,7 +165,9 @@ and firwall and/or port forwarding rules must be in place to allow TCP connectio
 ports 80 and 443. A dynamic hostname is fine (DDNS, Dynamic DNS, ...). The clients will
 connect to `https://${DOMAIN}/`.
 
-Or, build a binary for another platform, e.g. windows, raspberry pi, or a NAS:
+---
+
+### Or, build a binary for another platform, e.g. windows, raspberry pi, or a NAS
 
 ```bash
 cd c2FmZQ/c2FmZQ-server
