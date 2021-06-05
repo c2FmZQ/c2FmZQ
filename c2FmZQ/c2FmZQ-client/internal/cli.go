@@ -473,7 +473,7 @@ func (a *App) init(ctx *cli.Context, update bool) error {
 		if err != nil {
 			log.Fatalf("Failed to decrypt master key: %v", err)
 		}
-		storage := secure.NewStorage(a.flagDataDir, &masterKey.EncryptionKey)
+		storage := secure.NewStorage(a.flagDataDir, masterKey.EncryptionKey)
 
 		c, err := client.Load(masterKey, storage)
 		if err != nil {

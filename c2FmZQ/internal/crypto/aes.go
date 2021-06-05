@@ -14,6 +14,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	"c2FmZQ/internal/log"
 	"golang.org/x/crypto/pbkdf2"
@@ -36,7 +37,7 @@ var (
 // a passphrase. It is used to create file keys used to encrypt the content of
 // files.
 type MasterKey struct {
-	EncryptionKey
+	*EncryptionKey
 }
 
 // EncryptionKey is an encryption key that can be used to encrypt and decrypt
@@ -45,6 +46,31 @@ type EncryptionKey struct {
 	maskedKey    []byte
 	encryptedKey []byte
 	xor          func([]byte) []byte
+}
+
+// Wipe zeros the key material.
+func (k *EncryptionKey) Wipe() {
+	for i := range k.maskedKey {
+		k.maskedKey[i] = 0
+	}
+	runtime.SetFinalizer(k, nil)
+}
+
+func (k *EncryptionKey) setFinalizer() {
+	stack := log.Stack()
+	runtime.SetFinalizer(k, func(obj interface{}) {
+		key := obj.(*EncryptionKey)
+		for i := range key.maskedKey {
+			if key.maskedKey[i] != 0 {
+				if log.Level >= log.DebugLevel {
+					log.Panicf("WIPEME: EncryptionKey not wiped. Call stack: %s", stack)
+				}
+				log.Errorf("WIPEME: EncryptionKey not wiped. Call stack: %s", stack)
+				key.Wipe()
+				return
+			}
+		}
+	})
 }
 
 // CreateMasterKey creates a new master key.
@@ -219,7 +245,7 @@ func (k EncryptionKey) Encrypt(data []byte) ([]byte, error) {
 
 // encryptionKeyFromBytes returns an EncryptionKey with the raw bytes provided.
 // Internally, the key is masked with a ephemeral key in memory.
-func encryptionKeyFromBytes(b []byte) EncryptionKey {
+func encryptionKeyFromBytes(b []byte) *EncryptionKey {
 	mask := make([]byte, len(b))
 	if _, err := rand.Read(mask); err != nil {
 		panic(err)
@@ -231,10 +257,11 @@ func encryptionKeyFromBytes(b []byte) EncryptionKey {
 		}
 		return out
 	}
-	ek := EncryptionKey{maskedKey: xor(b), xor: xor}
+	ek := &EncryptionKey{maskedKey: xor(b), xor: xor}
 	for i := range b {
 		b[i] = 0
 	}
+	ek.setFinalizer()
 	return ek
 }
 
@@ -251,7 +278,7 @@ func (k EncryptionKey) NewEncryptionKey() (*EncryptionKey, error) {
 	}
 	ek := encryptionKeyFromBytes(b)
 	ek.encryptedKey = enc
-	return &ek, nil
+	return ek, nil
 }
 
 // DecryptKey decrypts an encrypted key.
@@ -271,7 +298,7 @@ func (k EncryptionKey) DecryptKey(encryptedKey []byte) (*EncryptionKey, error) {
 	ek := encryptionKeyFromBytes(b)
 	ek.encryptedKey = make([]byte, len(encryptedKey))
 	copy(ek.encryptedKey, encryptedKey)
-	return &ek, nil
+	return ek, nil
 }
 
 // StreamReader decrypts an input stream.

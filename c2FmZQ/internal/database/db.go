@@ -67,7 +67,7 @@ func New(dir string, passphrase []byte) *Database {
 		if err != nil {
 			log.Fatalf("Failed to decrypt master key: %v", err)
 		}
-		db.storage = secure.NewStorage(dir, &db.masterKey.EncryptionKey)
+		db.storage = secure.NewStorage(dir, db.masterKey.EncryptionKey)
 	} else {
 		if _, err := os.Stat(mkFile); err == nil {
 			log.Fatal("Passphrase is empty, but master.key exists.")

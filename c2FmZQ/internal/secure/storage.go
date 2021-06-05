@@ -349,6 +349,7 @@ func (s *Storage) ReadDataFile(filename string, obj interface{}) error {
 		if err != nil {
 			return err
 		}
+		defer k.Wipe()
 		// Use the file key to decrypt the rest of the file.
 		if r, err = k.StartReader(context(filename), f); err != nil {
 			return err
@@ -482,6 +483,7 @@ func (s *Storage) writeFile(ctx uint32, filename string, obj interface{}) (retEr
 		if err != nil {
 			return err
 		}
+		defer k.Wipe()
 		// Write the encrypted file key first.
 		if err := k.WriteEncryptedKey(f); err != nil {
 			f.Close()

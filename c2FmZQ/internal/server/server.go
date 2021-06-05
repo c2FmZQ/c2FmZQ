@@ -246,7 +246,7 @@ func parseInt(s string, def int64) int64 {
 func (s *Server) setDeadline(ctx context.Context, t time.Time) {
 	c, ok := ctx.Value(connKey).(net.Conn)
 	if !ok {
-		log.Errorf("ctx doesn't have connKey")
+		log.Debugf("ctx doesn't have connKey")
 		return
 	}
 	c.SetDeadline(t)

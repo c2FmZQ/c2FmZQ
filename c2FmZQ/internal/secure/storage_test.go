@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"testing"
 	"time"
 
@@ -22,7 +23,8 @@ func encryptionKey() *crypto.EncryptionKey {
 	if err != nil {
 		panic(err)
 	}
-	return &mk.EncryptionKey
+	runtime.SetFinalizer(mk.EncryptionKey, nil)
+	return mk.EncryptionKey
 }
 
 func TestLock(t *testing.T) {
