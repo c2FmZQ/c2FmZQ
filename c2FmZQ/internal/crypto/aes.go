@@ -204,6 +204,9 @@ func (k EncryptionKey) Encrypt(data []byte) ([]byte, error) {
 	mode := cipher.NewCBCEncrypter(block, iv)
 	encData := make([]byte, len(pData))
 	mode.CryptBlocks(encData, pData)
+	for i := range pData {
+		pData[i] = 0
+	}
 	hmac := k.Hash(encData)
 
 	out := make([]byte, 1+len(iv)+len(encData)+len(hmac))
@@ -360,6 +363,9 @@ func (w *StreamWriter) writeChunk(b []byte) (int, error) {
 	w.c++
 	nonce := gcmNonce(w.ctx, w.c)
 	out := w.gcm.Seal(nil, nonce, b, nil)
+	for i := range b {
+		b[i] = 0
+	}
 	return w.w.Write(out)
 }
 

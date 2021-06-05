@@ -57,6 +57,9 @@ func (w *StreamWriter) writeChunk(b []byte) (int, error) {
 		return 0, err
 	}
 	enc := ae.Seal(nonce, nonce, b, nil)
+	for i := 0; i < len(b); i++ {
+		b[i] = 0
+	}
 	return w.w.Write(enc)
 }
 
