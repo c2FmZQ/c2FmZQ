@@ -32,7 +32,7 @@ func TestFuse(t *testing.T) {
 	}
 	fuseDir := t.TempDir()
 	go func() {
-		if err := fuse.Mount(c, fuseDir); err != nil {
+		if err := fuse.Mount(c, fuseDir, false); err != nil {
 			t.Fatalf("fuse.Mount(%q): %v", fuseDir, err)
 		}
 	}()

@@ -435,6 +435,13 @@ func New() *App {
 				ArgsUsage: "<dir>",
 				Action:    app.mount,
 				Category:  "Mode",
+				Flags: []cli.Flag{
+					&cli.BoolFlag{
+						Name:    "read-only",
+						Aliases: []string{"ro"},
+						Usage:   "Mount filesystem read-only.",
+					},
+				},
 			},
 		)
 	}

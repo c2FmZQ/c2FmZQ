@@ -34,8 +34,14 @@ func init() {
 }
 
 // Mount mounts the client filesystem.
-func Mount(c *client.Client, mnt string) error {
-	conn, err := fuse.Mount(mnt, fuse.FSName("c2FmZQ"))
+func Mount(c *client.Client, mnt string, readOnly bool) error {
+	opts := []fuse.MountOption{
+		fuse.FSName("c2FmZQ"),
+	}
+	if readOnly {
+		opts = append(opts, fuse.ReadOnly())
+	}
+	conn, err := fuse.Mount(mnt, opts...)
 	if err != nil {
 		return err
 	}

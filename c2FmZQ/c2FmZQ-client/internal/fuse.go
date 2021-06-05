@@ -20,5 +20,5 @@ func (a *App) mount(ctx *cli.Context) error {
 		cli.ShowSubcommandHelp(ctx)
 		return nil
 	}
-	return fuse.Mount(a.client, ctx.Args().Get(0))
+	return fuse.Mount(a.client, ctx.Args().Get(0), ctx.Bool("read-only"))
 }
