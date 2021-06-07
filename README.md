@@ -63,16 +63,21 @@ permissions on the album can be changed, but it is impossible to control what
 happens to the files that were previously shared. They could have been downloaded,
 exported, published to the New York Times, etc.
 
-Since c2FmZQ is compatible with the Stingle Photos API, it uses the same
-cryptographic algotrigthms for authentication, client-server communication, and
-file encryption, namely:
+Since c2FmZQ is compatible with the Stingle Photos API, it uses the
+[same cryptographic algorithms](https://stingle.org/security/) for authentication,
+client-server communication, and file encryption, namely:
 
-* [Argon2](https://en.wikipedia.org/wiki/Argon2) for password key derivation on the client side; [bcrypt](https://en.wikipedia.org/wiki/Bcrypt) on the server side,
-* [NaCl](https://en.wikipedia.org/wiki/NaCl_(software)) (Curve25519/XSalsa20/Poly1305) for client-server authentication and encryption,
-* [Chacha20+Poly1305](https://ieeexplore.ieee.org/document/7927078) and [Blake2b](https://en.wikipedia.org/wiki/BLAKE_(hash_function)#BLAKE2) for file encryption and key derivation.
+* [Argon2](https://en.wikipedia.org/wiki/Argon2) for password key derivation on the
+client side; [bcrypt](https://en.wikipedia.org/wiki/Bcrypt) on the server side,
+* [NaCl](https://en.wikipedia.org/wiki/NaCl_(software)) (Curve25519/XSalsa20/Poly1305)
+for client-server authentication and encryption,
+* [Chacha20+Poly1305](https://ieeexplore.ieee.org/document/7927078) and
+[Blake2b](https://en.wikipedia.org/wiki/BLAKE_(hash_function)#BLAKE2) for file
+encryption and key derivation.
 
-Additionally, it uses [AES256-GCM](https://datatracker.ietf.org/doc/html/rfc5288) and AES256-CBC with HMAC-AES256 to encrypt
-its own metadata, and [PBKDF2](https://en.wikipedia.org/wiki/PBKDF2) for the passphrase key derivation.
+Additionally, it uses [AES256-GCM](https://datatracker.ietf.org/doc/html/rfc5288) and
+AES256-CBC with HMAC-AES256 to encrypt its own metadata, and
+[PBKDF2](https://en.wikipedia.org/wiki/PBKDF2) for the passphrase key derivation.
 
 ---
 
