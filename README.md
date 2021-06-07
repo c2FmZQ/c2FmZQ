@@ -75,8 +75,9 @@ for client-server authentication and encryption,
 [Blake2b](https://en.wikipedia.org/wiki/BLAKE_(hash_function)#BLAKE2) for file
 encryption and key derivation.
 
-Additionally, it uses [AES256-GCM](https://datatracker.ietf.org/doc/html/rfc5288) and
-AES256-CBC with HMAC-AES256 to encrypt its own metadata, and
+Additionally, it uses [AES256-GCM](https://en.wikipedia.org/wiki/Galois/Counter_Mode) and
+[AES256-CBC](https://en.wikipedia.org/wiki/Block_cipher_mode_of_operation#CBC) with
+[HMAC-AES256](https://en.wikipedia.org/wiki/HMAC) to encrypt its own metadata, and
 [PBKDF2](https://en.wikipedia.org/wiki/PBKDF2) for the passphrase key derivation.
 
 ---
