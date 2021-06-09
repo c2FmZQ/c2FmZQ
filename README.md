@@ -77,7 +77,7 @@ encryption and key derivation.
 
 Additionally, it uses [AES256-GCM](https://en.wikipedia.org/wiki/Galois/Counter_Mode) and
 [AES256-CBC](https://en.wikipedia.org/wiki/Block_cipher_mode_of_operation#CBC) with
-[HMAC-AES256](https://en.wikipedia.org/wiki/HMAC) to encrypt its own metadata, and
+[HMAC-SHA256](https://en.wikipedia.org/wiki/HMAC) to encrypt its own metadata, and
 [PBKDF2](https://en.wikipedia.org/wiki/PBKDF2) for the passphrase key derivation.
 
 ---
