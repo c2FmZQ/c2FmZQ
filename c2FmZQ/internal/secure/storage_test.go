@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"runtime"
 	"testing"
 	"time"
 
@@ -18,13 +17,12 @@ func init() {
 	log.Level = 3
 }
 
-func encryptionKey() *crypto.EncryptionKey {
-	mk, err := crypto.CreateMasterKey()
+func encryptionKey() crypto.EncryptionKey {
+	mk, err := crypto.CreateAESMasterKeyForTest()
 	if err != nil {
 		panic(err)
 	}
-	runtime.SetFinalizer(mk.EncryptionKey, nil)
-	return mk.EncryptionKey
+	return mk.(crypto.EncryptionKey)
 }
 
 func TestLock(t *testing.T) {
@@ -189,7 +187,7 @@ func TestEncodeBinary(t *testing.T) {
 	}
 }
 
-func RunBenchmarkOpenForUpdate(b *testing.B, kb int, k *crypto.EncryptionKey, compress, useGOB bool) {
+func RunBenchmarkOpenForUpdate(b *testing.B, kb int, k crypto.EncryptionKey, compress, useGOB bool) {
 	dir := b.TempDir()
 	file := filepath.Join(dir, "testfile")
 	s := NewStorage(dir, k)

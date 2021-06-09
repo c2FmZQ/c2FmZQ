@@ -18,31 +18,34 @@ func init() {
 func TestMasterKey(t *testing.T) {
 	dir := t.TempDir()
 	keyFile := filepath.Join(dir, "key")
-	mk, err := CreateMasterKey()
+	mk, err := CreateAESMasterKey()
 	if err != nil {
 		t.Fatalf("CreateMasterKey: %v", err)
 	}
+	defer mk.Wipe()
 	if err := mk.Save([]byte("foo"), keyFile); err != nil {
 		t.Fatalf("mk.Save: %v", err)
 	}
 
-	got, err := ReadMasterKey([]byte("foo"), keyFile)
+	got, err := ReadAESMasterKey([]byte("foo"), keyFile)
 	if err != nil {
 		t.Fatalf("ReadMasterKey('foo'): %v", err)
 	}
-	if want := mk; !reflect.DeepEqual(want.key(), got.key()) {
-		t.Errorf("Mismatch keys: %v != %v", want.key(), got.key())
+	defer got.Wipe()
+	if want := mk; !reflect.DeepEqual(want.(*AESMasterKey).key(), got.(*AESMasterKey).key()) {
+		t.Errorf("Mismatch keys: %v != %v", want.(*AESMasterKey).key(), got.(*AESMasterKey).key())
 	}
-	if _, err := ReadMasterKey([]byte("bar"), keyFile); err == nil {
+	if _, err := ReadAESMasterKey([]byte("bar"), keyFile); err == nil {
 		t.Errorf("ReadMasterKey('bar') should have failed, but didn't")
 	}
 }
 
 func TestEncryptDecrypt(t *testing.T) {
-	mk, err := CreateMasterKey()
+	mk, err := CreateAESMasterKey()
 	if err != nil {
 		t.Fatalf("CreateMasterKey: %v", err)
 	}
+	defer mk.Wipe()
 
 	m := []byte("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
 	for i := 1; i < len(m); i++ {
@@ -61,15 +64,17 @@ func TestEncryptDecrypt(t *testing.T) {
 }
 
 func TestEncryptedKey(t *testing.T) {
-	mk, err := CreateMasterKey()
+	mk, err := CreateAESMasterKey()
 	if err != nil {
 		t.Fatalf("CreateMasterKey: %v", err)
 	}
+	defer mk.Wipe()
 
-	ek, err := mk.NewEncryptionKey()
+	ek, err := mk.NewKey()
 	if err != nil {
-		t.Fatalf("mk.NewEncryptionKey: %v", err)
+		t.Fatalf("mk.NewKey: %v", err)
 	}
+	defer ek.Wipe()
 
 	var buf bytes.Buffer
 	if err := ek.WriteEncryptedKey(&buf); err != nil {
@@ -80,13 +85,14 @@ func TestEncryptedKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("mk.ReadEncryptedKey: %v", err)
 	}
-	if want, got := ek.key(), ek2.key(); !reflect.DeepEqual(want, got) {
+	defer ek2.Wipe()
+	if want, got := ek.(*AESKey).key(), ek2.(*AESKey).key(); !reflect.DeepEqual(want, got) {
 		t.Errorf("Unexpected key. Want %+v, got %+v", want, got)
 	}
 }
 
 func TestStream(t *testing.T) {
-	mk, err := CreateMasterKey()
+	mk, err := CreateAESMasterKeyForTest()
 	if err != nil {
 		t.Fatalf("CreateMasterKey: %v", err)
 	}
@@ -132,7 +138,7 @@ func TestStream(t *testing.T) {
 }
 
 func TestStreamInvalidMAC(t *testing.T) {
-	mk, err := CreateMasterKey()
+	mk, err := CreateAESMasterKey()
 	if err != nil {
 		t.Fatalf("CreateMasterKey: %v", err)
 	}

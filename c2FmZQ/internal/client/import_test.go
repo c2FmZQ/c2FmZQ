@@ -53,11 +53,11 @@ func TestFindFilesToImport(t *testing.T) {
 }
 
 func newClient(dir string) (*Client, error) {
-	masterKey, err := crypto.CreateMasterKey()
+	masterKey, err := crypto.CreateAESMasterKeyForTest()
 	if err != nil {
 		return nil, err
 	}
-	storage := secure.NewStorage(dir, masterKey.EncryptionKey)
+	storage := secure.NewStorage(dir, masterKey)
 	c, err := Create(masterKey, storage)
 	if err != nil {
 		return nil, err

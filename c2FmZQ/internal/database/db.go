@@ -58,8 +58,8 @@ func New(dir string, passphrase []byte) *Database {
 			log.Fatal("Passphrase is set, but metadata/users.dat exists.")
 		}
 		var err error
-		if db.masterKey, err = crypto.ReadMasterKey(passphrase, mkFile); errors.Is(err, os.ErrNotExist) {
-			if db.masterKey, err = crypto.CreateMasterKey(); err != nil {
+		if db.masterKey, err = crypto.ReadMasterKey(crypto.AES, passphrase, mkFile); errors.Is(err, os.ErrNotExist) {
+			if db.masterKey, err = crypto.CreateMasterKey(crypto.AES); err != nil {
 				log.Fatal("Failed to create master key")
 			}
 			err = db.masterKey.Save(passphrase, mkFile)
@@ -67,7 +67,7 @@ func New(dir string, passphrase []byte) *Database {
 		if err != nil {
 			log.Fatalf("Failed to decrypt master key: %v", err)
 		}
-		db.storage = secure.NewStorage(dir, db.masterKey.EncryptionKey)
+		db.storage = secure.NewStorage(dir, db.masterKey)
 	} else {
 		if _, err := os.Stat(mkFile); err == nil {
 			log.Fatal("Passphrase is empty, but master.key exists.")
@@ -85,7 +85,7 @@ func New(dir string, passphrase []byte) *Database {
 // encrypted storage on a local filesystem.
 type Database struct {
 	dir       string
-	masterKey *crypto.MasterKey
+	masterKey crypto.MasterKey
 	storage   *secure.Storage
 }
 

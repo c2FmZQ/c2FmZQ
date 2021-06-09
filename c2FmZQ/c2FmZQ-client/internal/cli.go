@@ -463,9 +463,9 @@ func (a *App) init(ctx *cli.Context, update bool) error {
 		}
 
 		mkFile := filepath.Join(a.flagDataDir, "master.key")
-		masterKey, err := crypto.ReadMasterKey(pp, mkFile)
+		masterKey, err := crypto.ReadMasterKey(crypto.AES, pp, mkFile)
 		if errors.Is(err, os.ErrNotExist) {
-			if masterKey, err = crypto.CreateMasterKey(); err != nil {
+			if masterKey, err = crypto.CreateMasterKey(crypto.AES); err != nil {
 				log.Fatal("Failed to create master key")
 			}
 			err = masterKey.Save(pp, mkFile)
@@ -473,7 +473,7 @@ func (a *App) init(ctx *cli.Context, update bool) error {
 		if err != nil {
 			log.Fatalf("Failed to decrypt master key: %v", err)
 		}
-		storage := secure.NewStorage(a.flagDataDir, masterKey.EncryptionKey)
+		storage := secure.NewStorage(a.flagDataDir, masterKey)
 
 		c, err := client.Load(masterKey, storage)
 		if err != nil {

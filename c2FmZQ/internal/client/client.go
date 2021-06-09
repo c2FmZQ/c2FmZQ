@@ -37,7 +37,7 @@ var (
 )
 
 // Create creates a new client configuration, if one doesn't exist already.
-func Create(m *crypto.MasterKey, s *secure.Storage) (*Client, error) {
+func Create(m crypto.MasterKey, s *secure.Storage) (*Client, error) {
 	var c Client
 	c.hc = &http.Client{}
 	c.masterKey = m
@@ -56,7 +56,7 @@ func Create(m *crypto.MasterKey, s *secure.Storage) (*Client, error) {
 }
 
 // Load loads the existing client configuration.
-func Load(m *crypto.MasterKey, s *secure.Storage) (*Client, error) {
+func Load(m crypto.MasterKey, s *secure.Storage) (*Client, error) {
 	var c Client
 	c.masterKey = m
 	c.storage = s
@@ -77,7 +77,7 @@ type Client struct {
 
 	hc *http.Client
 
-	masterKey *crypto.MasterKey
+	masterKey crypto.MasterKey
 	storage   *secure.Storage
 	writer    io.Writer
 	prompt    func(msg string) (string, error)

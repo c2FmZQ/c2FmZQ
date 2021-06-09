@@ -52,7 +52,7 @@ var (
 // NewStorage returns a new Storage rooted at dir. The caller must provide an
 // EncryptionKey that will be used to encrypt and decrypt per-file encryption
 // keys.
-func NewStorage(dir string, masterKey *crypto.EncryptionKey) *Storage {
+func NewStorage(dir string, masterKey crypto.EncryptionKey) *Storage {
 	s := &Storage{
 		dir:       dir,
 		masterKey: masterKey,
@@ -67,7 +67,7 @@ func NewStorage(dir string, masterKey *crypto.EncryptionKey) *Storage {
 // Storage offers the API to atomically read, write, and update encrypted files.
 type Storage struct {
 	dir       string
-	masterKey *crypto.EncryptionKey
+	masterKey crypto.EncryptionKey
 	compress  bool
 	useGOB    bool
 }
@@ -479,7 +479,7 @@ func (s *Storage) writeFile(ctx uint32, filename string, obj interface{}) (retEr
 	}
 	var w io.WriteCloser = f
 	if s.masterKey != nil {
-		k, err := s.masterKey.NewEncryptionKey()
+		k, err := s.masterKey.NewKey()
 		if err != nil {
 			return err
 		}

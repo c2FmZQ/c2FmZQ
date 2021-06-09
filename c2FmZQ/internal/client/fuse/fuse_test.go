@@ -190,11 +190,11 @@ func TestFuse(t *testing.T) {
 }
 
 func newClient(dir string) (*client.Client, error) {
-	masterKey, err := crypto.CreateMasterKey()
+	masterKey, err := crypto.CreateAESMasterKeyForTest()
 	if err != nil {
 		return nil, err
 	}
-	storage := secure.NewStorage(dir, masterKey.EncryptionKey)
+	storage := secure.NewStorage(dir, masterKey)
 	c, err := client.Create(masterKey, storage)
 	if err != nil {
 		return nil, err
