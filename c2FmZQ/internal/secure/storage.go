@@ -7,7 +7,6 @@ import (
 	"compress/gzip"
 	"crypto/sha1"
 	"encoding"
-	"encoding/binary"
 	"encoding/gob"
 	"encoding/hex"
 	"encoding/json"
@@ -316,10 +315,9 @@ func (s *Storage) OpenManyForUpdate(files []string, objects interface{}) (func(c
 	}, nil
 }
 
-func context(s string) (ctx uint32) {
+func context(s string) []byte {
 	h := sha1.Sum([]byte(s))
-	ctx = binary.BigEndian.Uint32(h[:4])
-	return
+	return h[:]
 }
 
 // ReadDataFile reads an object from a file.
@@ -446,7 +444,7 @@ func (s *Storage) CreateEmptyFile(filename string, empty interface{}) error {
 }
 
 // writeFile writes obj to a file.
-func (s *Storage) writeFile(ctx uint32, filename string, obj interface{}) (retErr error) {
+func (s *Storage) writeFile(ctx []byte, filename string, obj interface{}) (retErr error) {
 	fn := filepath.Join(s.dir, filename)
 	if err := createParentIfNotExist(fn); err != nil {
 		return err

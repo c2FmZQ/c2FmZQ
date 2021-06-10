@@ -8,7 +8,6 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -98,19 +97,19 @@ func ReadAESMasterKey(passphrase []byte, file string) (MasterKey, error) {
 	dk := pbkdf2.Key(passphrase, salt, numIter, 32, sha256.New)
 	block, err := aes.NewCipher(dk)
 	if err != nil {
-		log.Debugf("aes.NewCipher: %v", err)
+		log.Debug(err)
 		return nil, ErrDecryptFailed
 	}
 	gcm, err := cipher.NewGCM(block)
 	if err != nil {
-		log.Debugf("cipher.NewGCM: %v", err)
+		log.Debug(err)
 		return nil, ErrDecryptFailed
 	}
 	nonce := b[:gcm.NonceSize()]
 	encMasterKey := b[gcm.NonceSize():]
 	mkBytes, err := gcm.Open(nil, nonce, encMasterKey, nil)
 	if err != nil {
-		log.Debugf("gcm.Open: %v", err)
+		log.Debug(err)
 		return nil, ErrDecryptFailed
 	}
 	return &AESMasterKey{AESKey: aesKeyFromBytes(mkBytes)}, nil
@@ -131,17 +130,17 @@ func (mk AESMasterKey) Save(passphrase []byte, file string) error {
 	dk := pbkdf2.Key(passphrase, salt, numIter, 32, sha256.New)
 	block, err := aes.NewCipher(dk)
 	if err != nil {
-		log.Debugf("aes.NewCipher: %v", err)
+		log.Debug(err)
 		return ErrEncryptFailed
 	}
 	gcm, err := cipher.NewGCM(block)
 	if err != nil {
-		log.Debugf("cipher.NewGCM: %v", err)
+		log.Debug(err)
 		return ErrEncryptFailed
 	}
 	nonce := make([]byte, gcm.NonceSize())
 	if _, err := rand.Read(nonce); err != nil {
-		log.Debugf("io.ReadFull: %v", err)
+		log.Debug(err)
 		return ErrEncryptFailed
 	}
 	encMasterKey := gcm.Seal(nonce, nonce, mk.key(), nil)
@@ -153,7 +152,7 @@ func (mk AESMasterKey) Save(passphrase []byte, file string) error {
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return err
 	}
-	if err := ioutil.WriteFile(file, data, 0600); err != nil {
+	if err := os.WriteFile(file, data, 0600); err != nil {
 		return err
 	}
 	return nil
@@ -269,7 +268,7 @@ func aesKeyFromBytes(b []byte) *AESKey {
 func (k AESKey) NewKey() (EncryptionKey, error) {
 	b := make([]byte, 64)
 	if _, err := rand.Read(b); err != nil {
-		log.Debugf("io.ReadFull: %v", err)
+		log.Debug(err)
 		return nil, ErrEncryptFailed
 	}
 	enc, err := k.Encrypt(b)
@@ -305,14 +304,14 @@ func (k AESKey) DecryptKey(encryptedKey []byte) (EncryptionKey, error) {
 type AESStreamReader struct {
 	gcm cipher.AEAD
 	r   io.Reader
-	ctx uint32
+	ctx []byte
 	c   uint64
 	buf []byte
 }
 
-func gcmNonce(ctx uint32, counter uint64) []byte {
+func gcmNonce(ctx []byte, counter uint64) []byte {
 	var n [12]byte
-	binary.BigEndian.PutUint32(n[:4], ctx)
+	copy(n[:4], ctx)
 	binary.BigEndian.PutUint64(n[4:], counter)
 	return n[:]
 }
@@ -335,7 +334,7 @@ func (r *AESStreamReader) Read(b []byte) (n int, err error) {
 			}
 			dec, err := r.gcm.Open(nil, nonce, in[:nn], nil)
 			if err != nil {
-				log.Debugf("gcm.Open: %v", err)
+				log.Debug(err)
 				return n, ErrDecryptFailed
 			}
 			r.buf = append(r.buf, dec...)
@@ -363,15 +362,15 @@ func (r *AESStreamReader) Close() error {
 }
 
 // StartReader opens a reader to decrypt a stream of data.
-func (k AESKey) StartReader(ctx uint32, r io.Reader) (StreamReader, error) {
+func (k AESKey) StartReader(ctx []byte, r io.Reader) (StreamReader, error) {
 	block, err := aes.NewCipher(k.key()[:32])
 	if err != nil {
-		log.Debugf("aes.NewCipher: %v", err)
+		log.Debug(err)
 		return nil, ErrDecryptFailed
 	}
 	gcm, err := cipher.NewGCM(block)
 	if err != nil {
-		log.Debugf("cipher.NewGCM: %v", err)
+		log.Debug(err)
 		return nil, ErrDecryptFailed
 	}
 	return &AESStreamReader{gcm: gcm, r: r, ctx: ctx}, nil
@@ -381,7 +380,7 @@ func (k AESKey) StartReader(ctx uint32, r io.Reader) (StreamReader, error) {
 type AESStreamWriter struct {
 	gcm cipher.AEAD
 	w   io.Writer
-	ctx uint32
+	ctx []byte
 	c   uint64
 	buf []byte
 }
@@ -422,15 +421,15 @@ func (w *AESStreamWriter) Close() (err error) {
 }
 
 // StartWriter opens a writer to encrypt a stream of data.
-func (k AESKey) StartWriter(ctx uint32, w io.Writer) (StreamWriter, error) {
+func (k AESKey) StartWriter(ctx []byte, w io.Writer) (StreamWriter, error) {
 	block, err := aes.NewCipher(k.key()[:32])
 	if err != nil {
-		log.Debugf("aes.NewCipher: %v", err)
+		log.Debug(err)
 		return nil, ErrEncryptFailed
 	}
 	gcm, err := cipher.NewGCM(block)
 	if err != nil {
-		log.Debugf("cipher.NewGCM: %v", err)
+		log.Debug(err)
 		return nil, ErrEncryptFailed
 	}
 	return &AESStreamWriter{gcm: gcm, w: w, ctx: ctx}, nil
@@ -440,7 +439,7 @@ func (k AESKey) StartWriter(ctx uint32, w io.Writer) (StreamWriter, error) {
 func (k AESKey) ReadEncryptedKey(r io.Reader) (EncryptionKey, error) {
 	buf := make([]byte, aesEncryptedKeySize)
 	if _, err := io.ReadFull(r, buf); err != nil {
-		log.Debugf("ReadEncryptedKey: %v", err)
+		log.Debug(err)
 		return nil, ErrDecryptFailed
 	}
 	return k.DecryptKey(buf)

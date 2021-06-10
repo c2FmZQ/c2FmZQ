@@ -1,10 +1,16 @@
 package main
 
 import (
+	"bufio"
+	"crypto/sha1"
+	"encoding/base64"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
+	"unsafe"
 
 	"github.com/urfave/cli/v2" // cli
 	"golang.org/x/term"
@@ -129,6 +135,11 @@ func main() {
 					},
 				},
 			},
+			&cli.Command{
+				Name:   "convert-aes-chacha20poly1305",
+				Usage:  "Convert between AES and Chacha20Poly1305 encryption.",
+				Action: convertAESChacha20Poly1305,
+			},
 		},
 	}
 
@@ -147,6 +158,12 @@ func initDB(c *cli.Context) (*database.Database, error) {
 		}
 	}
 	return database.New(flagDatabase, pp), nil
+}
+
+func prompt(msg string) string {
+	fmt.Print(msg)
+	reply, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+	return strings.TrimSpace(reply)
 }
 
 func userSK(db *database.Database, email string) (*stingle.SecretKey, error) {
@@ -281,4 +298,172 @@ func findOrphanFiles(c *cli.Context) error {
 		return err
 	}
 	return db.FindOrphanFiles(c.Bool("delete"))
+}
+
+func convertAESChacha20Poly1305(c *cli.Context) error {
+	log.Level = flagLogLevel
+	pp, err := crypto.Passphrase(flagPassphraseCmd, flagPassphraseFile)
+	if err != nil {
+		return err
+	}
+	mkFile := filepath.Join(flagDatabase, "master.key")
+	mk1, err := crypto.ReadMasterKey(pp, mkFile)
+	if err != nil {
+		return err
+	}
+	var mk2 crypto.MasterKey
+	switch mk := mk1.(type) {
+	case *crypto.AESMasterKey:
+		log.Infof("MasterKey is AES. Converting to Chacha20Poly1305.")
+		mk2 = &crypto.Chacha20Poly1305MasterKey{
+			Chacha20Poly1305Key: (*crypto.Chacha20Poly1305Key)(unsafe.Pointer(mk.AESKey)),
+		}
+	case *crypto.Chacha20Poly1305MasterKey:
+		log.Infof("MasterKey is Chacha20Poly1305. Converting to AES.")
+		mk2 = &crypto.AESMasterKey{
+			AESKey: (*crypto.AESKey)(unsafe.Pointer(mk.Chacha20Poly1305Key)),
+		}
+	default:
+		log.Fatalf("MasterKey is %T", mk1)
+	}
+	if ans := prompt("\nMake sure you have a backup of the database before proceeding.\nType CONVERT to continue: "); ans != "CONVERT" {
+		log.Fatal("Aborted.")
+	}
+
+	if err := mk2.Save(pp, mkFile+".new"); err != nil {
+		return err
+	}
+
+	context := func(s string) []byte {
+		h := sha1.Sum([]byte(s))
+		return h[:]
+	}
+
+	if err := filepath.WalkDir(flagDatabase, func(path string, d fs.DirEntry, err error) (retErr error) {
+		if d.IsDir() {
+			return nil
+		}
+		rel, err := filepath.Rel(flagDatabase, path)
+		if err != nil {
+			return err
+		}
+		defer func() {
+			log.Infof("%s, err=%v", rel, retErr)
+		}()
+		ctx := context(rel)
+
+		in, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer in.Close()
+		hdr := make([]byte, 5)
+		if _, err := io.ReadFull(in, hdr); err != nil {
+			return nil
+		}
+		if string(hdr[:4]) != "KRIN" {
+			return nil
+		}
+		k1, err := mk1.ReadEncryptedKey(in)
+		if err != nil {
+			return err
+		}
+		defer k1.Wipe()
+		r, err := k1.StartReader(ctx, in)
+		if err != nil {
+			return err
+		}
+		defer r.Close()
+
+		out, err := os.OpenFile(path+".tmp", os.O_WRONLY|os.O_CREATE|os.O_EXCL|os.O_SYNC, 0600)
+		if err != nil {
+			return err
+		}
+		if _, err := out.Write(hdr); err != nil {
+			out.Close()
+			return err
+		}
+
+		k2, err := mk2.NewKey()
+		if err != nil {
+			out.Close()
+			return err
+		}
+		defer k2.Wipe()
+		if err := k2.WriteEncryptedKey(out); err != nil {
+			out.Close()
+			return err
+		}
+		w, err := k2.StartWriter(ctx, out)
+		if err != nil {
+			out.Close()
+			return err
+		}
+		var buf [4096]byte
+		for {
+			n, err := r.Read(buf[:])
+			if n > 0 {
+				if _, err := w.Write(buf[:n]); err != nil {
+					w.Close()
+					return err
+				}
+			}
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				w.Close()
+				return err
+			}
+		}
+		if err := w.Close(); err != nil {
+			return err
+		}
+		return os.Rename(path+".tmp", path)
+
+	}); err != nil {
+		return err
+	}
+	if err := os.Rename(mkFile+".new", mkFile); err != nil {
+		return err
+	}
+	db := database.New(flagDatabase, pp)
+	uids, err := db.UserIDs()
+	if err != nil {
+		return err
+	}
+	reencrypt := func(s string) (string, error) {
+		b, err := base64.StdEncoding.DecodeString(s)
+		if err != nil {
+			return "", err
+		}
+		k, err := mk1.Decrypt(b)
+		if err != nil {
+			return "", err
+		}
+		e, err := mk2.Encrypt(k)
+		if err != nil {
+			return "", err
+		}
+		return base64.StdEncoding.EncodeToString(e), nil
+	}
+	for _, uid := range uids {
+		u, err := db.UserByID(uid)
+		if err != nil {
+			return err
+		}
+		u.ServerSecretKey, err = reencrypt(u.ServerSecretKey)
+		if err != nil {
+			return err
+		}
+		u.TokenKey, err = reencrypt(u.TokenKey)
+		if err != nil {
+			return err
+		}
+		if err := db.UpdateUser(u); err != nil {
+			return err
+		}
+		log.Infof("Updated user %d", uid)
+	}
+	return nil
 }

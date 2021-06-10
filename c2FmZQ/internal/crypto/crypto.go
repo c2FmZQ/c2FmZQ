@@ -5,10 +5,15 @@ package crypto
 import (
 	"errors"
 	"io"
+	"os"
 )
 
 const (
-	AES int = iota // AES256-GCM and AES256-CBC+HMAC-SHA256.
+	AES256           int = iota // AES256-GCM, AES256-CBC+HMAC-SHA256, PBKDF2.
+	Chacha20Poly1305            // Chacha20Poly1305, Argon2.
+
+	DefaultAlgo = AES256
+	//DefaultAlgo = Chacha20Poly1305
 )
 
 var (
@@ -33,18 +38,26 @@ type MasterKey interface {
 // CreateMasterKey creates a new master key.
 func CreateMasterKey(alg int) (MasterKey, error) {
 	switch alg {
-	case AES:
+	case AES256:
 		return CreateAESMasterKey()
+	case Chacha20Poly1305:
+		return CreateChacha20Poly1305MasterKey()
 	default:
 		return nil, ErrUnexpectedAlgo
 	}
 }
 
 // ReadMasterKey reads an encrypted master key from file and decrypts it.
-func ReadMasterKey(alg int, passphrase []byte, file string) (MasterKey, error) {
-	switch alg {
-	case AES:
+func ReadMasterKey(passphrase []byte, file string) (MasterKey, error) {
+	b, err := os.ReadFile(file)
+	if err != nil {
+		return nil, err
+	}
+	switch b[0] {
+	case 1: // AES256
 		return ReadAESMasterKey(passphrase, file)
+	case 2: // Chacha20Poly1305
+		return ReadChacha20Poly1305MasterKey(passphrase, file)
 	default:
 		return nil, ErrUnexpectedAlgo
 	}
@@ -60,9 +73,9 @@ type EncryptionKey interface {
 	// Hash returns a cryptographially secure hash of b.
 	Hash(b []byte) []byte
 	// StartReader opens a reader to decrypt a stream of data.
-	StartReader(ctx uint32, r io.Reader) (StreamReader, error)
+	StartReader(ctx []byte, r io.Reader) (StreamReader, error)
 	// StartWriter opens a writer to encrypt a stream of data.
-	StartWriter(ctx uint32, w io.Writer) (StreamWriter, error)
+	StartWriter(ctx []byte, w io.Writer) (StreamWriter, error)
 	// NewKey creates a new encryption key.
 	NewKey() (EncryptionKey, error)
 	// DecryptKey decrypts an encrypted key.

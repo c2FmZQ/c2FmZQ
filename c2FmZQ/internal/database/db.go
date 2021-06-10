@@ -58,8 +58,8 @@ func New(dir string, passphrase []byte) *Database {
 			log.Fatal("Passphrase is set, but metadata/users.dat exists.")
 		}
 		var err error
-		if db.masterKey, err = crypto.ReadMasterKey(crypto.AES, passphrase, mkFile); errors.Is(err, os.ErrNotExist) {
-			if db.masterKey, err = crypto.CreateMasterKey(crypto.AES); err != nil {
+		if db.masterKey, err = crypto.ReadMasterKey(passphrase, mkFile); errors.Is(err, os.ErrNotExist) {
+			if db.masterKey, err = crypto.CreateMasterKey(crypto.DefaultAlgo); err != nil {
 				log.Fatal("Failed to create master key")
 			}
 			err = db.masterKey.Save(passphrase, mkFile)
@@ -205,6 +205,18 @@ func (d Database) DumpFile(filename string) error {
 	} else {
 		return err
 	}
+}
+
+func (d Database) UserIDs() ([]int64, error) {
+	var ul []userList
+	if err := d.storage.ReadDataFile(d.filePath(userListFile), &ul); err != nil {
+		return nil, err
+	}
+	var out []int64
+	for _, u := range ul {
+		out = append(out, u.UserID)
+	}
+	return out, nil
 }
 
 // DumpUsers shows information about all the users to stdout.
