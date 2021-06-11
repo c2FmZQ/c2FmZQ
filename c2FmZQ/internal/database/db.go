@@ -59,7 +59,7 @@ func New(dir string, passphrase []byte) *Database {
 		}
 		var err error
 		if db.masterKey, err = crypto.ReadMasterKey(passphrase, mkFile); errors.Is(err, os.ErrNotExist) {
-			if db.masterKey, err = crypto.CreateMasterKey(crypto.DefaultAlgo); err != nil {
+			if db.masterKey, err = crypto.CreateMasterKey(crypto.PickFastest); err != nil {
 				log.Fatal("Failed to create master key")
 			}
 			err = db.masterKey.Save(passphrase, mkFile)

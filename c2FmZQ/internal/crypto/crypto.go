@@ -13,7 +13,7 @@ const (
 	Chacha20Poly1305            // Chacha20Poly1305, Argon2.
 
 	DefaultAlgo = AES256
-	//DefaultAlgo = Chacha20Poly1305
+	PickFastest = -1
 )
 
 var (
@@ -37,6 +37,12 @@ type MasterKey interface {
 
 // CreateMasterKey creates a new master key.
 func CreateMasterKey(alg int) (MasterKey, error) {
+	if alg == PickFastest {
+		var err error
+		if alg, err = Fastest(); err != nil {
+			alg = DefaultAlgo
+		}
+	}
 	switch alg {
 	case AES256:
 		return CreateAESMasterKey()

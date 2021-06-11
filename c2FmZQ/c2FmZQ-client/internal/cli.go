@@ -465,7 +465,7 @@ func (a *App) init(ctx *cli.Context, update bool) error {
 		mkFile := filepath.Join(a.flagDataDir, "master.key")
 		masterKey, err := crypto.ReadMasterKey(pp, mkFile)
 		if errors.Is(err, os.ErrNotExist) {
-			if masterKey, err = crypto.CreateMasterKey(crypto.DefaultAlgo); err != nil {
+			if masterKey, err = crypto.CreateMasterKey(crypto.PickFastest); err != nil {
 				log.Fatal("Failed to create master key")
 			}
 			err = masterKey.Save(pp, mkFile)

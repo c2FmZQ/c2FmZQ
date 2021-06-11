@@ -142,6 +142,7 @@ func TestChachaStreamInvalidMAC(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateMasterKey: %v", err)
 	}
+	defer mk.Wipe()
 	var buf bytes.Buffer
 	content := make([]byte, 10000)
 	if _, err := rand.Read(content); err != nil {
