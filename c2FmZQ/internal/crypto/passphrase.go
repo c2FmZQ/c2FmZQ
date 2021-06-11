@@ -21,5 +21,6 @@ func Passphrase(cmd, file string) ([]byte, error) {
 	}
 	fmt.Print("Enter database passphrase: ")
 	p, err := term.ReadPassword(int(os.Stdin.Fd()))
+	fmt.Println()
 	return bytes.TrimSpace(p), err
 }
