@@ -102,7 +102,7 @@ files, or directly from letsencrypt.org.
 
 For the Stingle Photos app to connect to this server, it has to the recompiled to allow `api_server_url`
 to point to this server.
-See the [use-different-api-server'](https://github.com/rthellend/stingle-photos-android/tree/use-different-api-server) branch for an example.
+See this [fork of the Android Stingle Photos App](https://github.com/rthellend/stingle-photos-for-hosted-server).
 
 Note: build the F-Droid version with: `gradlew installFdroidRelease`
 
