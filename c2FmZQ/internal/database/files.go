@@ -191,12 +191,12 @@ func (d *Database) AddFile(user User, file FileSpec, name, set, albumID string) 
 	return nil
 }
 
-func (d *Database) mtime(f string) int64 {
+func (d *Database) stat(f string) (mtime, size int64) {
 	fi, err := os.Stat(filepath.Join(d.Dir(), f))
 	if err != nil {
-		return 0
+		return 0, 0
 	}
-	return fi.ModTime().UnixNano()
+	return fi.ModTime().UnixNano(), fi.Size()
 }
 
 // FileSet retrives a given file set, for reading only.
@@ -214,20 +214,24 @@ func (d *Database) FileSet(user User, set, albumID string) (*FileSet, error) {
 		fileName = d.fileSetPath(user, set)
 	}
 
-	key := struct {
-		name string
-		ts   int64
-	}{fileName, d.mtime(fileName)}
+	type cacheValue struct {
+		ts int64
+		sz int64
+		fs *FileSet
+	}
 	d.fileSetCacheMutex.Lock()
 	defer d.fileSetCacheMutex.Unlock()
-	var fileSet FileSet
 
-	if fs, ok := d.fileSetCache.Get(key); ok {
-		log.Debugf("FileSet cache hit %v", key)
-		return fs.(*FileSet), nil
+	ts, sz := d.stat(fileName)
+	if v, ok := d.fileSetCache.Get(fileName); ok {
+		if cv := v.(cacheValue); cv.ts == ts && cv.sz == sz {
+			log.Debugf("FileSet cache hit %s %d %d", fileName, ts, sz)
+			return cv.fs, nil
+		}
 	}
-	log.Debugf("FileSet cache miss %v", key)
+	log.Debugf("FileSet cache miss %s %d %d", fileName, ts, sz)
 
+	var fileSet FileSet
 	if err := d.storage.ReadDataFile(fileName, &fileSet); err != nil {
 		return nil, err
 	}
@@ -237,8 +241,8 @@ func (d *Database) FileSet(user User, set, albumID string) (*FileSet, error) {
 	if fileSet.Deletes == nil {
 		fileSet.Deletes = []DeleteEvent{}
 	}
-	if d.mtime(fileName) == key.ts {
-		d.fileSetCache.Add(key, &fileSet)
+	if ts2, sz2 := d.stat(fileName); ts == ts2 && sz == sz2 {
+		d.fileSetCache.Add(fileName, cacheValue{ts, sz, &fileSet})
 	}
 	return &fileSet, nil
 }
