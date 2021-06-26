@@ -191,6 +191,14 @@ func (d *Database) AddFile(user User, file FileSpec, name, set, albumID string) 
 	return nil
 }
 
+func (d *Database) mtime(f string) int64 {
+	fi, err := os.Stat(filepath.Join(d.Dir(), f))
+	if err != nil {
+		return 0
+	}
+	return fi.ModTime().UnixNano()
+}
+
 // FileSet retrives a given file set, for reading only.
 func (d *Database) FileSet(user User, set, albumID string) (*FileSet, error) {
 	defer recordLatency("FileSet")()
@@ -205,7 +213,21 @@ func (d *Database) FileSet(user User, set, albumID string) (*FileSet, error) {
 	} else {
 		fileName = d.fileSetPath(user, set)
 	}
+
+	key := struct {
+		name string
+		ts   int64
+	}{fileName, d.mtime(fileName)}
+	d.fileSetCacheMutex.Lock()
+	defer d.fileSetCacheMutex.Unlock()
 	var fileSet FileSet
+
+	if fs, ok := d.fileSetCache.Get(key); ok {
+		log.Debugf("FileSet cache hit %v", key)
+		return fs.(*FileSet), nil
+	}
+	log.Debugf("FileSet cache miss %v", key)
+
 	if err := d.storage.ReadDataFile(fileName, &fileSet); err != nil {
 		return nil, err
 	}
@@ -214,6 +236,9 @@ func (d *Database) FileSet(user User, set, albumID string) (*FileSet, error) {
 	}
 	if fileSet.Deletes == nil {
 		fileSet.Deletes = []DeleteEvent{}
+	}
+	if d.mtime(fileName) == key.ts {
+		d.fileSetCache.Add(key, &fileSet)
 	}
 	return &fileSet, nil
 }
@@ -444,6 +469,14 @@ func (d *Database) DownloadFile(user User, set, filename string, thumb bool) (*o
 	if err != nil {
 		log.Errorf("AlbumRefs(%q) failed: %v", user.Email, err)
 		return nil, err
+	}
+	// Make sure the cache is big enough for all the filesets. Use 2x to
+	// allow two concurrent users without causing evictions.
+	if n := 2 * len(albumRefs); n > d.fileSetCacheSize {
+		d.fileSetCacheMutex.Lock()
+		d.fileSetCacheSize = n
+		d.fileSetCache.Resize(n)
+		d.fileSetCacheMutex.Unlock()
 	}
 	for _, album := range albumRefs {
 		fileSpec, err := d.findFileInSet(user, stingle.AlbumSet, album.AlbumID, filename)

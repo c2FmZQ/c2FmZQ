@@ -7,6 +7,7 @@ require (
 	github.com/NYTimes/gziphandler v1.1.1
 	github.com/disintegration/imaging v1.6.2
 	github.com/go-test/deep v1.0.7
+	github.com/hashicorp/golang-lru v0.5.4
 	github.com/jamesruan/sodium v0.0.0-20181216154042-9620b83ffeae
 	github.com/mattn/go-shellwords v1.0.11
 	github.com/minio/blake2b-simd v0.0.0-20160723061019-3f5f724cb5b1

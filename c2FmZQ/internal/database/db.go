@@ -15,8 +15,10 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/hashicorp/golang-lru/simplelru"
 	"github.com/prometheus/client_golang/prometheus"
 
 	"c2FmZQ/internal/crypto"
@@ -78,6 +80,9 @@ func New(dir string, passphrase []byte) *Database {
 	// Fail silently if it already exists.
 	db.storage.CreateEmptyFile(db.filePath(userListFile), []userList{})
 	db.CreateEmptyQuotaFile()
+
+	db.fileSetCacheSize = 1
+	db.fileSetCache, _ = simplelru.NewLRU(db.fileSetCacheSize, nil)
 	return db
 }
 
@@ -87,6 +92,10 @@ type Database struct {
 	dir       string
 	masterKey crypto.MasterKey
 	storage   *secure.Storage
+
+	fileSetCache      *simplelru.LRU
+	fileSetCacheSize  int
+	fileSetCacheMutex sync.Mutex
 }
 
 // Dir returns the directory where the database stores its data.
