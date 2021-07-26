@@ -339,17 +339,20 @@ func (s *Server) copyWithCtx(ctx context.Context, dst io.Writer, src io.Reader) 
 	for {
 		select {
 		case <-ctx.Done():
-			log.Debugf("download: canceled after %d bytes", n)
+			log.Debugf("copy: canceled after %d bytes", n)
 			return
 		default:
 		}
+		s.setDeadline(ctx, time.Now().Add(time.Minute))
+		t := time.Now()
 		nr, err := src.Read(buf)
+		readDur := time.Since(t)
 		if nr > 0 {
 			s.setDeadline(ctx, time.Now().Add(time.Minute))
 			nw, err := dst.Write(buf[:nr])
 			n += int64(nw)
 			if nw != nr {
-				log.Debugf("download: short write after %d bytes", n)
+				log.Debugf("copy: short write after %d bytes", n)
 				return n, io.ErrShortWrite
 			}
 			if err != nil {
@@ -357,10 +360,11 @@ func (s *Server) copyWithCtx(ctx context.Context, dst io.Writer, src io.Reader) 
 			}
 		}
 		if err == io.EOF {
-			log.Debugf("download: finished: %d bytes", n)
+			log.Debugf("copy: finished: %d bytes", n)
 			return n, nil
 		}
 		if err != nil {
+			log.Debugf("copy: read error: %v (read duration: %s)", err, readDur)
 			return n, err
 		}
 	}
