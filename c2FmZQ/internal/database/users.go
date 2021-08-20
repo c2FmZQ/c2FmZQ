@@ -180,6 +180,32 @@ func (d *Database) UpdateUser(u User) error {
 	return commit(true, nil)
 }
 
+// RenameUser changes a user's email address.
+func (d *Database) RenameUser(id int64, newEmail string) (retErr error) {
+	defer recordLatency("RenameUser")()
+	files := []string{
+		d.filePath(userListFile),
+		d.filePath(homeByUserID(id, userFile)),
+	}
+	var ul []userList
+	var u User
+	commit, err := d.storage.OpenManyForUpdate(files, []interface{}{&ul, &u})
+	if err != nil {
+		log.Errorf("d.storage.OpenManyForUpdate: %v", err)
+		return err
+	}
+	defer commit(false, &retErr)
+	for i := range ul {
+		if ul[i].UserID == id {
+			ul[i].Email = newEmail
+			u.Email = newEmail
+			u.HomeFolder = hex.EncodeToString(d.Hash([]byte(u.Email)))
+			return commit(true, nil)
+		}
+	}
+	return os.ErrNotExist
+}
+
 // UserByID returns the User object with the given ID.
 func (d *Database) UserByID(id int64) (User, error) {
 	defer recordLatency("UserByID")()

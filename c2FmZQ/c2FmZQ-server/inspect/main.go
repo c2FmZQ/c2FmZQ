@@ -140,6 +140,21 @@ func main() {
 				Usage:  "Convert between AES and Chacha20Poly1305 encryption.",
 				Action: convertAESChacha20Poly1305,
 			},
+			&cli.Command{
+				Name:   "rename-user",
+				Usage:  "Change the email address of a user.",
+				Action: renameUser,
+				Flags: []cli.Flag{
+					&cli.Int64Flag{
+						Name:  "userid",
+						Usage: "The userid to update.",
+					},
+					&cli.StringFlag{
+						Name:  "new-email",
+						Usage: "The new email address of the user.",
+					},
+				},
+			},
 		},
 	}
 
@@ -466,4 +481,17 @@ func convertAESChacha20Poly1305(c *cli.Context) error {
 		log.Infof("Updated user %d", uid)
 	}
 	return nil
+}
+
+func renameUser(c *cli.Context) error {
+	db, err := initDB(c)
+	if err != nil {
+		return err
+	}
+	id := c.Int64("userid")
+	email := c.String("new-email")
+	if id <= 0 || len(email) == 0 {
+		return cli.ShowSubcommandHelp(c)
+	}
+	return db.RenameUser(id, email)
 }
