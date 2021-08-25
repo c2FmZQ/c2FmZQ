@@ -7,7 +7,10 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/binary"
+	"errors"
+	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -302,52 +305,119 @@ func (k AESKey) DecryptKey(encryptedKey []byte) (EncryptionKey, error) {
 
 // AESStreamReader decrypts an input stream.
 type AESStreamReader struct {
-	gcm cipher.AEAD
-	r   io.Reader
-	ctx []byte
-	c   uint64
-	buf []byte
+	gcm   cipher.AEAD
+	r     io.Reader
+	ctx   []byte
+	start int64
+	off   int64
+	buf   []byte
 }
 
-func gcmNonce(ctx []byte, counter uint64) []byte {
+func gcmNonce(ctx []byte, counter int64) []byte {
 	var n [12]byte
 	copy(n[:4], ctx)
-	binary.BigEndian.PutUint64(n[4:], counter)
+	binary.BigEndian.PutUint64(n[4:], uint64(counter))
 	return n[:]
+}
+
+// Seek moves the next read to a new offset. The offset is in the decrypted
+// stream.
+func (r *AESStreamReader) Seek(offset int64, whence int) (int64, error) {
+	var newOffset int64
+	switch whence {
+	case io.SeekStart:
+		newOffset = offset
+	case io.SeekCurrent:
+		newOffset = r.off + offset
+	case io.SeekEnd:
+		seeker, ok := r.r.(io.Seeker)
+		if !ok {
+			return 0, errors.New("input is not seekable")
+		}
+		size, err := seeker.Seek(0, io.SeekEnd)
+		if err != nil {
+			return 0, err
+		}
+		nChunks := (size - r.start) / int64(aesFileChunkSize+r.gcm.Overhead())
+		lastChunkSize := (size - r.start) % int64(aesFileChunkSize+r.gcm.Overhead())
+		if lastChunkSize > 0 {
+			lastChunkSize -= int64(r.gcm.Overhead())
+		}
+		if lastChunkSize < 0 {
+			return 0, errors.New("invalid last chunk")
+		}
+		decSize := nChunks*int64(aesFileChunkSize) + lastChunkSize
+		newOffset = decSize + offset
+	default:
+		return 0, fmt.Errorf("invalid whence: %d", whence)
+	}
+	if newOffset < 0 {
+		return 0, fs.ErrInvalid
+	}
+	if newOffset == r.off {
+		return r.off, nil
+	}
+	seeker, ok := r.r.(io.Seeker)
+	if !ok {
+		return 0, errors.New("input is not seekable")
+	}
+	// Move to new offset.
+	r.off = newOffset
+	chunkOffset := r.off % int64(aesFileChunkSize)
+	seekTo := r.start + r.off/int64(aesFileChunkSize)*int64(aesFileChunkSize+r.gcm.Overhead())
+	if _, err := seeker.Seek(seekTo, io.SeekStart); err != nil {
+		return 0, err
+	}
+	r.buf = nil
+	if err := r.readChunk(); err != nil && err != io.EOF {
+		return 0, err
+	}
+	if chunkOffset < int64(len(r.buf)) {
+		r.buf = r.buf[chunkOffset:]
+	} else {
+		r.buf = nil
+	}
+	return r.off, nil
+}
+
+func (r *AESStreamReader) readChunk() error {
+	in := make([]byte, aesFileChunkSize+r.gcm.Overhead())
+	n, err := io.ReadFull(r.r, in)
+	if n > 0 {
+		nonce := gcmNonce(r.ctx, r.off/int64(aesFileChunkSize)+1)
+		if n <= r.gcm.Overhead() {
+			log.Debugf("StreamReader.Read: short chunk %d", n)
+			return ErrDecryptFailed
+		}
+		dec, err := r.gcm.Open(nil, nonce, in[:n], nil)
+		if err != nil {
+			log.Debug(err)
+			return ErrDecryptFailed
+		}
+		r.buf = append(r.buf, dec...)
+	}
+	if err == io.ErrUnexpectedEOF {
+		err = io.EOF
+	}
+	if len(r.buf) > 0 && err == io.EOF {
+		err = nil
+	}
+	return err
 }
 
 func (r *AESStreamReader) Read(b []byte) (n int, err error) {
 	for err == nil {
 		nn := copy(b[n:], r.buf)
 		r.buf = r.buf[nn:]
+		r.off += int64(nn)
 		n += nn
 		if n == len(b) {
 			break
 		}
-		in := make([]byte, aesFileChunkSize+r.gcm.Overhead())
-		if nn, err = io.ReadFull(r.r, in); nn > 0 {
-			r.c++
-			nonce := gcmNonce(r.ctx, r.c)
-			if nn <= r.gcm.Overhead() {
-				log.Debugf("StreamReader.Read: short chunk %d", nn)
-				return n, ErrDecryptFailed
-			}
-			dec, err := r.gcm.Open(nil, nonce, in[:nn], nil)
-			if err != nil {
-				log.Debug(err)
-				return n, ErrDecryptFailed
-			}
-			r.buf = append(r.buf, dec...)
-		}
-		if len(r.buf) > 0 && (err == io.EOF || err == io.ErrUnexpectedEOF) {
-			err = nil
-		}
+		err = r.readChunk()
 	}
 	if n > 0 {
 		return n, nil
-	}
-	if err == io.ErrUnexpectedEOF {
-		err = io.EOF
 	}
 	return n, err
 }
@@ -363,6 +433,15 @@ func (r *AESStreamReader) Close() error {
 
 // StartReader opens a reader to decrypt a stream of data.
 func (k AESKey) StartReader(ctx []byte, r io.Reader) (StreamReader, error) {
+	var start int64
+	if seeker, ok := r.(io.Seeker); ok {
+		off, err := seeker.Seek(0, io.SeekCurrent)
+		if err != nil {
+			panic(err)
+		}
+		start = off
+	}
+
 	block, err := aes.NewCipher(k.key()[:32])
 	if err != nil {
 		log.Debug(err)
@@ -373,7 +452,7 @@ func (k AESKey) StartReader(ctx []byte, r io.Reader) (StreamReader, error) {
 		log.Debug(err)
 		return nil, ErrDecryptFailed
 	}
-	return &AESStreamReader{gcm: gcm, r: r, ctx: ctx}, nil
+	return &AESStreamReader{gcm: gcm, r: r, ctx: ctx, start: start}, nil
 }
 
 // AESStreamWriter encrypts a stream of data.
@@ -381,7 +460,7 @@ type AESStreamWriter struct {
 	gcm cipher.AEAD
 	w   io.Writer
 	ctx []byte
-	c   uint64
+	c   int64
 	buf []byte
 }
 

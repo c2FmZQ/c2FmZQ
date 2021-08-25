@@ -96,12 +96,13 @@ type EncryptionKey interface {
 
 // StreamReader decrypts a stream.
 type StreamReader interface {
-	Read(b []byte) (n int, err error)
-	Close() error
+	io.Reader
+	io.Seeker
+	io.Closer
 }
 
 // StreamWriter encrypts a stream.
 type StreamWriter interface {
-	Write(b []byte) (n int, err error)
-	Close() error
+	io.Writer
+	io.Closer
 }

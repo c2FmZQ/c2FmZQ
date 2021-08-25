@@ -5,18 +5,17 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"path"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
 
 	"c2FmZQ/internal/database"
 	"c2FmZQ/internal/log"
 	"c2FmZQ/internal/stingle"
 	"c2FmZQ/internal/stingle/token"
-	"github.com/prometheus/client_golang/prometheus"
 )
 
 // handleUpload handles the /v2/sync/upload endpoint. It is used to upload
@@ -37,37 +36,46 @@ import (
 //
 // Returns:
 //  - stingle.Response("ok")
-func (s *Server) handleUpload(req *http.Request) *stingle.Response {
-	up, err := s.receiveUpload(filepath.Join(s.db.Dir(), "uploads"), req)
+func (s *Server) handleUpload(w http.ResponseWriter, req *http.Request) {
+	up, err := s.receiveUpload("uploads", req)
 	s.setDeadline(req.Context(), time.Now().Add(30*time.Second))
 	if err != nil {
-		log.Errorf("receiveUpload: %v", err)
-		return stingle.ResponseNOK()
+		log.Errorf("handleUpload: receiveUpload failed: %v", err)
+		http.Error(w, "Internal Error", http.StatusInternalServerError)
+		return
 	}
 	_, user, err := s.checkToken(up.token, "session")
 	if err != nil {
-		return stingle.ResponseNOK()
+		log.Errorf("handleUpload: checkToken failed: %v", err)
+		http.Error(w, "Internal Error", http.StatusInternalServerError)
+		return
 	}
+	log.Infof("%s %s (UserID:%d)", req.Method, req.URL, user.UserID)
 
 	if up.set == stingle.AlbumSet {
 		albumSpec, err := s.db.Album(user, up.albumID)
 		if err != nil {
 			log.Errorf("db.Album(%q, %q) failed: %v", user.Email, up.albumID, err)
-			return stingle.ResponseNOK()
+			http.Error(w, "Internal Error", http.StatusInternalServerError)
+			return
 		}
 		if albumSpec.OwnerID != user.UserID && !albumSpec.Permissions.AllowAdd() {
-			return stingle.ResponseNOK().AddError("Adding to this album is not permitted")
+			log.Error("handleUpload: permission denied on album")
+			http.Error(w, "Adding to this album is not permitted", http.StatusForbidden)
+			return
 		}
 	}
 
 	if err := s.db.AddFile(user, up.FileSpec, up.name, up.set, up.albumID); err != nil {
 		log.Errorf("AddFile: %v", err)
 		if err == database.ErrQuotaExceeded {
-			return stingle.ResponseNOK().AddError("Quota exceeded")
+			http.Error(w, "Quota exceeded", http.StatusForbidden)
+			return
 		}
-		return stingle.ResponseNOK()
+		http.Error(w, "Internal Error", http.StatusInternalServerError)
+		return
 	}
-	return stingle.ResponseOK()
+	stingle.ResponseOK().Send(w)
 }
 
 // handleMoveFile handles the /v2/sync/moveFile endpoint. It is used to move
@@ -267,23 +275,23 @@ func (s *Server) handleDownload(w http.ResponseWriter, req *http.Request) {
 
 // tryToHandleRange implements minimal support for RFC 7233, section 3.1: Range.
 // Streaming videos doesn't work very well without it.
-func (s *Server) tryToHandleRange(w http.ResponseWriter, rangeHdr string, f *os.File) {
+func (s *Server) tryToHandleRange(w http.ResponseWriter, rangeHdr string, f io.ReadSeekCloser) {
 	log.Debugf("Requested range: %s", rangeHdr)
 	m := regexp.MustCompile(`^bytes=(\d+)-$`).FindStringSubmatch(rangeHdr)
 	if len(m) != 2 {
 		return
 	}
-	offset := parseInt(m[1], 0)
-	if _, err := f.Seek(offset, 0); err != nil {
-		log.Errorf("f.Seek(%d, 0) failed: %v", offset, err)
-		return
-	}
-	fi, err := f.Stat()
+	size, err := f.Seek(0, io.SeekEnd)
 	if err != nil {
-		log.Errorf("f.Stat() failed: %v", err)
+		log.Errorf("f.Seek(0, SeekEnd) failed: %v", err)
 		return
 	}
-	cr := fmt.Sprintf("bytes %d-%d/%d", offset, fi.Size()-1, fi.Size())
+	offset := parseInt(m[1], 0)
+	if _, err := f.Seek(offset, io.SeekStart); err != nil {
+		log.Errorf("f.Seek(%d, SeekStart) failed: %v", offset, err)
+		return
+	}
+	cr := fmt.Sprintf("bytes %d-%d/%d", offset, size-1, size)
 	log.Debugf("Sending %s", cr)
 	w.Header().Set("Content-Range", cr)
 	w.WriteHeader(http.StatusPartialContent)

@@ -24,7 +24,7 @@ func TestUploadDownload(t *testing.T) {
 	// Upload to gallery.
 	sr, err := c.uploadFile("filename1", stingle.GallerySet, "", 1000)
 	if err != nil {
-		t.Errorf("c.uploadFile failed: %v", err)
+		t.Fatalf("c.uploadFile failed: %v", err)
 	}
 	if want, got := "ok", sr.Status; want != got {
 		t.Errorf("c.uploadFile returned unexpected status: Want %q, got %q", want, got)
@@ -32,18 +32,15 @@ func TestUploadDownload(t *testing.T) {
 
 	// Upload album.
 	if sr, err = c.uploadFile("filename2", stingle.AlbumSet, "album1", 1000); err != nil {
-		t.Errorf("c.uploadFile failed: %v", err)
+		t.Fatalf("c.uploadFile failed: %v", err)
 	}
 	if want, got := "ok", sr.Status; want != got {
 		t.Errorf("c.uploadFile returned unexpected status: Want %q, got %q", want, got)
 	}
 
 	// Upload to a non-existent album should fail.
-	if sr, err = c.uploadFile("filename3", stingle.AlbumSet, "DoesNotExist", 1000); err != nil {
-		t.Errorf("c.uploadFile failed: %v", err)
-	}
-	if want, got := "nok", sr.Status; want != got {
-		t.Errorf("c.uploadFile returned unexpected status: Want %q, got %q", want, got)
+	if sr, err = c.uploadFile("filename3", stingle.AlbumSet, "DoesNotExist", 1000); err == nil {
+		t.Fatalf("c.uploadFile did not fail: %v", sr)
 	}
 
 	// Download with /v2/sync/download

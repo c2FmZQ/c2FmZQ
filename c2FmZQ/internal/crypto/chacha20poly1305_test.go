@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/rand"
 	"io"
+	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -91,7 +92,7 @@ func TestChachaEncryptedKey(t *testing.T) {
 	}
 }
 
-func TestChachaStream(t *testing.T) {
+func TestChachaStreamRead(t *testing.T) {
 	mk, err := CreateChacha20Poly1305MasterKeyForTest()
 	if err != nil {
 		t.Fatalf("CreateMasterKey: %v", err)
@@ -134,6 +135,81 @@ func TestChachaStream(t *testing.T) {
 	}
 	if want := content; !reflect.DeepEqual(want, got) {
 		t.Errorf("Read different content. Want %v, got %v", want, got)
+	}
+}
+
+func TestChachaStreamSeek(t *testing.T) {
+	v := func(off int64) byte {
+		return byte((off >> 24) + (off >> 16) + (off >> 8) + off)
+	}
+	dir := t.TempDir()
+
+	mk, err := CreateChacha20Poly1305MasterKeyForTest()
+	if err != nil {
+		t.Fatalf("CreateMasterKey: %v", err)
+	}
+	fn := filepath.Join(dir, "seekfile")
+	tmp, err := os.Create(fn)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	ctx := []byte{0x12, 0x12, 0x12, 0x12}
+	w, err := mk.StartWriter(ctx, tmp)
+	if err != nil {
+		t.Fatalf("StartWriter: %v", err)
+	}
+	const fileSize = 5*1024*1024 + 1024
+	for i := int64(0); i < fileSize; i++ {
+		if _, err := w.Write([]byte{v(i)}); err != nil {
+			t.Fatalf("StartWriter.Write: %v", err)
+		}
+	}
+	if err := w.Close(); err != nil {
+		t.Fatalf("StartWriter.Close: %v", err)
+	}
+
+	if tmp, err = os.Open(fn); err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	r, err := mk.StartReader(ctx, tmp)
+	if err != nil {
+		t.Fatalf("StartReader: %v", err)
+	}
+
+	want := int64(10)
+	if got, _ := r.Seek(10, io.SeekStart); want != got {
+		t.Errorf("Unexpected seek offset. Want %d, got %d", want, got)
+	}
+	want = 20
+	if got, _ := r.Seek(10, io.SeekCurrent); want != got {
+		t.Errorf("Unexpected seek offset. Want %d, got %d", want, got)
+	}
+	want = 15
+	if got, _ := r.Seek(-5, io.SeekCurrent); want != got {
+		t.Errorf("Unexpected seek offset. Want %d, got %d", want, got)
+	}
+	want = fileSize - 100
+	if got, _ := r.Seek(-100, io.SeekEnd); want != got {
+		t.Errorf("Unexpected seek offset. Want %d, got %d", want, got)
+	}
+	want = fileSize
+	if got, _ := r.Seek(0, io.SeekEnd); want != got {
+		t.Fatalf("Unexpected seek offset. Want %d, got %d", want, got)
+	}
+
+	for _, off := range []int64{0, 1, 1024 * 1024, 1024*1024 - 10, 3 * 1024 * 1024} {
+		if _, err := r.Seek(off, io.SeekStart); err != nil {
+			t.Fatalf("Seek(%d): %v", off, err)
+		}
+		buf := make([]byte, 100)
+		if _, err := io.ReadFull(r, buf); err != nil {
+			t.Fatalf("ReadFull: %v", err)
+		}
+		for i := range buf {
+			if want, got := v(off+int64(i)), buf[i]; want != got {
+				t.Errorf("Unexpected byte off=%d i=%d. Want %d, got %d", off, i, want, got)
+			}
+		}
 	}
 }
 

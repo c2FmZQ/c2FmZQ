@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 
@@ -122,14 +123,30 @@ func (d *Database) addFileToFileSet(user User, file FileSpec, name, set, albumID
 	return nil
 }
 
-// makeFilePath creates a random file name for a new file.
-func (d *Database) makeFilePath() (string, error) {
+// TempFile returns a temporary file, open for writing in dir, where dir is
+// relative to the database's root directory.
+func (d *Database) TempFile(dir string) (io.WriteCloser, string, error) {
 	name := make([]byte, 32)
 	if _, err := rand.Read(name); err != nil {
+		return nil, "", err
+	}
+	temp := filepath.Join(dir, base64.RawURLEncoding.EncodeToString(name))
+	fullTemp := filepath.Join(d.Dir(), temp)
+	if err := createParentIfNotExist(fullTemp); err != nil {
+		return nil, "", err
+	}
+	final, _ := finalFilename(temp)
+	w, err := d.storage.OpenBlobWrite(temp, final)
+	return w, fullTemp, err
+}
+
+func finalFilename(temp string) (string, error) {
+	_, n := filepath.Split(temp)
+	b, err := base64.RawURLEncoding.DecodeString(n)
+	if err != nil {
 		return "", err
 	}
-	dir := filepath.Join("blobs", fmt.Sprintf("%02X", name[0]))
-	return filepath.Join(dir, base64.RawURLEncoding.EncodeToString(name)), nil
+	return filepath.Join("blobs", fmt.Sprintf("%02X", b[0]), n), nil
 }
 
 // AddFile adds a new file to the database. The file content and thumbnail are
@@ -153,12 +170,12 @@ func (d *Database) AddFile(user User, file FileSpec, name, set, albumID string) 
 		return ErrQuotaExceeded
 	}
 
-	fn, err := d.makeFilePath()
+	fn, err := finalFilename(file.StoreFile)
 	if err != nil {
 		log.Errorf("makeFilePath() failed: %v", err)
 		return err
 	}
-	tn, err := d.makeFilePath()
+	tn, err := finalFilename(file.StoreThumb)
 	if err != nil {
 		log.Errorf("makeFilePath() failed: %v", err)
 		return err
@@ -450,15 +467,15 @@ func (d *Database) findFileInSet(user User, set, albumID, filename string) (*Fil
 }
 
 // downloadFileSpec opens a file for reading.
-func (d *Database) downloadFileSpec(fileSpec *FileSpec, thumb bool) (*os.File, error) {
+func (d *Database) downloadFileSpec(fileSpec *FileSpec, thumb bool) (io.ReadSeekCloser, error) {
 	if thumb {
-		return os.Open(filepath.Join(d.Dir(), fileSpec.StoreThumb))
+		return d.storage.OpenBlobRead(fileSpec.StoreThumb)
 	}
-	return os.Open(filepath.Join(d.Dir(), fileSpec.StoreFile))
+	return d.storage.OpenBlobRead(fileSpec.StoreFile)
 }
 
 // DownloadFile locates a file and opens it for reading.
-func (d *Database) DownloadFile(user User, set, filename string, thumb bool) (*os.File, error) {
+func (d *Database) DownloadFile(user User, set, filename string, thumb bool) (io.ReadSeekCloser, error) {
 	defer recordLatency("DownloadFile")()
 
 	if set != stingle.AlbumSet {

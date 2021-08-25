@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"io/ioutil"
 	"math/rand"
 	"os"
@@ -467,53 +468,11 @@ func (s *Storage) writeFile(ctx []byte, filename string, obj interface{}) (retEr
 		flags |= optCompressed
 	}
 
-	f, err := os.OpenFile(fn, os.O_WRONLY|os.O_CREATE|os.O_EXCL|os.O_SYNC, 0600)
+	w, err := s.openWriteStream(ctx, fn, flags)
 	if err != nil {
 		return err
 	}
-	if _, err := f.Write([]byte{'K', 'R', 'I', 'N', flags}); err != nil {
-		f.Close()
-		return err
-	}
-	var w io.WriteCloser = f
-	if s.masterKey != nil {
-		k, err := s.masterKey.NewKey()
-		if err != nil {
-			return err
-		}
-		defer k.Wipe()
-		// Write the encrypted file key first.
-		if err := k.WriteEncryptedKey(f); err != nil {
-			f.Close()
-			return err
-		}
-		// Use the file key to encrypt the rest of the file.
-		if w, err = k.StartWriter(ctx, f); err != nil {
-			f.Close()
-			return err
-		}
-		// Write the header again.
-		if _, err := w.Write([]byte{'K', 'R', 'I', 'N', flags}); err != nil {
-			w.Close()
-			return err
-		}
-	}
-	var wc io.WriteCloser = w
-	if s.compress {
-		// Compress the content.
-		gz, err := gzip.NewWriterLevel(w, gzip.BestSpeed)
-		if err != nil {
-			return err
-		}
-		wc = gz
-	}
-
 	defer func() {
-		if wc != w {
-			if err := wc.Close(); err != nil && retErr == nil {
-				retErr = err
-			}
-		}
 		if err := w.Close(); err != nil && retErr == nil {
 			retErr = err
 		}
@@ -522,12 +481,12 @@ func (s *Storage) writeFile(ctx []byte, filename string, obj interface{}) (retEr
 	switch enc := flags & optEncodingMask; enc {
 	case optGOBEncoded:
 		// Encode with GOB.
-		if err := gob.NewEncoder(wc).Encode(obj); err != nil {
+		if err := gob.NewEncoder(w).Encode(obj); err != nil {
 			return err
 		}
 	case optJSONEncoded:
 		// Encode as JSON object.
-		enc := json.NewEncoder(wc)
+		enc := json.NewEncoder(w)
 		enc.SetIndent("", "  ")
 		if err := enc.Encode(obj); err != nil {
 			return err
@@ -542,7 +501,7 @@ func (s *Storage) writeFile(ctx []byte, filename string, obj interface{}) (retEr
 		if err != nil {
 			return err
 		}
-		if _, err := wc.Write(b); err != nil {
+		if _, err := w.Write(b); err != nil {
 			return err
 		}
 	case optRawBytes:
@@ -552,7 +511,7 @@ func (s *Storage) writeFile(ctx []byte, filename string, obj interface{}) (retEr
 			return fmt.Errorf("obj isn't *[]byte: %T", obj)
 		}
 		if b != nil {
-			if _, err := wc.Write(*b); err != nil {
+			if _, err := w.Write(*b); err != nil {
 				return err
 			}
 		}
@@ -561,6 +520,165 @@ func (s *Storage) writeFile(ctx []byte, filename string, obj interface{}) (retEr
 	}
 
 	return nil
+}
+
+// OpenBlobWrite opens a blob file for writing.
+// writeFileName is the name of the file where to write the data.
+// finalFileName is the final name of the file. The caller is expected to rename
+// the file to that name when it is done with writing.
+func (s *Storage) OpenBlobWrite(writeFileName, finalFileName string) (io.WriteCloser, error) {
+	fn := filepath.Join(s.dir, writeFileName)
+	if err := createParentIfNotExist(fn); err != nil {
+		return nil, err
+	}
+	var flags byte = optRawBytes
+	if s.masterKey != nil {
+		flags |= optEncrypted
+	}
+	return s.openWriteStream(context(finalFileName), fn, flags)
+}
+
+// OpenBlobRead opens a blob file for reading.
+func (s *Storage) OpenBlobRead(filename string) (stream io.ReadSeekCloser, retErr error) {
+	f, err := os.Open(filepath.Join(s.dir, filename))
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if retErr != nil {
+			f.Close()
+		}
+	}()
+
+	hdr := make([]byte, 5)
+	if _, err := io.ReadFull(f, hdr); err != nil {
+		return nil, err
+	}
+	if string(hdr[:4]) != "KRIN" {
+		// File is an old blob. The client can read it directly.
+		if _, err := f.Seek(0, io.SeekStart); err != nil {
+			return nil, err
+		}
+		return f, nil
+	}
+	flags := hdr[4]
+	if flags&optRawBytes == 0 {
+		return nil, errors.New("blob files is not raw bytes")
+	}
+	if flags&optCompressed != 0 {
+		return nil, errors.New("blob files cannot be compressed")
+	}
+	if flags&optEncrypted != 0 && s.masterKey == nil {
+		return nil, errors.New("file is encrypted, but a master key was not provided")
+	}
+
+	var r io.ReadSeekCloser = f
+	if flags&optEncrypted != 0 {
+		// Read the encrypted file key.
+		k, err := s.masterKey.ReadEncryptedKey(f)
+		if err != nil {
+			return nil, err
+		}
+		defer k.Wipe()
+		// Use the file key to decrypt the rest of the file.
+		if r, err = k.StartReader(context(filename), f); err != nil {
+			return nil, err
+		}
+		// Read the header again.
+		h := make([]byte, 5)
+		if _, err := io.ReadFull(r, h); err != nil {
+			return nil, err
+		}
+		if bytes.Compare(hdr, h) != 0 {
+			return nil, errors.New("wrong encrypted header")
+		}
+	}
+	off, err := r.Seek(0, io.SeekCurrent)
+	if err != nil {
+		return nil, err
+	}
+	return &seekWrapper{r, off}, nil
+}
+
+// seekWrapper wraps a read stream such that Seek calls are relative to the
+// start offset.
+type seekWrapper struct {
+	io.ReadSeekCloser
+	start int64
+}
+
+func (w *seekWrapper) Seek(offset int64, whence int) (newOffset int64, err error) {
+	switch whence {
+	case io.SeekStart:
+		newOffset, err = w.ReadSeekCloser.Seek(w.start+offset, whence)
+	default:
+		newOffset, err = w.ReadSeekCloser.Seek(offset, whence)
+	}
+	newOffset -= w.start
+	if newOffset < 0 {
+		err = fs.ErrInvalid
+	}
+	return
+}
+
+// openWriteStream opens a write stream.
+func (s *Storage) openWriteStream(ctx []byte, fullPath string, flags byte) (io.WriteCloser, error) {
+	f, err := os.OpenFile(fullPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL|os.O_SYNC, 0600)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := f.Write([]byte{'K', 'R', 'I', 'N', flags}); err != nil {
+		f.Close()
+		return nil, err
+	}
+	var w io.WriteCloser = f
+	if flags&optEncrypted != 0 {
+		k, err := s.masterKey.NewKey()
+		if err != nil {
+			return nil, err
+		}
+		defer k.Wipe()
+		// Write the encrypted file key first.
+		if err := k.WriteEncryptedKey(f); err != nil {
+			f.Close()
+			return nil, err
+		}
+		// Use the file key to encrypt the rest of the file.
+		if w, err = k.StartWriter(ctx, f); err != nil {
+			f.Close()
+			return nil, err
+		}
+		// Write the header again.
+		if _, err := w.Write([]byte{'K', 'R', 'I', 'N', flags}); err != nil {
+			w.Close()
+			return nil, err
+		}
+	}
+	var wc io.WriteCloser = w
+	if flags&optCompressed != 0 {
+		// Compress the content.
+		gz, err := gzip.NewWriterLevel(w, gzip.BestSpeed)
+		if err != nil {
+			return nil, err
+		}
+		wc = &gzipWrapper{gz, w}
+	}
+	return wc, nil
+}
+
+// gzipWrapper wraps a gzip.Writer so that its Close function also closes the
+// underlying stream.
+type gzipWrapper struct {
+	*gzip.Writer
+	w io.Closer
+}
+
+func (gz *gzipWrapper) Close() error {
+	err := gz.Writer.Close()
+	if e := gz.w.Close(); err == nil {
+		err = e
+	}
+	return err
 }
 
 // EditDataFile opens a file in a text editor.

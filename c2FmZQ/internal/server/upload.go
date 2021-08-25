@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strconv"
 	"time"
 
@@ -24,15 +23,10 @@ type upload struct {
 // receiveUpload processes a multipart/form-data.
 func (s *Server) receiveUpload(dir string, req *http.Request) (*upload, error) {
 	ctx := req.Context()
-
-	if err := os.MkdirAll(dir, 0700); err != nil {
-		return nil, err
-	}
 	mr, err := req.MultipartReader()
 	if err != nil {
 		return nil, err
 	}
-
 	var upload upload
 
 	for {
@@ -45,7 +39,7 @@ func (s *Server) receiveUpload(dir string, req *http.Request) (*upload, error) {
 			return nil, err
 		}
 		if p.FileName() != "" {
-			f, err := os.CreateTemp(dir, "upload-*")
+			f, name, err := s.db.TempFile(dir)
 			if err != nil {
 				return nil, err
 			}
@@ -56,10 +50,10 @@ func (s *Server) receiveUpload(dir string, req *http.Request) (*upload, error) {
 
 			upload.name = p.FileName()
 			if p.FormName() == "file" {
-				upload.FileSpec.StoreFile = f.Name()
+				upload.FileSpec.StoreFile = name
 				upload.FileSpec.StoreFileSize = size
 			} else if p.FormName() == "thumb" {
-				upload.FileSpec.StoreThumb = f.Name()
+				upload.FileSpec.StoreThumb = name
 				upload.FileSpec.StoreThumbSize = size
 			}
 

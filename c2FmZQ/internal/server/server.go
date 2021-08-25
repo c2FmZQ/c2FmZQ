@@ -111,7 +111,7 @@ func New(db *database.Database, addr, htdigest, pathPrefix string) *Server {
 	s.mux.HandleFunc(pathPrefix+"/v2/keys/reuploadKeys", s.auth(s.handleReuploadKeys))
 
 	s.mux.HandleFunc(pathPrefix+"/v2/sync/getUpdates", s.auth(s.handleGetUpdates))
-	s.mux.HandleFunc(pathPrefix+"/v2/sync/upload", s.noauth(s.handleUpload))
+	s.mux.HandleFunc(pathPrefix+"/v2/sync/upload", s.handleUpload)
 	s.mux.HandleFunc(pathPrefix+"/v2/sync/moveFile", s.auth(s.handleMoveFile))
 	s.mux.HandleFunc(pathPrefix+"/v2/sync/emptyTrash", s.auth(s.handleEmptyTrash))
 	s.mux.HandleFunc(pathPrefix+"/v2/sync/delete", s.auth(s.handleDelete))

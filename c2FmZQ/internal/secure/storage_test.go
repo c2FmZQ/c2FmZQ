@@ -3,6 +3,7 @@ package secure
 import (
 	"crypto/rand"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -192,6 +193,99 @@ func TestEncodeBinary(t *testing.T) {
 	}
 	if got.UnixNano() != want.UnixNano() {
 		t.Errorf("Unexpected time. Want %q, got %q", want, got)
+	}
+}
+
+func TestBlobs(t *testing.T) {
+	dir := t.TempDir()
+	s := NewStorage(dir, aesEncryptionKey())
+	//s := NewStorage(dir, ccEncryptionKey())
+	const (
+		temp    = "tempfile"
+		final   = "finalfile"
+		content = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	)
+
+	w, err := s.OpenBlobWrite(temp, final)
+	if err != nil {
+		t.Fatalf("s.OpenBlobWrite failed: %v", err)
+	}
+	if _, err := w.Write([]byte(content)); err != nil {
+		t.Fatalf("w.Write failed: %v", err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatalf("w.Close failed: %v", err)
+	}
+
+	var buf []byte
+	if err := s.ReadDataFile(temp, &buf); err == nil {
+		t.Fatalf("s.ReadDataFile() didn't fail. Got: %s", buf)
+	}
+	if err := os.Rename(filepath.Join(dir, temp), filepath.Join(dir, final)); err != nil {
+		t.Fatalf("os.Rename failed: %v", err)
+	}
+	if err := s.ReadDataFile(final, &buf); err != nil {
+		t.Fatalf("s.ReadDataFile() failed: %v", err)
+	}
+	if want, got := content, string(buf); want != got {
+		t.Errorf("Unexpected content. Want %q, got %q", want, got)
+	}
+
+	r, err := s.OpenBlobRead(final)
+	if err != nil {
+		t.Fatalf("s.OpenBlobRead failed: %v", err)
+	}
+
+	// Test SeekStart.
+	off, err := r.Seek(5, io.SeekStart)
+	if err != nil {
+		t.Fatalf("r.Seek(5, io.SeekStart) failed: %v", err)
+	}
+	if want, got := int64(5), off; want != got {
+		t.Errorf("Unexpected seek offset. Want %d, got %d", want, got)
+	}
+	if got, err := io.ReadAll(r); err != nil || string(got) != content[5:] {
+		t.Errorf("Unexpected content. Want %q, got %s", content[5:], got)
+	}
+
+	// Test SeekCurrent.
+	if _, err := r.Seek(5, io.SeekStart); err != nil {
+		t.Fatalf("r.Seek(5, io.SeekStart) failed: %v", err)
+	}
+	if off, err = r.Seek(10, io.SeekCurrent); err != nil {
+		t.Fatalf("r.Seek(5, io.SeekCurrent) failed: %v", err)
+	}
+	if want, got := int64(15), off; want != got {
+		t.Errorf("Unexpected seek offset. Want %d, got %d", want, got)
+	}
+	if got, err := io.ReadAll(r); err != nil || string(got) != content[15:] {
+		t.Errorf("Unexpected content. Want %q, got %s", content[15:], got)
+	}
+
+	// Test SeekEnd.
+	if off, err = r.Seek(-3, io.SeekEnd); err != nil {
+		t.Fatalf("r.Seek(-3, io.SeekEnd) failed: %v", err)
+	}
+	if want, got := int64(len(content)-3), off; want != got {
+		t.Errorf("Unexpected seek offset. Want %d, got %d", want, got)
+	}
+	if got, err := io.ReadAll(r); err != nil || string(got) != "XYZ" {
+		t.Errorf("Unexpected content. Want %q, got %s", "XYZ", got)
+	}
+
+	// Test SeekEnd.
+	if off, err = r.Seek(0, io.SeekEnd); err != nil {
+		t.Fatalf("r.Seek(0, io.SeekEnd) failed: %v", err)
+	}
+	if want, got := int64(len(content)), off; want != got {
+		t.Errorf("Unexpected seek offset. Want %d, got %d", want, got)
+	}
+	if got, err := io.ReadAll(r); err != nil || string(got) != "" {
+		t.Errorf("Unexpected content. Want %q, got %s", "", got)
+	}
+
+	if err := r.Close(); err != nil {
+		t.Fatalf("r.Close failed: %v", err)
 	}
 }
 

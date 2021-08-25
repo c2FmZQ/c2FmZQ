@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 
 	"golang.org/x/crypto/chacha20poly1305"
 )
@@ -118,11 +119,17 @@ func (r *StreamReader) Seek(offset int64, whence int) (int64, error) {
 			return 0, err
 		}
 		nChunks := (size - r.start) / int64(r.hdr.ChunkSize+chunkOverhead)
-		lastChunkSize := (size-r.start)%int64(r.hdr.ChunkSize+chunkOverhead) - chunkOverhead
+		lastChunkSize := (size - r.start) % int64(r.hdr.ChunkSize+chunkOverhead)
+		if lastChunkSize > 0 {
+			lastChunkSize -= chunkOverhead
+		}
 		decSize := nChunks*int64(r.hdr.ChunkSize) + lastChunkSize
 		newOffset = decSize + offset
 	default:
 		return 0, fmt.Errorf("invalid whence: %d", whence)
+	}
+	if newOffset < 0 {
+		return 0, fs.ErrInvalid
 	}
 	if newOffset == r.off {
 		return r.off, nil
@@ -133,14 +140,13 @@ func (r *StreamReader) Seek(offset int64, whence int) (int64, error) {
 	}
 	// Move to new offset.
 	r.off = newOffset
-	r.c = r.off / int64(r.hdr.ChunkSize)
 	chunkOffset := r.off % int64(r.hdr.ChunkSize)
-	seekTo := r.start + r.c*int64(r.hdr.ChunkSize+chunkOverhead)
+	seekTo := r.start + r.off/int64(r.hdr.ChunkSize)*int64(r.hdr.ChunkSize+chunkOverhead)
 	if _, err := seeker.Seek(seekTo, io.SeekStart); err != nil {
 		return 0, err
 	}
 	r.buf = nil
-	if err := r.readChunk(); err != nil {
+	if err := r.readChunk(); err != nil && err != io.EOF {
 		return 0, err
 	}
 	if chunkOffset < int64(len(r.buf)) {
@@ -152,8 +158,7 @@ func (r *StreamReader) Seek(offset int64, whence int) (int64, error) {
 }
 
 func (r *StreamReader) readChunk() error {
-	r.c++
-	ck := DeriveKey(r.hdr.SymmetricKey, chacha20poly1305.KeySize, uint64(r.c), context)
+	ck := DeriveKey(r.hdr.SymmetricKey, chacha20poly1305.KeySize, uint64(r.off/int64(r.hdr.ChunkSize)+1), context)
 	in := make([]byte, r.hdr.ChunkSize+chunkOverhead)
 	n, err := io.ReadFull(r.r, in)
 	if n > 0 {
@@ -170,7 +175,10 @@ func (r *StreamReader) readChunk() error {
 		}
 		r.buf = append(r.buf, dec...)
 	}
-	if n > 0 && (err == io.EOF || err == io.ErrUnexpectedEOF) {
+	if err == io.ErrUnexpectedEOF {
+		err = io.EOF
+	}
+	if n > 0 && err == io.EOF {
 		err = nil
 	}
 	return err
@@ -180,20 +188,15 @@ func (r *StreamReader) Read(b []byte) (n int, err error) {
 	for err == nil {
 		nn := copy(b[n:], r.buf)
 		r.buf = r.buf[nn:]
+		r.off += int64(nn)
 		n += nn
 		if n == len(b) {
 			break
 		}
-		if err = r.readChunk(); len(r.buf) > 0 && (err == io.EOF || err == io.ErrUnexpectedEOF) {
-			err = nil
-		}
+		err = r.readChunk()
 	}
-	r.off += int64(n)
 	if n > 0 {
 		return n, nil
-	}
-	if err == io.ErrUnexpectedEOF {
-		err = io.EOF
 	}
 	return n, err
 }

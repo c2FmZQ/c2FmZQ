@@ -6,7 +6,10 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/binary"
+	"errors"
+	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -264,52 +267,117 @@ func (k Chacha20Poly1305Key) DecryptKey(encryptedKey []byte) (EncryptionKey, err
 	return ek, nil
 }
 
-func chachaNonce(ctx []byte, counter uint64) []byte {
+func chachaNonce(ctx []byte, counter int64) []byte {
 	var n [24]byte
 	copy(n[:16], ctx)
-	binary.LittleEndian.PutUint64(n[16:], counter)
+	binary.LittleEndian.PutUint64(n[16:], uint64(counter))
 	return n[:]
 }
 
 // Chacha20Poly1305StreamReader decrypts an input stream.
 type Chacha20Poly1305StreamReader struct {
-	ccp cipher.AEAD
-	k   Chacha20Poly1305Key
-	r   io.Reader
-	ctx []byte
-	c   uint64
-	buf []byte
+	ccp   cipher.AEAD
+	k     Chacha20Poly1305Key
+	r     io.Reader
+	ctx   []byte
+	start int64
+	off   int64
+	buf   []byte
+}
+
+// Seek moves the next read to a new offset. The offset is in the decrypted
+// stream.
+func (r *Chacha20Poly1305StreamReader) Seek(offset int64, whence int) (int64, error) {
+	var newOffset int64
+	switch whence {
+	case io.SeekStart:
+		newOffset = offset
+	case io.SeekCurrent:
+		newOffset = r.off + offset
+	case io.SeekEnd:
+		seeker, ok := r.r.(io.Seeker)
+		if !ok {
+			return 0, errors.New("input is not seekable")
+		}
+		size, err := seeker.Seek(0, io.SeekEnd)
+		if err != nil {
+			return 0, err
+		}
+		nChunks := (size - r.start) / int64(chachaFileChunkSize+r.ccp.Overhead())
+		lastChunkSize := (size - r.start) % int64(chachaFileChunkSize+r.ccp.Overhead())
+		if lastChunkSize > 0 {
+			lastChunkSize -= int64(r.ccp.Overhead())
+		}
+		if lastChunkSize < 0 {
+			return 0, errors.New("invalid last chunk")
+		}
+		decSize := nChunks*int64(chachaFileChunkSize) + lastChunkSize
+		newOffset = decSize + offset
+	default:
+		return 0, fmt.Errorf("invalid whence: %d", whence)
+	}
+	if newOffset < 0 {
+		return 0, fs.ErrInvalid
+	}
+	if newOffset == r.off {
+		return r.off, nil
+	}
+	seeker, ok := r.r.(io.Seeker)
+	if !ok {
+		return 0, errors.New("input is not seekable")
+	}
+	// Move to new offset.
+	r.off = newOffset
+	chunkOffset := r.off % int64(chachaFileChunkSize)
+	seekTo := r.start + r.off/int64(chachaFileChunkSize)*int64(chachaFileChunkSize+r.ccp.Overhead())
+	if _, err := seeker.Seek(seekTo, io.SeekStart); err != nil {
+		return 0, err
+	}
+	r.buf = nil
+	if err := r.readChunk(); err != nil && err != io.EOF {
+		return 0, err
+	}
+	if chunkOffset < int64(len(r.buf)) {
+		r.buf = r.buf[chunkOffset:]
+	} else {
+		r.buf = nil
+	}
+	return r.off, nil
+}
+
+func (r *Chacha20Poly1305StreamReader) readChunk() error {
+	in := make([]byte, chachaFileChunkSize+r.ccp.Overhead())
+	n, err := io.ReadFull(r.r, in)
+	if n > 0 {
+		dec, err := r.ccp.Open(in[:0], chachaNonce(r.ctx, r.off/int64(chachaFileChunkSize)+1), in[:n], nil)
+		if err != nil {
+			log.Debug(err)
+			return ErrDecryptFailed
+		}
+		r.buf = append(r.buf, dec...)
+	}
+	if err == io.ErrUnexpectedEOF {
+		err = io.EOF
+	}
+	if len(r.buf) > 0 && err == io.EOF {
+		err = nil
+	}
+	return err
 }
 
 func (r *Chacha20Poly1305StreamReader) Read(b []byte) (n int, err error) {
 	for err == nil {
 		nn := copy(b[n:], r.buf)
 		r.buf = r.buf[nn:]
+		r.off += int64(nn)
 		n += nn
 		if n == len(b) {
 			break
 		}
-
-		r.c++
-		in := make([]byte, chachaFileChunkSize+r.ccp.Overhead())
-		var nr int
-		if nr, err = io.ReadFull(r.r, in); nr > 0 {
-			dec, err := r.ccp.Open(in[:0], chachaNonce(r.ctx, r.c), in[:nr], nil)
-			if err != nil {
-				log.Debug(err)
-				return n, ErrDecryptFailed
-			}
-			r.buf = append(r.buf, dec...)
-		}
-		if nr > 0 && (err == io.EOF || err == io.ErrUnexpectedEOF) {
-			err = nil
-		}
+		err = r.readChunk()
 	}
 	if n > 0 {
 		return n, nil
-	}
-	if err == io.ErrUnexpectedEOF {
-		err = io.EOF
 	}
 	return n, err
 }
@@ -325,11 +393,20 @@ func (r *Chacha20Poly1305StreamReader) Close() error {
 
 // StartReader opens a reader to decrypt a stream of data.
 func (k Chacha20Poly1305Key) StartReader(ctx []byte, r io.Reader) (StreamReader, error) {
+	var start int64
+	if seeker, ok := r.(io.Seeker); ok {
+		off, err := seeker.Seek(0, io.SeekCurrent)
+		if err != nil {
+			panic(err)
+		}
+		start = off
+	}
+
 	ccp, err := chacha20poly1305.NewX(k.key()[:32])
 	if err != nil {
 		return nil, err
 	}
-	return &Chacha20Poly1305StreamReader{ccp: ccp, r: r, ctx: ctx}, nil
+	return &Chacha20Poly1305StreamReader{ccp: ccp, r: r, ctx: ctx, start: start}, nil
 }
 
 // Chacha20Poly1305StreamWriter encrypts a stream of data.
@@ -337,7 +414,7 @@ type Chacha20Poly1305StreamWriter struct {
 	ccp cipher.AEAD
 	w   io.Writer
 	ctx []byte
-	c   uint64
+	c   int64
 	buf []byte
 }
 

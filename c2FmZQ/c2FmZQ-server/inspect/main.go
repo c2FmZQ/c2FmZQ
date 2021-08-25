@@ -18,6 +18,7 @@ import (
 	"c2FmZQ/internal/crypto"
 	"c2FmZQ/internal/database"
 	"c2FmZQ/internal/log"
+	"c2FmZQ/internal/secure"
 	"c2FmZQ/internal/stingle"
 )
 
@@ -139,6 +140,11 @@ func main() {
 				Name:   "convert-aes-chacha20poly1305",
 				Usage:  "Convert between AES and Chacha20Poly1305 encryption.",
 				Action: convertAESChacha20Poly1305,
+			},
+			&cli.Command{
+				Name:   "encrypt-blobs",
+				Usage:  "Encrypt blobs that were left unencrypted by older code.",
+				Action: encryptBlobs,
 			},
 			&cli.Command{
 				Name:   "rename-user",
@@ -494,4 +500,65 @@ func renameUser(c *cli.Context) error {
 		return cli.ShowSubcommandHelp(c)
 	}
 	return db.RenameUser(id, email)
+}
+
+func encryptBlobs(c *cli.Context) error {
+	log.Level = flagLogLevel
+	pp, err := crypto.Passphrase(flagPassphraseCmd, flagPassphraseFile)
+	if err != nil {
+		return err
+	}
+	mk, err := crypto.ReadMasterKey(pp, filepath.Join(flagDatabase, "master.key"))
+	if err != nil {
+		return err
+	}
+	s := secure.NewStorage(flagDatabase, mk)
+
+	if ans := prompt("\nMake sure you have a backup of the database before proceeding.\nType ENCRYPT to continue: "); ans != "ENCRYPT" {
+		log.Fatal("Aborted.")
+	}
+
+	if err := filepath.WalkDir(filepath.Join(flagDatabase, "blobs"), func(path string, d fs.DirEntry, err error) (retErr error) {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		rel, err := filepath.Rel(flagDatabase, path)
+		if err != nil {
+			return err
+		}
+		in, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer in.Close()
+		hdr := make([]byte, 5)
+		if _, err := io.ReadFull(in, hdr); err == nil && string(hdr[:4]) == "KRIN" {
+			return nil
+		}
+		log.Infof("Encrypting %s", rel)
+		if _, err := in.Seek(0, io.SeekStart); err != nil {
+			return err
+		}
+		w, err := s.OpenBlobWrite(rel+".encrypted", rel)
+		if err != nil {
+			return err
+		}
+		n, err := io.Copy(w, in)
+		if err != nil {
+			return err
+		}
+		if err := w.Close(); err != nil {
+			return err
+		}
+		log.Infof("Encrypted %d bytes", n)
+
+		return os.Rename(path+".encrypted", path)
+	}); err != nil {
+		return err
+	}
+
+	return nil
 }
