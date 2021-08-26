@@ -13,6 +13,7 @@ import (
 
 	"github.com/tyler-smith/go-bip39"
 
+	"c2FmZQ/internal/log"
 	"c2FmZQ/internal/stingle"
 )
 
@@ -178,7 +179,7 @@ func (c *Client) sendLogin(email, hashedPassword string) (*stingle.Response, err
 	}
 	userID, ok := sr.Part("userId").(string)
 	if !ok {
-		fmt.Errorf("userId has unexpected type: %T", sr.Part("userId"))
+		log.Errorf("userId has unexpected type: %T", sr.Part("userId"))
 	}
 	id, err := strconv.ParseInt(userID, 10, 32)
 	if err != nil {
@@ -186,7 +187,7 @@ func (c *Client) sendLogin(email, hashedPassword string) (*stingle.Response, err
 	}
 	serverPublicKey, ok := sr.Part("serverPublicKey").(string)
 	if !ok {
-		fmt.Errorf("serverPublicKey has unexpected type: %T", sr.Part("serverPublicKey"))
+		log.Errorf("serverPublicKey has unexpected type: %T", sr.Part("serverPublicKey"))
 	}
 	pk, err := base64.StdEncoding.DecodeString(serverPublicKey)
 	if err != nil {

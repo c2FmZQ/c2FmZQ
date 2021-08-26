@@ -1,3 +1,4 @@
+//go:build !windows
 // +build !windows
 
 package fuse_test
@@ -33,7 +34,7 @@ func TestFuse(t *testing.T) {
 	fuseDir := t.TempDir()
 	go func() {
 		if err := fuse.Mount(c, fuseDir, false); err != nil {
-			t.Fatalf("fuse.Mount(%q): %v", fuseDir, err)
+			log.Fatalf("fuse.Mount(%q): %v", fuseDir, err)
 		}
 	}()
 	var unmount func()

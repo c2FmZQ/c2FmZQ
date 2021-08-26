@@ -99,7 +99,7 @@ type Database struct {
 }
 
 // Dir returns the directory where the database stores its data.
-func (d Database) Dir() string {
+func (d *Database) Dir() string {
 	return d.dir
 }
 
@@ -178,7 +178,7 @@ func showCallStack() {
 }
 
 // DumpFile shows the content of a file to stdout.
-func (d Database) DumpFile(filename string) error {
+func (d *Database) DumpFile(filename string) error {
 	var (
 		user          User
 		blob          BlobSpec
@@ -216,7 +216,7 @@ func (d Database) DumpFile(filename string) error {
 	}
 }
 
-func (d Database) UserIDs() ([]int64, error) {
+func (d *Database) UserIDs() ([]int64, error) {
 	var ul []userList
 	if err := d.storage.ReadDataFile(d.filePath(userListFile), &ul); err != nil {
 		return nil, err
@@ -229,7 +229,7 @@ func (d Database) UserIDs() ([]int64, error) {
 }
 
 // DumpUsers shows information about all the users to stdout.
-func (d Database) DumpUsers() {
+func (d *Database) DumpUsers() {
 	var ul []userList
 	if err := d.storage.ReadDataFile(d.filePath(userListFile), &ul); err != nil {
 		log.Errorf("ReadDataFile: %v", err)
@@ -255,7 +255,7 @@ func (d Database) DumpUsers() {
 	}
 }
 
-func (d Database) FindOrphanFiles(del bool) error {
+func (d *Database) FindOrphanFiles(del bool) error {
 	exist := make(map[string]struct{})
 	err := filepath.WalkDir(d.Dir(), func(path string, de fs.DirEntry, err error) error {
 		if err != nil {

@@ -1,3 +1,4 @@
+//go:build !windows
 // +build !windows
 
 package fuse
@@ -188,7 +189,7 @@ type node struct {
 	mu sync.Mutex
 }
 
-func (n node) String() string {
+func (n *node) String() string {
 	return n.label
 }
 
@@ -424,13 +425,13 @@ func (n *dirNode) ReadDirAll(context.Context) ([]fuse.Dirent, error) {
 var _ fs.HandlePoller = (*node)(nil)
 
 // Poll checks whether a handle is ready for I/O.
-func (node) Poll(ctx context.Context, req *fuse.PollRequest, resp *fuse.PollResponse) error {
+func (*node) Poll(ctx context.Context, req *fuse.PollRequest, resp *fuse.PollResponse) error {
 	return syscall.ENOSYS
 }
 
 var _ fs.NodeGetxattrer = (*node)(nil)
 
-func (node) Getxattr(ctx context.Context, req *fuse.GetxattrRequest, resp *fuse.GetxattrResponse) error {
+func (*node) Getxattr(ctx context.Context, req *fuse.GetxattrRequest, resp *fuse.GetxattrResponse) error {
 	return syscall.ENOSYS
 }
 
@@ -499,7 +500,7 @@ func (n *dirNode) Remove(ctx context.Context, req *fuse.RemoveRequest) error {
 var _ fs.NodeForgetter = (*node)(nil)
 
 // Forget tells us this node will not receive any further requests.
-func (n node) Forget() {
+func (n *node) Forget() {
 	log.Debugf("Forget called on %s", n)
 }
 
@@ -761,7 +762,7 @@ type handle struct {
 	mu sync.Mutex
 }
 
-func (h handle) String() string {
+func (h *handle) String() string {
 	mode := "-"
 	if h.r != nil && h.w != nil {
 		mode = "Read/Write"
