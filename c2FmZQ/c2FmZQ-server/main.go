@@ -121,7 +121,7 @@ func main() {
 			&cli.IntFlag{
 				Name:        "verbose",
 				Aliases:     []string{"v"},
-				Value:       3,
+				Value:       2,
 				DefaultText: "2 (info)",
 				Usage:       "The level of logging verbosity: 1:Error 2:Info 3:Debug",
 				Destination: &flagLogLevel,
