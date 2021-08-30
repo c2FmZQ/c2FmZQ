@@ -125,10 +125,11 @@ users with a few thousand files per album, and still maintain an acceptable resp
 The server is self-contained. It doesn't depend on any external resources. It
 stores all its data on a local filesystem.
 
-It can run on AWS [Howto](HOWTO-AWS.md) or any other cloud providers. It can run
+It can run on AWS ([Howto](HOWTO-AWS.md)) or any other cloud providers. It can run
 in a docker container. It can run on Linux, MacOS, Windows. It can run on a
 raspberry pi, or on a NAS. It can run pretty much on anything that has at least
 1 GB of RAM.
+
 --- 
 
 ### Build it, and run it locally
