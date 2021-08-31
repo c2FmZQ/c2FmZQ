@@ -101,7 +101,6 @@ new PromConsole.Graph({
   colorScheme: 'cool',
 })
 </script>
-</td></tr></table>
 
 {{ range $i, $v := query "sum by (uri) (server_response_time_count{job='c2FmZQ-server'})" | sortByLabel "uri" }}
 <br/>
@@ -143,7 +142,75 @@ new PromConsole.Graph({
   colorScheme: 'cool',
 })
 </script>
-</td></tr></table>
+{{ end }}
+
+<br/>
+<hr>
+<h2>Size Of Objects Read From Storage</h2>
+
+<p><strong>All Objects</strong></p>
+
+<div id="objectCountGraph"></div>
+<script>
+new PromConsole.Graph({
+  node: document.querySelector("#objectCountGraph"),
+  expr: "sum by (job) (rate(storage_read_file_size_count{job='c2FmZQ-server'}[5m]))",
+  name: "Reads",
+  yAxisFormatter: PromConsole.NumberFormatter.humanizeNoSmallPrefix,
+  yHoverFormatter: PromConsole.NumberFormatter.humanizeNoSmallPrefix,
+  yUnits: "/s",
+  yTitle: "Reads",
+  min: 0,
+  height: 200,
+  colorScheme: 'munin',
+})
+</script>
+
+<br/>
+<div id="objectSizeGraph"></div>
+<script>
+new PromConsole.Graph({
+  node: document.querySelector("#objectSizeGraph"),
+  expr: [
+     "histogram_quantile(0.99, sum by (job, le) (rate(storage_read_file_size_bucket{job='c2FmZQ-server'}[5m])))",
+     "histogram_quantile(0.9, sum by (job, le) (rate(storage_read_file_size_bucket{job='c2FmZQ-server'}[5m])))",
+     "histogram_quantile(0.5, sum by (job, le) (rate(storage_read_file_size_bucket{job='c2FmZQ-server'}[5m])))"
+  ],
+  name: ["99p", "90p", "50p"],
+  yAxisFormatter: PromConsole.NumberFormatter.humanizeNoSmallPrefix,
+  yHoverFormatter: PromConsole.NumberFormatter.humanizeNoSmallPrefix,
+  yUnits: "B",
+  yTitle: "Object Size",
+  min: 0,
+  height: 100,
+  width: 350,
+  colorScheme: 'cool',
+})
+</script>
+
+{{ range $i, $v := query "sum by (type) (storage_read_file_size_count{job='c2FmZQ-server'})" | sortByLabel "type" }}
+<br/>
+<p><strong>Object Type {{ .Labels.type }}</strong></p>
+<div id="objectSizeGraph-{{ $i }}"></div>
+<script>
+new PromConsole.Graph({
+  node: document.querySelector("#objectSizeGraph-{{ $i }}"),
+  expr: [
+     "histogram_quantile(0.99, sum by (job, le) (rate(storage_read_file_size_bucket{job='c2FmZQ-server',type='{{ .Labels.type }}'}[5m])))",
+     "histogram_quantile(0.9, sum by (job, le) (rate(storage_read_file_size_bucket{job='c2FmZQ-server',type='{{ .Labels.type }}'}[5m])))",
+     "histogram_quantile(0.5, sum by (job, le) (rate(storage_read_file_size_bucket{job='c2FmZQ-server',type='{{ .Labels.type }}'}[5m])))"
+  ],
+  name: ["99p", "90p", "50p"],
+  yAxisFormatter: PromConsole.NumberFormatter.humanizeNoSmallPrefix,
+  yHoverFormatter: PromConsole.NumberFormatter.humanizeNoSmallPrefix,
+  yUnits: "B",
+  yTitle: "Object Size",
+  min: 0,
+  height: 100,
+  width: 350,
+  colorScheme: 'cool',
+})
+</script>
 {{ end }}
 
 {{ template "prom_content_tail" . }}

@@ -25,6 +25,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+
 	"c2FmZQ/internal/crypto"
 	"c2FmZQ/internal/log"
 )
@@ -47,7 +49,21 @@ var (
 	ErrAlreadyRolledBack = errors.New("already rolled back")
 	// Indicates that the update was already committed by a previous call.
 	ErrAlreadyCommitted = errors.New("already committed")
+
+	dataFileSizes = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "storage_read_file_size",
+			Help:    "The database's response time",
+			Buckets: prometheus.ExponentialBuckets(1, 2, 32),
+		},
+		[]string{"type"},
+	)
 )
+
+func init() {
+	prometheus.MustRegister(dataFileSizes)
+
+}
 
 // NewStorage returns a new Storage rooted at dir. The caller must provide an
 // EncryptionKey that will be used to encrypt and decrypt per-file encryption
@@ -328,6 +344,12 @@ func (s *Storage) ReadDataFile(filename string, obj interface{}) error {
 		return err
 	}
 	defer f.Close()
+
+	fi, err := f.Stat()
+	if err != nil {
+		return err
+	}
+	dataFileSizes.WithLabelValues(fmt.Sprintf("%T", obj)).Observe(float64(fi.Size()))
 
 	hdr := make([]byte, 5)
 	if _, err := io.ReadFull(f, hdr); err != nil {
