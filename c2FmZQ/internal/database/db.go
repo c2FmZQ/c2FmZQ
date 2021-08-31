@@ -83,6 +83,8 @@ func New(dir string, passphrase []byte) *Database {
 
 	db.fileSetCacheSize = 1
 	db.fileSetCache, _ = simplelru.NewLRU(db.fileSetCacheSize, nil)
+	db.albumRefCacheSize = 20
+	db.albumRefCache, _ = simplelru.NewLRU(db.albumRefCacheSize, nil)
 	return db
 }
 
@@ -96,6 +98,10 @@ type Database struct {
 	fileSetCache      *simplelru.LRU
 	fileSetCacheSize  int
 	fileSetCacheMutex sync.Mutex
+
+	albumRefCache      *simplelru.LRU
+	albumRefCacheSize  int
+	albumRefCacheMutex sync.Mutex
 }
 
 // Dir returns the directory where the database stores its data.

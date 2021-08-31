@@ -196,12 +196,33 @@ func (d *Database) AlbumPermissions(user User, albumID string) (stingle.Permissi
 func (d *Database) AlbumRefs(user User) (map[string]*AlbumRef, error) {
 	defer recordLatency("AlbumRefs")()
 
+	type cacheValue struct {
+		ts int64
+		sz int64
+		ar map[string]*AlbumRef
+	}
+	d.albumRefCacheMutex.Lock()
+	defer d.albumRefCacheMutex.Unlock()
+
+	fileName := d.filePath(user.home(albumManifest))
+	ts, sz := d.stat(fileName)
+	if v, ok := d.albumRefCache.Get(fileName); ok {
+		if cv := v.(cacheValue); cv.ts == ts && cv.sz == sz {
+			log.Debugf("AlbumRef cache hit %s %d %d", fileName, ts, sz)
+			return cv.ar, nil
+		}
+	}
+	log.Debugf("AlbumRef cache miss %s %d %d", fileName, ts, sz)
+
 	var manifest AlbumManifest
-	if err := d.storage.ReadDataFile(d.filePath(user.home(albumManifest)), &manifest); err != nil {
+	if err := d.storage.ReadDataFile(fileName, &manifest); err != nil {
 		return nil, err
 	}
 	if manifest.Albums == nil {
 		manifest.Albums = make(map[string]*AlbumRef)
+	}
+	if ts2, sz2 := d.stat(fileName); ts == ts2 && sz == sz2 {
+		d.albumRefCache.Add(fileName, cacheValue{ts, sz, manifest.Albums})
 	}
 	return manifest.Albums, nil
 }
@@ -351,11 +372,11 @@ func (d *Database) UnshareAlbum(owner User, albumID string) (retErr error) {
 
 // albumRef returns a reference to an album file, i.e. where it is stored.
 func (d *Database) albumRef(user User, albumID string) (*AlbumRef, error) {
-	var manifest AlbumManifest
-	if err := d.storage.ReadDataFile(d.filePath(user.home(albumManifest)), &manifest); err != nil {
+	ar, err := d.AlbumRefs(user)
+	if err != nil {
 		return nil, err
 	}
-	a := manifest.Albums[albumID]
+	a := ar[albumID]
 	if a == nil {
 		return nil, os.ErrNotExist
 	}
