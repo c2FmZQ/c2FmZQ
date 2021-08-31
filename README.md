@@ -104,7 +104,7 @@ For the Stingle Photos app to connect to this server, it has to the recompiled t
 to point to this server.
 See the [Stingle Photos App for Self-Hosted Server](https://github.com/c2FmZQ/stingle-photos-for-self-hosted-server) ([diff](https://github.com/stingle/stingle-photos-android/compare/master...c2FmZQ:master?diff=split)).
 
-Note: build the F-Droid version with: `gradlew installFdroidRelease`
+[How to build StinglePhotos with docker](HOWTO-Build-android-app.md)
 
 ---
 
