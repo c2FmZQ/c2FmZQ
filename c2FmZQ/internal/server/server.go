@@ -152,6 +152,9 @@ func (s *Server) httpServer() *http.Server {
 			return context.WithValue(ctx, connKey, c)
 		},
 		ErrorLog: log.Logger(),
+		TLSConfig: &tls.Config{
+			MinVersion: tls.VersionTLS12,
+		},
 	}
 	return s.srv
 }
@@ -184,9 +187,7 @@ func (s *Server) RunWithAutocert(domain, addr string) error {
 	}()
 
 	s.srv = s.httpServer()
-	s.srv.TLSConfig = &tls.Config{
-		GetCertificate: certManager.GetCertificate,
-	}
+	s.srv.TLSConfig.GetCertificate = certManager.GetCertificate
 	return s.srv.ListenAndServeTLS("", "")
 }
 
