@@ -56,7 +56,7 @@ Create a file that contains the passphrase used to encrypt the server's master
 key. It's best to keep it in a in-memory filesystem.
 
 ```
-mkdir -p 700 /dev/shm/c2fmzq
+mkdir -m 700 /dev/shm/c2fmzq
 vi /dev/shm/c2fmzq/passphrase
 ```
 
