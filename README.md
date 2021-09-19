@@ -10,7 +10,7 @@
   * [How to run the server](#run-server)
 * [c2FmZQ Client](#c2FmZQ-client)
   * [Mount as fuse filesystem](#fuse)
-  * [Connect to stingle.org account](#connect-to-stingle)
+  * [Connecting to stingle.org account](#connect-to-stingle)
 
 # <a name="overview"></a>Overview
 
@@ -20,7 +20,7 @@ files, including but not limited to pictures and videos.
 There is a command-line client application, and a server application.
 
 The server is the central repository where all the encrypted data can be stored.
-It has no way to access to the plaintext data.
+It has no way to access the client's plaintext data.
 
 The command-line client is used to import, export, organize, and share files.
 
@@ -40,7 +40,7 @@ reverse engineering the API.
 contributions are welcome.
 
 The server has no way to decrypt the files that are uploaded by the clients.
-It knows how many files you have, how big they are, and who they're
+It only knows how many files you have, how big they are, and who they're
 shared with.
 
 The client has to trust the server when sharing albums. The server provides
@@ -50,8 +50,8 @@ public key (via /v2/sync/share).
 
 A malicious server _could_ replace the contact's User ID and public key with
 someone else's, and make the user think they're sharing with their friend while
-actually sharing with an attacker. The client application lets the user verify
-the contact's public key before sharing.
+actually sharing with an attacker. The command-line client application lets the
+user verify the contact's public key before sharing. (The android app doesn't)
 
 When viewing a shared album, the client has to trust that the shared content is
 "safe". Since the server can't decrypt the content, it has no way to sanitize it
@@ -104,7 +104,7 @@ For the Stingle Photos app to connect to this server, it has to the recompiled t
 to point to this server.
 See the [Stingle Photos App for Self-Hosted Server](https://github.com/c2FmZQ/stingle-photos-for-self-hosted-server) ([diff](https://github.com/stingle/stingle-photos-android/compare/master...c2FmZQ:master?diff=split)).
 
-[How to build StinglePhotos with docker](HOWTO-Build-android-app.md)
+Learn [how to build a compatible StinglePhotos app with docker](HOWTO-Build-android-app.md).
 
 ---
 
@@ -292,8 +292,9 @@ write operations with some caveats.
   copy doesn't exist.
 
 ```bash
-mkdir -p 0700 /dev/shm/$USER
-echo -n "<INSERT DATABASE PASSPHRASE HERE>" > /dev/shm/$USER/.c2fmzq-passphrase
+mkdir -m 0700 /dev/shm/$USER
+# Create a passphrase with with favorite editor.
+ echo -n "<INSERT DATABASE PASSPHRASE HERE>" > /dev/shm/$USER/.c2fmzq-passphrase
 export C2FMZQ_PASSPHRASE_FILE=/dev/shm/$USER/.c2fmzq-passphrase
 ```
 ```bash
@@ -321,13 +322,14 @@ When you're done, hit `CTRL-C` where the `mount` command is running to close and
 
 ---
 
-## <a name="connect-to-stingle"></a>Connect to stingle.org account
+## <a name="connect-to-stingle"></a>Connecting to stingle.org account
 
 To connect to your stingle.org account, `--server=https://api.stingle.org/` with _login_ or _recover-account_.
 
 ```bash
-mkdir -p 0700 /dev/shm/$USER
-echo -n "<INSERT DATABASE PASSPHRASE HERE>" > /dev/shm/$USER/.c2fmzq-passphrase
+mkdir -m 0700 /dev/shm/$USER
+# Create a passphrase with with favorite editor.
+ echo -n "<INSERT DATABASE PASSPHRASE HERE>" > /dev/shm/$USER/.c2fmzq-passphrase
 export C2FMZQ_PASSPHRASE_FILE=/dev/shm/$USER/.c2fmzq-passphrase
 ```
 ```bash
