@@ -14,7 +14,9 @@ import (
 // of the file. Otherwise, the passphrase is read from the terminal.
 func Passphrase(cmd, file string) ([]byte, error) {
 	if cmd != "" {
-		return exec.Command("/bin/sh", "-c", cmd).Output()
+		c := exec.Command("/bin/sh", "-c", cmd)
+		c.Stderr = os.Stderr
+		return c.Output()
 	}
 	if file != "" {
 		return os.ReadFile(file)
