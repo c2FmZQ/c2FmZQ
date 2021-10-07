@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 
@@ -45,6 +46,9 @@ func (s *Server) receiveUpload(dir string, req *http.Request) (*upload, error) {
 			}
 			size, err := s.copyWithCtx(ctx, f, p)
 			if err != nil {
+				if err := os.Remove(name); err != nil {
+					log.Errorf("os.Remove(%q): %v", name, err)
+				}
 				return nil, err
 			}
 
