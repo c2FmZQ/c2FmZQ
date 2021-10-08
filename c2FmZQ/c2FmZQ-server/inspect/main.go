@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"crypto/rand"
 	"crypto/sha1"
 	"encoding/base64"
 	"errors"
@@ -11,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"unsafe"
 
 	"github.com/urfave/cli/v2" // cli
@@ -138,9 +140,33 @@ func main() {
 				},
 			},
 			&cli.Command{
-				Name:   "convert-aes-chacha20poly1305",
-				Usage:  "Convert between AES and Chacha20Poly1305 encryption.",
-				Action: convertAESChacha20Poly1305,
+				Name:   "change-passphrase",
+				Usage:  "Change the passphrase that protects the database's master key.",
+				Action: changePassphrase,
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:  "new-passphrase-command",
+						Value: "",
+						Usage: "Read the new database passphrase from the standard output of `COMMAND`.",
+					},
+					&cli.StringFlag{
+						Name:  "new-passphrase-file",
+						Value: "",
+						Usage: "Read the new database passphrase from `FILE`.",
+					},
+				},
+			},
+			&cli.Command{
+				Name:   "change-master-key",
+				Usage:  "Re-encrypt all the data with a new master key. This can take a while.",
+				Action: changeMasterKey,
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:  "format",
+						Value: "auto",
+						Usage: "The format of the new master key ('auto', 'aes', 'chacha20poly1305')",
+					},
+				},
 			},
 			&cli.Command{
 				Name:   "encrypt-blobs",
@@ -159,23 +185,6 @@ func main() {
 					&cli.StringFlag{
 						Name:  "new-email",
 						Usage: "The new email address of the user.",
-					},
-				},
-			},
-			&cli.Command{
-				Name:   "change-passphrase",
-				Usage:  "Change the passphrase that protects the database.",
-				Action: changePassphrase,
-				Flags: []cli.Flag{
-					&cli.StringFlag{
-						Name:  "new-passphrase-command",
-						Value: "",
-						Usage: "Read the new database passphrase from the standard output of `COMMAND`.",
-					},
-					&cli.StringFlag{
-						Name:  "new-passphrase-file",
-						Value: "",
-						Usage: "Read the new database passphrase from `FILE`.",
 					},
 				},
 			},
@@ -339,8 +348,10 @@ func findOrphanFiles(c *cli.Context) error {
 	return db.FindOrphanFiles(c.Bool("delete"))
 }
 
-func convertAESChacha20Poly1305(c *cli.Context) error {
+func changeMasterKey(c *cli.Context) error {
 	log.Level = flagLogLevel
+	log.Infof("Working on %s", flagDatabase)
+
 	pp, err := crypto.Passphrase(flagPassphraseCmd, flagPassphraseFile)
 	if err != nil {
 		return err
@@ -350,22 +361,73 @@ func convertAESChacha20Poly1305(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	var mk2 crypto.MasterKey
+
+	// Keys are made up of two 32-byte parts. The first part is the encryption
+	// key. The second is the hashing key. We're only changing the encryption
+	// key for now. So, we need to preserve the other part. We do this in a
+	// somewhat convoluted matter because we purposefully made the actual keys
+	// hard to extract.
+	type key struct {
+		maskedKey    []byte
+		encryptedKey []byte
+		xor          func([]byte) []byte
+	}
+	tk := key{
+		maskedKey: make([]byte, 64),
+	}
+
+	var tk2 *key
 	switch mk := mk1.(type) {
 	case *crypto.AESMasterKey:
-		log.Infof("MasterKey is AES. Converting to Chacha20Poly1305.")
-		mk2 = &crypto.Chacha20Poly1305MasterKey{
-			Chacha20Poly1305Key: (*crypto.Chacha20Poly1305Key)(unsafe.Pointer(mk.AESKey)),
-		}
+		log.Info("Old MasterKey is AES256")
+		tk2 = (*key)(unsafe.Pointer(mk.AESKey))
 	case *crypto.Chacha20Poly1305MasterKey:
-		log.Infof("MasterKey is Chacha20Poly1305. Converting to AES.")
+		log.Info("Old MasterKey is Chacha20Poly1305")
+		tk2 = (*key)(unsafe.Pointer(mk.Chacha20Poly1305Key))
+	default:
+		log.Fatalf("MasterKey is %T", mk)
+	}
+
+	// Make a new encryption key.
+	if _, err := rand.Read(tk.maskedKey[:32]); err != nil {
+		return err
+	}
+	// The last 32 bytes of the key are used as hash key. If we changed it,
+	// all the filenames would also need to change.
+	copy(tk.maskedKey[32:], tk2.maskedKey[32:])
+	tk.xor = tk2.xor
+
+	var alg int
+	switch f := strings.ToLower(c.String("format")); f {
+	case "auto":
+		if alg, err = crypto.Fastest(); err != nil {
+			log.Fatalf("crypto.Fastest: %v", err)
+		}
+	case "aes", "aes256":
+		alg = crypto.AES256
+	case "chacha20poly1305":
+		alg = crypto.Chacha20Poly1305
+	default:
+		log.Fatalf("Invalid format %q", f)
+	}
+
+	var mk2 crypto.MasterKey
+	switch alg {
+	case crypto.AES256:
+		log.Info("New MasterKey is AES256")
 		mk2 = &crypto.AESMasterKey{
-			AESKey: (*crypto.AESKey)(unsafe.Pointer(mk.Chacha20Poly1305Key)),
+			AESKey: (*crypto.AESKey)(unsafe.Pointer(&tk)),
+		}
+	case crypto.Chacha20Poly1305:
+		log.Info("New MasterKey is Chacha20Poly1305")
+		mk2 = &crypto.Chacha20Poly1305MasterKey{
+			Chacha20Poly1305Key: (*crypto.Chacha20Poly1305Key)(unsafe.Pointer(&tk)),
 		}
 	default:
-		log.Fatalf("MasterKey is %T", mk1)
+		log.Fatalf("alg %d", alg)
 	}
-	if ans := prompt("\nMake sure you have a backup of the database before proceeding.\nType CONVERT to continue: "); ans != "CONVERT" {
+
+	if ans := prompt("\nMake sure you have a backup of the database before proceeding.\nType CHANGE-MASTER-KEY to continue: "); ans != "CHANGE-MASTER-KEY" {
 		log.Fatal("Aborted.")
 	}
 
@@ -378,17 +440,16 @@ func convertAESChacha20Poly1305(c *cli.Context) error {
 		return h[:]
 	}
 
-	if err := filepath.WalkDir(flagDatabase, func(path string, d fs.DirEntry, err error) (retErr error) {
-		if d.IsDir() {
-			return nil
-		}
+	reEncryptFile := func(path string) (err error) {
+		defer func() {
+			if err != nil {
+				log.Infof("%s: %v", path, err)
+			}
+		}()
 		rel, err := filepath.Rel(flagDatabase, path)
 		if err != nil {
 			return err
 		}
-		defer func() {
-			log.Infof("%s, err=%v", rel, retErr)
-		}()
 		ctx := context(rel)
 
 		in, err := os.Open(path)
@@ -398,9 +459,11 @@ func convertAESChacha20Poly1305(c *cli.Context) error {
 		defer in.Close()
 		hdr := make([]byte, 5)
 		if _, err := io.ReadFull(in, hdr); err != nil {
+			log.Infof("%s Skipped", path)
 			return nil
 		}
 		if string(hdr[:4]) != "KRIN" {
+			log.Infof("%s Skipped", path)
 			return nil
 		}
 		k1, err := mk1.ReadEncryptedKey(in)
@@ -458,11 +521,62 @@ func convertAESChacha20Poly1305(c *cli.Context) error {
 		if err := w.Close(); err != nil {
 			return err
 		}
-		return os.Rename(path+".tmp", path)
-
-	}); err != nil {
-		return err
+		if err := os.Rename(path+".tmp", path); err != nil {
+			return err
+		}
+		log.Infof("%s Done", path)
+		return nil
 	}
+
+	type result struct {
+		path string
+		err  error
+	}
+
+	fileChan := make(chan string)
+	errChan := make(chan result)
+	var wg sync.WaitGroup
+
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func(in <-chan string, out chan<- result) {
+			defer wg.Done()
+			for path := range in {
+				if err := reEncryptFile(path); err != nil {
+					out <- result{path, err}
+				}
+			}
+		}(fileChan, errChan)
+	}
+
+	go func(in <-chan result) {
+		count := 0
+		for res := range in {
+			count++
+			log.Infof("%s: %v", res.path, res.err)
+		}
+		if count == 0 {
+			log.Info("All files re-encrypted successfully")
+		} else {
+			log.Infof("Re-encryption error count: %d", count)
+		}
+	}(errChan)
+
+	filepath.WalkDir(flagDatabase, func(path string, d fs.DirEntry, err error) error {
+		if d.IsDir() {
+			return nil
+		}
+		if err != nil {
+			errChan <- result{path, err}
+			return nil
+		}
+		fileChan <- path
+		return nil
+	})
+	close(fileChan)
+	wg.Wait()
+	close(errChan)
+
 	if err := os.Rename(mkFile+".new", mkFile); err != nil {
 		return err
 	}
@@ -471,7 +585,7 @@ func convertAESChacha20Poly1305(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	reencrypt := func(s string) (string, error) {
+	reEncryptString := func(s string) (string, error) {
 		b, err := base64.StdEncoding.DecodeString(s)
 		if err != nil {
 			return "", err
@@ -491,11 +605,11 @@ func convertAESChacha20Poly1305(c *cli.Context) error {
 		if err != nil {
 			return err
 		}
-		u.ServerSecretKey, err = reencrypt(u.ServerSecretKey)
+		u.ServerSecretKey, err = reEncryptString(u.ServerSecretKey)
 		if err != nil {
 			return err
 		}
-		u.TokenKey, err = reencrypt(u.TokenKey)
+		u.TokenKey, err = reEncryptString(u.TokenKey)
 		if err != nil {
 			return err
 		}
