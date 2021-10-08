@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"crypto/sha1"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -158,6 +159,23 @@ func main() {
 					&cli.StringFlag{
 						Name:  "new-email",
 						Usage: "The new email address of the user.",
+					},
+				},
+			},
+			&cli.Command{
+				Name:   "change-passphrase",
+				Usage:  "Change the passphrase that protects the database.",
+				Action: changePassphrase,
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:  "new-passphrase-command",
+						Value: "",
+						Usage: "Read the new database passphrase from the standard output of `COMMAND`.",
+					},
+					&cli.StringFlag{
+						Name:  "new-passphrase-file",
+						Value: "",
+						Usage: "Read the new database passphrase from `FILE`.",
 					},
 				},
 			},
@@ -560,5 +578,37 @@ func encryptBlobs(c *cli.Context) error {
 		return err
 	}
 
+	return nil
+}
+
+func changePassphrase(c *cli.Context) error {
+	log.Level = flagLogLevel
+
+	if !flagEncryptMetadata {
+		return errors.New("-encrypt-metadata must be true")
+	}
+	mkFile := filepath.Join(flagDatabase, "master.key")
+
+	oldPass, err := crypto.Passphrase(flagPassphraseCmd, flagPassphraseFile)
+	if err != nil {
+		return err
+	}
+	mk, err := crypto.ReadMasterKey(oldPass, mkFile)
+	if err != nil {
+		return err
+	}
+	defer mk.Wipe()
+
+	newPass, err := crypto.NewPassphrase(c.String("new-passphrase-command"), c.String("new-passphrase-file"))
+	if err != nil {
+		return err
+	}
+	if err := mk.Save(newPass, mkFile+".new"); err != nil {
+		return err
+	}
+	if err := os.Rename(mkFile+".new", mkFile); err != nil {
+		return err
+	}
+	log.Infof("Passphrase changed successfully [%s].", mkFile)
 	return nil
 }
