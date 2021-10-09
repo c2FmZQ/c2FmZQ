@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"crypto/rand"
 	"crypto/sha1"
 	"encoding/base64"
 	"errors"
@@ -13,7 +12,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"unsafe"
 
 	"github.com/urfave/cli/v2" // cli
 	"golang.org/x/term"
@@ -208,6 +206,15 @@ func initDB(c *cli.Context) (*database.Database, error) {
 	return database.New(flagDatabase, pp), nil
 }
 
+func createParent(filename string) {
+	dir, _ := filepath.Split(filename)
+	if _, err := os.Stat(dir); errors.Is(err, os.ErrNotExist) {
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			log.Fatalf("os.MkdirAll(%q): %w", dir, err)
+		}
+	}
+}
+
 func prompt(msg string) string {
 	fmt.Print(msg)
 	reply, _ := bufio.NewReader(os.Stdin).ReadString('\n')
@@ -362,47 +369,10 @@ func changeMasterKey(c *cli.Context) error {
 		return err
 	}
 
-	// Keys are made up of two 32-byte parts. The first part is the encryption
-	// key. The second is the hashing key. We're only changing the encryption
-	// key for now. So, we need to preserve the other part. We do this in a
-	// somewhat convoluted matter because we purposefully made the actual keys
-	// hard to extract.
-	type key struct {
-		maskedKey    []byte
-		encryptedKey []byte
-		xor          func([]byte) []byte
-	}
-	tk := key{
-		maskedKey: make([]byte, 64),
-	}
-
-	var tk2 *key
-	switch mk := mk1.(type) {
-	case *crypto.AESMasterKey:
-		log.Info("Old MasterKey is AES256")
-		tk2 = (*key)(unsafe.Pointer(mk.AESKey))
-	case *crypto.Chacha20Poly1305MasterKey:
-		log.Info("Old MasterKey is Chacha20Poly1305")
-		tk2 = (*key)(unsafe.Pointer(mk.Chacha20Poly1305Key))
-	default:
-		log.Fatalf("MasterKey is %T", mk)
-	}
-
-	// Make a new encryption key.
-	if _, err := rand.Read(tk.maskedKey[:32]); err != nil {
-		return err
-	}
-	// The last 32 bytes of the key are used as hash key. If we changed it,
-	// all the filenames would also need to change.
-	copy(tk.maskedKey[32:], tk2.maskedKey[32:])
-	tk.xor = tk2.xor
-
 	var alg int
 	switch f := strings.ToLower(c.String("format")); f {
 	case "auto":
-		if alg, err = crypto.Fastest(); err != nil {
-			log.Fatalf("crypto.Fastest: %v", err)
-		}
+		alg = crypto.PickFastest
 	case "aes", "aes256":
 		alg = crypto.AES256
 	case "chacha20poly1305":
@@ -411,20 +381,9 @@ func changeMasterKey(c *cli.Context) error {
 		log.Fatalf("Invalid format %q", f)
 	}
 
-	var mk2 crypto.MasterKey
-	switch alg {
-	case crypto.AES256:
-		log.Info("New MasterKey is AES256")
-		mk2 = &crypto.AESMasterKey{
-			AESKey: (*crypto.AESKey)(unsafe.Pointer(&tk)),
-		}
-	case crypto.Chacha20Poly1305:
-		log.Info("New MasterKey is Chacha20Poly1305")
-		mk2 = &crypto.Chacha20Poly1305MasterKey{
-			Chacha20Poly1305Key: (*crypto.Chacha20Poly1305Key)(unsafe.Pointer(&tk)),
-		}
-	default:
-		log.Fatalf("alg %d", alg)
+	mk2, err := crypto.CreateMasterKey(alg)
+	if err != nil {
+		return err
 	}
 
 	if ans := prompt("\nMake sure you have a backup of the database before proceeding.\nType CHANGE-MASTER-KEY to continue: "); ans != "CHANGE-MASTER-KEY" {
@@ -440,19 +399,23 @@ func changeMasterKey(c *cli.Context) error {
 		return h[:]
 	}
 
-	reEncryptFile := func(path string) (err error) {
+	db := database.New(flagDatabase, pp)
+
+	reEncryptFile := func(path database.DFile) (err error) {
 		defer func() {
 			if err != nil {
 				log.Infof("%s: %v", path, err)
 			}
 		}()
-		rel, err := filepath.Rel(flagDatabase, path)
-		if err != nil {
-			return err
+		rel := path.RelativePath
+		newRel := rel
+		if path.LogicalPath != "" {
+			h := mk2.Hash([]byte(path.LogicalPath))
+			dir := filepath.Join("metadata", fmt.Sprintf("%02X", h[0]))
+			newRel = filepath.Join(dir, base64.RawURLEncoding.EncodeToString(h))
 		}
-		ctx := context(rel)
-
-		in, err := os.Open(path)
+		oldPath := filepath.Join(db.Dir(), rel)
+		in, err := os.Open(oldPath)
 		if err != nil {
 			return err
 		}
@@ -471,13 +434,15 @@ func changeMasterKey(c *cli.Context) error {
 			return err
 		}
 		defer k1.Wipe()
-		r, err := k1.StartReader(ctx, in)
+		r, err := k1.StartReader(context(rel), in)
 		if err != nil {
 			return err
 		}
 		defer r.Close()
 
-		out, err := os.OpenFile(path+".tmp", os.O_WRONLY|os.O_CREATE|os.O_EXCL|os.O_SYNC, 0600)
+		newPath := filepath.Join(db.Dir(), newRel)
+		createParent(newPath)
+		out, err := os.OpenFile(newPath+".tmp", os.O_WRONLY|os.O_CREATE|os.O_EXCL|os.O_SYNC, 0600)
 		if err != nil {
 			return err
 		}
@@ -496,7 +461,7 @@ func changeMasterKey(c *cli.Context) error {
 			out.Close()
 			return err
 		}
-		w, err := k2.StartWriter(ctx, out)
+		w, err := k2.StartWriter(context(newRel), out)
 		if err != nil {
 			out.Close()
 			return err
@@ -521,10 +486,15 @@ func changeMasterKey(c *cli.Context) error {
 		if err := w.Close(); err != nil {
 			return err
 		}
-		if err := os.Rename(path+".tmp", path); err != nil {
+		if err := os.Rename(newPath+".tmp", newPath); err != nil {
 			return err
 		}
-		log.Infof("%s Done", path)
+		if oldPath != newPath {
+			if err := os.Remove(oldPath); err != nil {
+				return err
+			}
+		}
+		log.Infof("%s Done", path.RelativePath)
 		return nil
 	}
 
@@ -533,54 +503,44 @@ func changeMasterKey(c *cli.Context) error {
 		err  error
 	}
 
-	fileChan := make(chan string)
+	fileChan := db.FileIterator()
 	errChan := make(chan result)
 	var wg sync.WaitGroup
 
 	for i := 0; i < 10; i++ {
 		wg.Add(1)
-		go func(in <-chan string, out chan<- result) {
+		go func(in <-chan database.DFile, out chan<- result) {
 			defer wg.Done()
 			for path := range in {
 				if err := reEncryptFile(path); err != nil {
-					out <- result{path, err}
+					out <- result{path.RelativePath, err}
 				}
 			}
 		}(fileChan, errChan)
 	}
 
-	go func(in <-chan result) {
-		count := 0
-		for res := range in {
-			count++
-			log.Infof("%s: %v", res.path, res.err)
-		}
-		if count == 0 {
-			log.Info("All files re-encrypted successfully")
-		} else {
-			log.Infof("Re-encryption error count: %d", count)
-		}
-	}(errChan)
+	go func() {
+		wg.Wait()
+		close(errChan)
+	}()
 
-	filepath.WalkDir(flagDatabase, func(path string, d fs.DirEntry, err error) error {
-		if d.IsDir() {
-			return nil
-		}
-		if err != nil {
-			errChan <- result{path, err}
-			return nil
-		}
-		fileChan <- path
-		return nil
-	})
-	close(fileChan)
-	wg.Wait()
-	close(errChan)
+	count := 0
+	for res := range errChan {
+		count++
+		log.Infof("%s: %v", res.path, res.err)
+	}
+	if count == 0 {
+		log.Info("All files re-encrypted successfully")
+	} else {
+		log.Infof("Re-encryption error count: %d", count)
+	}
 
 	if err := os.Rename(mkFile+".new", mkFile); err != nil {
 		return err
 	}
-	db := database.New(flagDatabase, pp)
+	db.Wipe()
+	db = database.New(flagDatabase, pp)
+	defer db.Wipe()
 	uids, err := db.UserIDs()
 	if err != nil {
 		return err

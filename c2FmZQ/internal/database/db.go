@@ -104,6 +104,12 @@ type Database struct {
 	albumRefCacheMutex sync.Mutex
 }
 
+func (d *Database) Wipe() {
+	if d.masterKey != nil {
+		d.masterKey.Wipe()
+	}
+}
+
 // Dir returns the directory where the database stores its data.
 func (d *Database) Dir() string {
 	return d.dir
@@ -279,51 +285,9 @@ func (d *Database) FindOrphanFiles(del bool) error {
 		return err
 	}
 	delete(exist, "master.key")
-	delete(exist, d.filePath(userListFile))
-	delete(exist, d.filePath(quotaFile))
 
-	var ul []userList
-	if err := d.storage.ReadDataFile(d.filePath(userListFile), &ul); err != nil {
-		log.Errorf("ReadDataFile: %v", err)
-		return err
-	}
-	for _, u := range ul {
-		user, err := d.UserByID(u.UserID)
-		if err != nil {
-			log.Errorf("User(%q): %v", u.Email, err)
-			return err
-		}
-		delete(exist, d.filePath(user.home(userFile)))
-		delete(exist, d.filePath(user.home(contactListFile)))
-		delete(exist, d.filePath(user.home(albumManifest)))
-		delete(exist, d.fileSetPath(user, stingle.TrashSet))
-		delete(exist, d.fileSetPath(user, stingle.GallerySet))
-		albums, err := d.AlbumRefs(user)
-		if err != nil {
-			log.Errorf("AlbumRefs(%q): %v", u.Email, err)
-			return err
-		}
-		fsList := []string{
-			d.fileSetPath(user, stingle.TrashSet),
-			d.fileSetPath(user, stingle.GallerySet),
-		}
-		for _, v := range albums {
-			delete(exist, v.File)
-			fsList = append(fsList, v.File)
-		}
-		for _, f := range fsList {
-			var fs FileSet
-			if err := d.storage.ReadDataFile(f, &fs); err != nil {
-				log.Errorf("FileSet: %v", err)
-				return err
-			}
-			for _, file := range fs.Files {
-				delete(exist, file.StoreFile)
-				delete(exist, file.StoreThumb)
-				delete(exist, file.StoreFile+".ref")
-				delete(exist, file.StoreThumb+".ref")
-			}
-		}
+	for i := range d.FileIterator() {
+		delete(exist, i.RelativePath)
 	}
 	var sorted []string
 	for e := range exist {
@@ -341,4 +305,75 @@ func (d *Database) FindOrphanFiles(del bool) error {
 		log.Infof("Orphan file: %s", e)
 	}
 	return nil
+}
+
+// DFile encapsulates the path of a database file.
+type DFile struct {
+	RelativePath string // Relative path to database directory.
+	LogicalPath  string // Logical path before hashing.
+}
+
+// FileIterator returns a channel from which all the database files can be read.
+func (d *Database) FileIterator() <-chan DFile {
+	ch := make(chan DFile)
+	fp := func(f string) DFile {
+		return DFile{d.filePath(f), f}
+	}
+	fsp := func(u User, set string) DFile {
+		return fp(u.home(fmt.Sprintf(fileSetPattern, set)))
+	}
+	go func() {
+		ch <- fp(userListFile)
+		ch <- fp(quotaFile)
+		if _, err := os.Stat(filepath.Join(d.Dir(), d.filePath(cacheFile))); err == nil {
+			ch <- fp(cacheFile)
+		}
+
+		var ul []userList
+		if err := d.storage.ReadDataFile(d.filePath(userListFile), &ul); err != nil {
+			log.Errorf("ReadDataFile: %v", err)
+			return
+		}
+		for _, u := range ul {
+			user, err := d.UserByID(u.UserID)
+			if err != nil {
+				log.Errorf("User(%q): %v", u.Email, err)
+				return
+			}
+			ch <- fp(user.home(userFile))
+			ch <- fp(user.home(contactListFile))
+			ch <- fp(user.home(albumManifest))
+			ch <- fsp(user, stingle.TrashSet)
+			ch <- fsp(user, stingle.GallerySet)
+
+			albums, err := d.AlbumRefs(user)
+			if err != nil {
+				log.Errorf("AlbumRefs(%q): %v", u.Email, err)
+				return
+			}
+			fsList := []string{
+				d.fileSetPath(user, stingle.TrashSet),
+				d.fileSetPath(user, stingle.GallerySet),
+			}
+			for _, v := range albums {
+				ch <- DFile{v.File, ""}
+				fsList = append(fsList, v.File)
+			}
+			for _, f := range fsList {
+				var fs FileSet
+				if err := d.storage.ReadDataFile(f, &fs); err != nil {
+					log.Errorf("FileSet: %v", err)
+					return
+				}
+				for _, file := range fs.Files {
+					ch <- DFile{file.StoreFile, ""}
+					ch <- DFile{file.StoreThumb, ""}
+					ch <- DFile{file.StoreFile + ".ref", ""}
+					ch <- DFile{file.StoreThumb + ".ref", ""}
+				}
+			}
+		}
+		close(ch)
+	}()
+	return ch
 }
