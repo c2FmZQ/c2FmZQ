@@ -356,7 +356,6 @@ func (d *Database) FileIterator() <-chan DFile {
 				d.fileSetPath(user, stingle.GallerySet),
 			}
 			for _, v := range albums {
-				ch <- DFile{v.File, ""}
 				fsList = append(fsList, v.File)
 			}
 			for _, f := range fsList {
@@ -365,6 +364,10 @@ func (d *Database) FileIterator() <-chan DFile {
 					log.Errorf("FileSet: %v", err)
 					return
 				}
+				if fs.Album != nil && fs.Album.OwnerID != u.UserID {
+					continue
+				}
+				ch <- DFile{f, ""}
 				for _, file := range fs.Files {
 					ch <- DFile{file.StoreFile, ""}
 					ch <- DFile{file.StoreThumb, ""}
