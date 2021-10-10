@@ -357,11 +357,20 @@ func (r *AESStreamReader) Seek(offset int64, whence int) (int64, error) {
 	if newOffset == r.off {
 		return r.off, nil
 	}
+	// Move to new offset. Fast path if we already have enough data in the
+	// buffer.
+	if d := newOffset - r.off; d > 0 && d < int64(len(r.buf)) {
+		r.buf = r.buf[int(d):]
+		r.off = newOffset
+		return r.off, nil
+	}
+
+	// Move to new offset. Slow path. Seek to new position and read a new
+	// chunk.
 	seeker, ok := r.r.(io.Seeker)
 	if !ok {
 		return 0, errors.New("input is not seekable")
 	}
-	// Move to new offset.
 	r.off = newOffset
 	chunkOffset := r.off % int64(aesFileChunkSize)
 	seekTo := r.start + r.off/int64(aesFileChunkSize)*int64(aesFileChunkSize+r.gcm.Overhead())

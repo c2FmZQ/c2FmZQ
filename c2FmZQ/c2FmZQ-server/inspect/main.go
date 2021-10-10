@@ -210,7 +210,7 @@ func createParent(filename string) {
 	dir, _ := filepath.Split(filename)
 	if _, err := os.Stat(dir); errors.Is(err, os.ErrNotExist) {
 		if err := os.MkdirAll(dir, 0700); err != nil {
-			log.Fatalf("os.MkdirAll(%q): %w", dir, err)
+			log.Fatalf("os.MkdirAll(%q): %v", dir, err)
 		}
 	}
 }

@@ -5,8 +5,10 @@ import (
 	"bufio"
 	"bytes"
 	"compress/gzip"
+	"crypto/rand"
 	"crypto/sha1"
 	"encoding"
+	"encoding/binary"
 	"encoding/gob"
 	"encoding/hex"
 	"encoding/json"
@@ -15,7 +17,7 @@ import (
 	"io"
 	"io/fs"
 	"io/ioutil"
-	"math/rand"
+	mrand "math/rand"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -40,6 +42,7 @@ const (
 
 	optEncrypted  = 0x10
 	optCompressed = 0x20
+	optPadded     = 0x40
 )
 
 var (
@@ -113,7 +116,7 @@ func (s *Storage) Lock(fn string) error {
 	if err := createParentIfNotExist(lockf); err != nil {
 		return err
 	}
-	deadline := time.Duration(600+rand.Int()%60) * time.Second
+	deadline := time.Duration(600+mrand.Int()%60) * time.Second
 	for {
 		f, err := os.OpenFile(lockf, os.O_WRONLY|os.O_CREATE|os.O_EXCL|os.O_SYNC, 0600)
 		if errors.Is(err, os.ErrExist) {
@@ -124,7 +127,7 @@ func (s *Storage) Lock(fn string) error {
 				}
 			}
 			tryToRemoveStaleLock(lockf, deadline)
-			time.Sleep(time.Duration(100+rand.Int()%100) * time.Millisecond)
+			time.Sleep(time.Duration(100+mrand.Int()%100) * time.Millisecond)
 			continue
 		}
 		if err != nil {
@@ -363,7 +366,7 @@ func (s *Storage) ReadDataFile(filename string, obj interface{}) error {
 		return errors.New("file is encrypted, but a master key was not provided")
 	}
 
-	var r io.ReadCloser = f
+	var r io.ReadSeekCloser = f
 	if flags&optEncrypted != 0 {
 		// Read the encrypted file key.
 		k, err := s.masterKey.ReadEncryptedKey(f)
@@ -382,6 +385,11 @@ func (s *Storage) ReadDataFile(filename string, obj interface{}) error {
 		}
 		if bytes.Compare(hdr, h) != 0 {
 			return errors.New("wrong encrypted header")
+		}
+		if flags&optPadded != 0 {
+			if err := skipPadding(r); err != nil {
+				return err
+			}
 		}
 	}
 	var rc io.Reader = r
@@ -485,12 +493,13 @@ func (s *Storage) writeFile(ctx []byte, filename string, obj interface{}) (retEr
 	}
 	if s.masterKey != nil {
 		flags |= optEncrypted
+		flags |= optPadded
 	}
 	if s.compress {
 		flags |= optCompressed
 	}
 
-	w, err := s.openWriteStream(ctx, fn, flags)
+	w, err := s.openWriteStream(ctx, fn, flags, 64*1024)
 	if err != nil {
 		return err
 	}
@@ -556,8 +565,9 @@ func (s *Storage) OpenBlobWrite(writeFileName, finalFileName string) (io.WriteCl
 	var flags byte = optRawBytes
 	if s.masterKey != nil {
 		flags |= optEncrypted
+		flags |= optPadded
 	}
-	return s.openWriteStream(context(finalFileName), fn, flags)
+	return s.openWriteStream(context(finalFileName), fn, flags, 1024*1024)
 }
 
 // OpenBlobRead opens a blob file for reading.
@@ -614,6 +624,11 @@ func (s *Storage) OpenBlobRead(filename string) (stream io.ReadSeekCloser, retEr
 		if bytes.Compare(hdr, h) != 0 {
 			return nil, errors.New("wrong encrypted header")
 		}
+		if flags&optPadded != 0 {
+			if err := skipPadding(r); err != nil {
+				return nil, err
+			}
+		}
 	}
 	off, err := r.Seek(0, io.SeekCurrent)
 	if err != nil {
@@ -644,7 +659,7 @@ func (w *seekWrapper) Seek(offset int64, whence int) (newOffset int64, err error
 }
 
 // openWriteStream opens a write stream.
-func (s *Storage) openWriteStream(ctx []byte, fullPath string, flags byte) (io.WriteCloser, error) {
+func (s *Storage) openWriteStream(ctx []byte, fullPath string, flags byte, maxPadding int) (io.WriteCloser, error) {
 	f, err := os.OpenFile(fullPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL|os.O_SYNC, 0600)
 	if err != nil {
 		return nil, err
@@ -674,6 +689,11 @@ func (s *Storage) openWriteStream(ctx []byte, fullPath string, flags byte) (io.W
 		if _, err := w.Write([]byte{'K', 'R', 'I', 'N', flags}); err != nil {
 			w.Close()
 			return nil, err
+		}
+		if flags&optPadded != 0 {
+			if err := addPadding(w, maxPadding); err != nil {
+				return nil, err
+			}
 		}
 	}
 	var wc io.WriteCloser = w
@@ -783,4 +803,40 @@ func (s *Storage) EditDataFile(filename string, obj interface{}) (retErr error) 
 		break
 	}
 	return commit(true, nil)
+}
+
+func addPadding(w io.Writer, max int) error {
+	b := make([]byte, 3)
+	if _, err := rand.Read(b); err != nil {
+		return err
+	}
+	n := int(uint(b[0])<<16|uint(b[1])<<8|uint(b[2])) % max
+	if err := binary.Write(w, binary.BigEndian, int32(n)); err != nil {
+		return err
+	}
+	buf := bytes.Repeat(b, 1000)
+	for n > 0 {
+		l := len(buf)
+		if l > n {
+			l = n
+		}
+		nn, err := w.Write(buf[:l])
+		if err != nil {
+			return err
+		}
+		n -= nn
+	}
+	return nil
+}
+
+func skipPadding(r io.ReadSeeker) error {
+	var n int32
+	if err := binary.Read(r, binary.BigEndian, &n); err != nil {
+		return err
+	}
+	if n < 0 {
+		return errors.New("invalid padding")
+	}
+	_, err := r.Seek(int64(n), io.SeekCurrent)
+	return err
 }
