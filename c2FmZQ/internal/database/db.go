@@ -287,7 +287,11 @@ func (d *Database) FindOrphanFiles(del bool) error {
 	delete(exist, "master.key")
 
 	for i := range d.FileIterator() {
-		delete(exist, i.RelativePath)
+		if _, ok := exist[i.RelativePath]; ok {
+			delete(exist, i.RelativePath)
+		} else {
+			log.Errorf("Missing file: %s", i.RelativePath)
+		}
 	}
 	var sorted []string
 	for e := range exist {
@@ -323,7 +327,7 @@ func (d *Database) FileIterator() <-chan DFile {
 		return fp(u.home(fmt.Sprintf(fileSetPattern, set)))
 	}
 	go func() {
-		ch <- fp(userListFile)
+		defer close(ch)
 		ch <- fp(quotaFile)
 		if _, err := os.Stat(filepath.Join(d.Dir(), d.filePath(cacheFile))); err == nil {
 			ch <- fp(cacheFile)
@@ -334,40 +338,42 @@ func (d *Database) FileIterator() <-chan DFile {
 			log.Errorf("ReadDataFile: %v", err)
 			return
 		}
+		ch <- fp(userListFile)
+
 		for _, u := range ul {
 			user, err := d.UserByID(u.UserID)
 			if err != nil {
 				log.Errorf("User(%q): %v", u.Email, err)
-				return
+				continue
 			}
-			ch <- fp(user.home(userFile))
-			ch <- fp(user.home(contactListFile))
-			ch <- fp(user.home(albumManifest))
-			ch <- fsp(user, stingle.TrashSet)
-			ch <- fsp(user, stingle.GallerySet)
-
 			albums, err := d.AlbumRefs(user)
 			if err != nil {
 				log.Errorf("AlbumRefs(%q): %v", u.Email, err)
-				return
+				continue
 			}
-			fsList := []string{
-				d.fileSetPath(user, stingle.TrashSet),
-				d.fileSetPath(user, stingle.GallerySet),
+			type fsItem struct {
+				file string
+				desc string
+			}
+			fsList := []fsItem{
+				{d.fileSetPath(user, stingle.TrashSet), fmt.Sprintf("%d:Trash", user.UserID)},
+				{d.fileSetPath(user, stingle.GallerySet), fmt.Sprintf("%d:Gallery", user.UserID)},
 			}
 			for _, v := range albums {
-				fsList = append(fsList, v.File)
+				fsList = append(fsList, fsItem{v.File, fmt.Sprintf("%d:%s", user.UserID, v.AlbumID)})
 			}
 			for _, f := range fsList {
 				var fs FileSet
-				if err := d.storage.ReadDataFile(f, &fs); err != nil {
-					log.Errorf("FileSet: %v", err)
-					return
+				if err := d.storage.ReadDataFile(f.file, &fs); err != nil {
+					log.Errorf("FileSet: %s %v", f.desc, err)
+					continue
 				}
 				if fs.Album != nil && fs.Album.OwnerID != u.UserID {
 					continue
 				}
-				ch <- DFile{f, ""}
+				if fs.Album != nil {
+					ch <- DFile{f.file, ""}
+				}
 				for _, file := range fs.Files {
 					ch <- DFile{file.StoreFile, ""}
 					ch <- DFile{file.StoreThumb, ""}
@@ -375,8 +381,12 @@ func (d *Database) FileIterator() <-chan DFile {
 					ch <- DFile{file.StoreThumb + ".ref", ""}
 				}
 			}
+			ch <- fp(user.home(userFile))
+			ch <- fp(user.home(contactListFile))
+			ch <- fp(user.home(albumManifest))
+			ch <- fsp(user, stingle.TrashSet)
+			ch <- fsp(user, stingle.GallerySet)
 		}
-		close(ch)
 	}()
 	return ch
 }

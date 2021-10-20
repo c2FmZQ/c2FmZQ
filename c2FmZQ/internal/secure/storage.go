@@ -387,7 +387,7 @@ func (s *Storage) ReadDataFile(filename string, obj interface{}) error {
 			return errors.New("wrong encrypted header")
 		}
 		if flags&optPadded != 0 {
-			if err := skipPadding(r); err != nil {
+			if err := SkipPadding(r); err != nil {
 				return err
 			}
 		}
@@ -625,7 +625,7 @@ func (s *Storage) OpenBlobRead(filename string) (stream io.ReadSeekCloser, retEr
 			return nil, errors.New("wrong encrypted header")
 		}
 		if flags&optPadded != 0 {
-			if err := skipPadding(r); err != nil {
+			if err := SkipPadding(r); err != nil {
 				return nil, err
 			}
 		}
@@ -691,7 +691,7 @@ func (s *Storage) openWriteStream(ctx []byte, fullPath string, flags byte, maxPa
 			return nil, err
 		}
 		if flags&optPadded != 0 {
-			if err := addPadding(w, maxPadding); err != nil {
+			if err := AddPadding(w, maxPadding); err != nil {
 				return nil, err
 			}
 		}
@@ -805,7 +805,9 @@ func (s *Storage) EditDataFile(filename string, obj interface{}) (retErr error) 
 	return commit(true, nil)
 }
 
-func addPadding(w io.Writer, max int) error {
+// AddPadding writes a random-sized padding in the range [0,max[ at the current
+// write position.
+func AddPadding(w io.Writer, max int) error {
 	b := make([]byte, 3)
 	if _, err := rand.Read(b); err != nil {
 		return err
@@ -829,7 +831,9 @@ func addPadding(w io.Writer, max int) error {
 	return nil
 }
 
-func skipPadding(r io.ReadSeeker) error {
+// SkipPadding skips the random-sized padding starting at the current read
+// position.
+func SkipPadding(r io.ReadSeeker) error {
 	var n int32
 	if err := binary.Read(r, binary.BigEndian, &n); err != nil {
 		return err

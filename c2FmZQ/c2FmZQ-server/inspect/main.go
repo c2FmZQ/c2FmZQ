@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/sha1"
 	"encoding/base64"
 	"errors"
@@ -414,6 +415,11 @@ func changeMasterKey(c *cli.Context) error {
 			dir := filepath.Join("metadata", fmt.Sprintf("%02X", h[0]))
 			newRel = filepath.Join(dir, base64.RawURLEncoding.EncodeToString(h))
 		}
+		maxPadding := 1024 * 1024
+		if strings.HasPrefix(newRel, "metadata/") || strings.HasSuffix(newRel, ".ref") {
+			maxPadding = 64 * 1024
+		}
+
 		oldPath := filepath.Join(db.Dir(), rel)
 		in, err := os.Open(oldPath)
 		if err != nil {
@@ -440,6 +446,21 @@ func changeMasterKey(c *cli.Context) error {
 		}
 		defer r.Close()
 
+		// Read the header again.
+		h := make([]byte, 5)
+		if _, err := io.ReadFull(r, h); err != nil {
+			return err
+		}
+		if bytes.Compare(hdr, h) != 0 {
+			return errors.New("wrong encrypted header")
+		}
+		if hdr[4]&0x40 != 0 {
+			if err := secure.SkipPadding(r); err != nil {
+				return err
+			}
+		}
+		hdr[4] |= 0x40 // padded
+
 		newPath := filepath.Join(db.Dir(), newRel)
 		createParent(newPath)
 		out, err := os.OpenFile(newPath+".tmp", os.O_WRONLY|os.O_CREATE|os.O_EXCL|os.O_SYNC, 0600)
@@ -464,6 +485,13 @@ func changeMasterKey(c *cli.Context) error {
 		w, err := k2.StartWriter(context(newRel), out)
 		if err != nil {
 			out.Close()
+			return err
+		}
+		if _, err := w.Write(hdr); err != nil {
+			out.Close()
+			return err
+		}
+		if err := secure.AddPadding(w, maxPadding); err != nil {
 			return err
 		}
 		var buf [4096]byte
@@ -494,7 +522,6 @@ func changeMasterKey(c *cli.Context) error {
 				return err
 			}
 		}
-		log.Infof("%s Done", path.RelativePath)
 		return nil
 	}
 
@@ -512,9 +539,8 @@ func changeMasterKey(c *cli.Context) error {
 		go func(in <-chan database.DFile, out chan<- result) {
 			defer wg.Done()
 			for path := range in {
-				if err := reEncryptFile(path); err != nil {
-					out <- result{path.RelativePath, err}
-				}
+				err := reEncryptFile(path)
+				out <- result{path.RelativePath, err}
 			}
 		}(fileChan, errChan)
 	}
@@ -524,15 +550,24 @@ func changeMasterKey(c *cli.Context) error {
 		close(errChan)
 	}()
 
-	count := 0
+	errCount := 0
+	doneCount := 0
 	for res := range errChan {
-		count++
-		log.Infof("%s: %v", res.path, res.err)
+		if res.err != nil {
+			errCount++
+			log.Infof("%s: %v", res.path, res.err)
+			continue
+		}
+		doneCount++
+		if doneCount%100 == 0 {
+			log.Infof("%d done", doneCount)
+		}
 	}
-	if count == 0 {
+	log.Infof("%d done", doneCount)
+	if errCount == 0 {
 		log.Info("All files re-encrypted successfully")
 	} else {
-		log.Infof("Re-encryption error count: %d", count)
+		log.Infof("Re-encryption error count: %d", errCount)
 	}
 
 	if err := os.Rename(mkFile+".new", mkFile); err != nil {
