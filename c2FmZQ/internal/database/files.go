@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 
@@ -127,17 +128,26 @@ func (d *Database) addFileToFileSet(user User, file FileSpec, name, set, albumID
 // relative to the database's root directory.
 func (d *Database) TempFile(dir string) (io.WriteCloser, string, error) {
 	name := make([]byte, 32)
-	if _, err := rand.Read(name); err != nil {
-		return nil, "", err
+	for {
+		if _, err := rand.Read(name); err != nil {
+			return nil, "", err
+		}
+		temp := filepath.Join(dir, base64.RawURLEncoding.EncodeToString(name))
+		fullTemp := filepath.Join(d.Dir(), temp)
+		final, _ := finalFilename(temp)
+		if _, err := os.Stat(filepath.Join(d.Dir(), final)); err == nil {
+			log.Debugf("TempFile collision: %s", final)
+			continue
+		}
+		if err := createParentIfNotExist(fullTemp); err != nil {
+			return nil, "", err
+		}
+		w, err := d.storage.OpenBlobWrite(temp, final)
+		if errors.Is(err, fs.ErrExist) {
+			continue
+		}
+		return w, fullTemp, err
 	}
-	temp := filepath.Join(dir, base64.RawURLEncoding.EncodeToString(name))
-	fullTemp := filepath.Join(d.Dir(), temp)
-	if err := createParentIfNotExist(fullTemp); err != nil {
-		return nil, "", err
-	}
-	final, _ := finalFilename(temp)
-	w, err := d.storage.OpenBlobWrite(temp, final)
-	return w, fullTemp, err
 }
 
 func finalFilename(temp string) (string, error) {

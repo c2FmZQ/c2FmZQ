@@ -3,7 +3,9 @@ package database
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -79,11 +81,18 @@ func (d *Database) Album(user User, albumID string) (*AlbumSpec, error) {
 // makeAlbumPath returns a new random path for an album.
 func (d *Database) makeAlbumPath() (string, error) {
 	name := make([]byte, 32)
-	if _, err := rand.Read(name); err != nil {
-		return "", err
+	for {
+		if _, err := rand.Read(name); err != nil {
+			return "", err
+		}
+		dir := filepath.Join("metadata", fmt.Sprintf("%02X", name[0]))
+		file := filepath.Join(dir, base64.RawURLEncoding.EncodeToString(name))
+		if err := d.storage.CreateEmptyFile(file, FileSet{}); errors.Is(err, fs.ErrExist) {
+			log.Debugf("makeAlbumPath collision: %s", file)
+			continue
+		}
+		return file, nil
 	}
-	dir := filepath.Join("metadata", fmt.Sprintf("%02X", name[0]))
-	return filepath.Join(dir, base64.RawURLEncoding.EncodeToString(name)), nil
 }
 
 // AddAlbum creates a new empty album with the given information.
@@ -96,9 +105,6 @@ func (d *Database) AddAlbum(owner User, album AlbumSpec) (retErr error) {
 		return err
 	}
 	if err := d.addAlbumRef(owner.UserID, album.AlbumID, ap); err != nil {
-		return err
-	}
-	if err := d.storage.CreateEmptyFile(ap, FileSet{}); err != nil {
 		return err
 	}
 	commit, fs, err := d.fileSetForUpdate(owner, stingle.AlbumSet, album.AlbumID)
