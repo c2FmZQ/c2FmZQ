@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path"
@@ -223,6 +224,10 @@ func (d *Database) DumpFile(filename string) error {
 	}
 	if err := d.storage.ReadDataFile(filename, &fileSet); err == nil && fileSet.Files != nil {
 		return out(fileSet)
+	}
+	if r, err := d.storage.OpenBlobRead(filename); err == nil {
+		io.Copy(os.Stdout, r)
+		return r.Close()
 	} else {
 		return err
 	}
