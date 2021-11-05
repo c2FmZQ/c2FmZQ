@@ -61,10 +61,21 @@ type BlobSpec struct {
 	RefCount int `json:"refCount"`
 }
 
+func (d *Database) blobRef(blob string) string {
+	return d.filePath(blob + ".ref")
+}
+
 // incRefCount increases the RefCount of a blob by delta, which can be negative.
 func (d *Database) incRefCount(blob string, delta int) int {
 	var blobSpec BlobSpec
-	commit, err := d.storage.OpenForUpdate(blob+".ref", &blobSpec)
+	ref := d.blobRef(blob)
+	commit, err := d.storage.OpenForUpdate(ref, &blobSpec)
+	if errors.Is(err, os.ErrNotExist) {
+		log.Debugf("incRefCount(%q, %d) failed: %v", blob, delta, err)
+		// Try the old file name.
+		ref = blob + ".ref"
+		commit, err = d.storage.OpenForUpdate(ref, &blobSpec)
+	}
 	if err != nil {
 		log.Fatalf("incRefCount(%q, %d) failed: %v", blob, delta, err)
 	}
@@ -74,12 +85,11 @@ func (d *Database) incRefCount(blob string, delta int) int {
 	}
 	log.Debugf("RefCount(%q)%+d -> %d", blob, delta, blobSpec.RefCount)
 	if blobSpec.RefCount == 0 {
-		fn := filepath.Join(d.dir, blob)
-		if err := os.Remove(fn); err != nil {
+		if err := os.Remove(filepath.Join(d.dir, blob)); err != nil {
 			log.Errorf("os.Remove(%q) failed: %v", blob, err)
 		}
-		if err := os.Remove(fn + ".ref"); err != nil {
-			log.Errorf("os.Remove(%q) failed: %v", blob+".ref", err)
+		if err := os.Remove(filepath.Join(d.dir, ref)); err != nil {
+			log.Errorf("os.Remove(%q) failed: %v", ref, err)
 		}
 	}
 	return blobSpec.RefCount
@@ -117,8 +127,8 @@ func (d *Database) addFileToFileSet(user User, file FileSpec, name, set, albumID
 		fileSet.Deletes = []DeleteEvent{}
 	}
 	fileSet.Files[name] = &file
-	d.storage.CreateEmptyFile(file.StoreFile+".ref", BlobSpec{})
-	d.storage.CreateEmptyFile(file.StoreThumb+".ref", BlobSpec{})
+	d.storage.CreateEmptyFile(d.blobRef(file.StoreFile), BlobSpec{})
+	d.storage.CreateEmptyFile(d.blobRef(file.StoreThumb), BlobSpec{})
 	d.incRefCount(file.StoreFile, 1)
 	d.incRefCount(file.StoreThumb, 1)
 	return nil
@@ -137,6 +147,10 @@ func (d *Database) TempFile(dir string) (io.WriteCloser, string, error) {
 		final, _ := finalFilename(temp)
 		if _, err := os.Stat(filepath.Join(d.Dir(), final)); err == nil {
 			log.Debugf("TempFile collision: %s", final)
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(d.Dir(), d.blobRef(final))); err == nil {
+			log.Debugf("TempFile collision: %s", d.blobRef(final))
 			continue
 		}
 		if err := createParentIfNotExist(fullTemp); err != nil {
@@ -208,7 +222,7 @@ func (d *Database) AddFile(user User, file FileSpec, name, set, albumID string) 
 	file.DateModified = nowInMS()
 
 	if err := d.addFileToFileSet(user, file, name, set, albumID); err != nil {
-		for _, f := range []string{fn, tn, fn + ".ref", tn + ".ref"} {
+		for _, f := range []string{fn, tn, d.blobRef(fn), d.blobRef(tn)} {
 			if err := os.Remove(filepath.Join(d.Dir(), f)); err != nil {
 				log.Errorf("os.Remove(%q) failed: %v", f, err)
 			}

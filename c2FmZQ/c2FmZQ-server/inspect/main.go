@@ -173,6 +173,11 @@ func main() {
 				Action: encryptBlobs,
 			},
 			&cli.Command{
+				Name:   "rename-ref-files",
+				Usage:  "Rename old ref files (now deprecated)",
+				Action: renameRefFiles,
+			},
+			&cli.Command{
 				Name:   "rename-user",
 				Usage:  "Change the email address of a user.",
 				Action: renameUser,
@@ -613,6 +618,95 @@ func changeMasterKey(c *cli.Context) error {
 		}
 		log.Infof("Updated user %d", uid)
 	}
+	return nil
+}
+
+func renameRefFiles(c *cli.Context) error {
+	log.Level = flagLogLevel
+	log.Infof("Working on %s", flagDatabase)
+
+	pp, err := crypto.Passphrase(flagPassphraseCmd, flagPassphraseFile)
+	if err != nil {
+		return err
+	}
+	mkFile := filepath.Join(flagDatabase, "master.key")
+	mk, err := crypto.ReadMasterKey(pp, mkFile)
+	if err != nil {
+		return err
+	}
+	s := secure.NewStorage(flagDatabase, mk)
+
+	reEncryptFile := func(path database.DFile) (err error) {
+		defer func() {
+			if err != nil {
+				log.Infof("%s: %v", path, err)
+			}
+		}()
+		if !strings.HasSuffix(path.RelativePath, ".ref") {
+			return nil
+		}
+
+		h := mk.Hash([]byte(path.RelativePath))
+		dir := filepath.Join("metadata", fmt.Sprintf("%02X", h[0]))
+		newRel := filepath.Join(dir, base64.RawURLEncoding.EncodeToString(h))
+
+		var blobSpec database.BlobSpec
+		if err := s.ReadDataFile(path.RelativePath, &blobSpec); err != nil {
+			return err
+		}
+		if err := s.SaveDataFile(newRel, &blobSpec); err != nil {
+			return err
+		}
+		return os.Remove(filepath.Join(flagDatabase, path.RelativePath))
+	}
+
+	type result struct {
+		path string
+		err  error
+	}
+
+	db := database.New(flagDatabase, pp)
+	defer db.Wipe()
+	fileChan := db.FileIterator()
+	errChan := make(chan result)
+	var wg sync.WaitGroup
+
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func(in <-chan database.DFile, out chan<- result) {
+			defer wg.Done()
+			for path := range in {
+				err := reEncryptFile(path)
+				out <- result{path.RelativePath, err}
+			}
+		}(fileChan, errChan)
+	}
+
+	go func() {
+		wg.Wait()
+		close(errChan)
+	}()
+
+	errCount := 0
+	doneCount := 0
+	for res := range errChan {
+		if res.err != nil {
+			errCount++
+			log.Infof("%s: %v", res.path, res.err)
+			continue
+		}
+		doneCount++
+		if doneCount%100 == 0 {
+			log.Infof("%d scanned", doneCount)
+		}
+	}
+	log.Infof("%d scanned", doneCount)
+	if errCount == 0 {
+		log.Info("All files renamed successfully")
+	} else {
+		log.Infof("Renaming error count: %d", errCount)
+	}
+
 	return nil
 }
 

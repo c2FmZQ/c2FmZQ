@@ -82,7 +82,7 @@ func New(dir string, passphrase []byte) *Database {
 	db.storage.CreateEmptyFile(db.filePath(userListFile), []userList{})
 	db.CreateEmptyQuotaFile()
 
-	db.fileSetCacheSize = 1
+	db.fileSetCacheSize = 20
 	db.fileSetCache, _ = simplelru.NewLRU(db.fileSetCacheSize, nil)
 	db.albumRefCacheSize = 20
 	db.albumRefCache, _ = simplelru.NewLRU(db.albumRefCacheSize, nil)
@@ -295,7 +295,7 @@ func (d *Database) FindOrphanFiles(del bool) error {
 		if _, ok := exist[i.RelativePath]; ok {
 			delete(exist, i.RelativePath)
 		} else {
-			log.Errorf("Missing file: %s", i.RelativePath)
+			log.Errorf("Missing file: %s (%s)", i.RelativePath, i.LogicalPath)
 		}
 	}
 	var sorted []string
@@ -345,6 +345,8 @@ func (d *Database) FileIterator() <-chan DFile {
 		}
 		ch <- fp(userListFile)
 
+		blobs := make(map[string]bool)
+
 		for _, u := range ul {
 			user, err := d.UserByID(u.UserID)
 			if err != nil {
@@ -380,10 +382,21 @@ func (d *Database) FileIterator() <-chan DFile {
 					ch <- DFile{f.file, ""}
 				}
 				for _, file := range fs.Files {
-					ch <- DFile{file.StoreFile, ""}
-					ch <- DFile{file.StoreThumb, ""}
-					ch <- DFile{file.StoreFile + ".ref", ""}
-					ch <- DFile{file.StoreThumb + ".ref", ""}
+					for _, blob := range []string{file.StoreFile, file.StoreThumb} {
+						if blobs[blob] {
+							continue
+						}
+						blobs[blob] = true
+
+						ch <- DFile{blob, ""}
+						ref := blob + ".ref"
+						if _, err := os.Stat(filepath.Join(d.dir, ref)); err == nil {
+							// Old file name format.
+							ch <- DFile{ref, ""}
+						} else {
+							ch <- DFile{d.blobRef(blob), ref}
+						}
+					}
 				}
 			}
 			ch <- fp(user.home(userFile))
