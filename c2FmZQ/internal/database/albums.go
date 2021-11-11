@@ -85,7 +85,7 @@ func (d *Database) makeAlbumPath() (string, error) {
 		if _, err := rand.Read(name); err != nil {
 			return "", err
 		}
-		dir := filepath.Join("metadata", fmt.Sprintf("%02X", name[0]))
+		dir := fmt.Sprintf("%02X", name[0])
 		file := filepath.Join(dir, base64.RawURLEncoding.EncodeToString(name))
 		if err := d.storage.CreateEmptyFile(file, FileSet{}); errors.Is(err, fs.ErrExist) {
 			log.Debugf("makeAlbumPath collision: %s", file)

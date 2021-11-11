@@ -22,8 +22,7 @@ var (
 	ErrQuotaExceeded = errors.New("quota exceeded")
 )
 
-// FileSet encapsulates to information of a file set, i.e. a group of files
-// like the Gallery, the Trash, or albums.
+// FileSet encapsulates to information of a file set, i.e. a group of files like the Gallery, the Trash, or albums.
 type FileSet struct {
 	// If the file set is an album, Album points to the album spec.
 	Album *AlbumSpec `json:"album,omitempty"`
@@ -170,7 +169,7 @@ func finalFilename(temp string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join("blobs", fmt.Sprintf("%02X", b[0]), n), nil
+	return filepath.Join(fmt.Sprintf("%02X", b[0]), n), nil
 }
 
 // AddFile adds a new file to the database. The file content and thumbnail are
