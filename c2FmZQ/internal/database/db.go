@@ -78,10 +78,6 @@ func New(dir string, passphrase []byte) *Database {
 		db.storage = secure.NewStorage(dir, nil)
 	}
 
-	if _, err := os.Stat(filepath.Join(dir, "metadata")); err == nil {
-		db.haveMetadataDir = true
-	}
-
 	// Fail silently if it already exists.
 	db.storage.CreateEmptyFile(db.filePath(userListFile), []userList{})
 	db.CreateEmptyQuotaFile()
@@ -107,8 +103,6 @@ type Database struct {
 	albumRefCache      *simplelru.LRU
 	albumRefCacheSize  int
 	albumRefCacheMutex sync.Mutex
-
-	haveMetadataDir bool
 }
 
 func (d *Database) Wipe() {
@@ -135,9 +129,6 @@ func (d *Database) filePath(elems ...string) string {
 	if d.masterKey != nil {
 		name := d.masterKey.Hash([]byte(path.Join(elems...)))
 		dir := fmt.Sprintf("%02X", name[0])
-		if d.haveMetadataDir {
-			dir = filepath.Join("metadata", dir)
-		}
 		return filepath.Join(dir, base64.RawURLEncoding.EncodeToString(name))
 	}
 	return filepath.Join("metadata", filepath.Join(elems...))
@@ -398,13 +389,7 @@ func (d *Database) FileIterator() <-chan DFile {
 						blobs[blob] = true
 
 						ch <- DFile{blob, ""}
-						ref := blob + ".ref"
-						if _, err := os.Stat(filepath.Join(d.dir, ref)); err == nil {
-							// Old file name format.
-							ch <- DFile{ref, ""}
-						} else {
-							ch <- DFile{d.blobRef(blob), ref}
-						}
+						ch <- DFile{d.blobRef(blob), blob + ".ref"}
 					}
 				}
 			}

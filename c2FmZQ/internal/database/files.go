@@ -69,12 +69,6 @@ func (d *Database) incRefCount(blob string, delta int) int {
 	var blobSpec BlobSpec
 	ref := d.blobRef(blob)
 	commit, err := d.storage.OpenForUpdate(ref, &blobSpec)
-	if errors.Is(err, os.ErrNotExist) {
-		log.Debugf("incRefCount(%q, %d) failed: %v", blob, delta, err)
-		// Try the old file name.
-		ref = blob + ".ref"
-		commit, err = d.storage.OpenForUpdate(ref, &blobSpec)
-	}
 	if err != nil {
 		log.Fatalf("incRefCount(%q, %d) failed: %v", blob, delta, err)
 	}

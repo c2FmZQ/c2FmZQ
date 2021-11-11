@@ -19,17 +19,33 @@ func addFile(db *database.Database, user database.User, name, set, albumID strin
 		DateCreated:    1,
 		DateModified:   2,
 		Version:        "1",
-		StoreFile:      filepath.Join(db.Dir(), "upload-"+name),
 		StoreFileSize:  1000,
-		StoreThumb:     filepath.Join(db.Dir(), "upload-thumb-"+name),
 		StoreThumbSize: 100,
 	}
-	if err := os.WriteFile(fs.StoreFile, []byte("file content"), 0600); err != nil {
+	w, fn, err := db.TempFile(filepath.Join(db.Dir(), "uploads"))
+	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(fs.StoreThumb, []byte("thumb content"), 0600); err != nil {
+	if _, err := w.Write([]byte("file content")); err != nil {
 		return err
 	}
+	if err := w.Close(); err != nil {
+		return err
+	}
+	fs.StoreFile = fn
+
+	w, fn, err = db.TempFile(filepath.Join(db.Dir(), "uploads"))
+	if err != nil {
+		return err
+	}
+	if _, err := w.Write([]byte("thumb content")); err != nil {
+		return err
+	}
+	if err := w.Close(); err != nil {
+		return err
+	}
+	fs.StoreThumb = fn
+
 	return db.AddFile(user, fs, name, set, albumID)
 }
 

@@ -587,11 +587,7 @@ func (s *Storage) OpenBlobRead(filename string) (stream io.ReadSeekCloser, retEr
 		return nil, err
 	}
 	if string(hdr[:4]) != "KRIN" {
-		// File is an old blob. The client can read it directly.
-		if _, err := f.Seek(0, io.SeekStart); err != nil {
-			return nil, err
-		}
-		return f, nil
+		return nil, errors.New("wrong file type")
 	}
 	flags := hdr[4]
 	if flags&optRawBytes == 0 {
