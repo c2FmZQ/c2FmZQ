@@ -321,7 +321,7 @@ func (s *Server) handleTokenDownload(w http.ResponseWriter, req *http.Request) {
 		reqStatus.WithLabelValues(req.Method, baseURI, "nok").Inc()
 		return
 	}
-	log.Infof("%s %s (UserID:%d)", req.Method, req.URL, user.UserID)
+	log.Infof("%s %s[...] (UserID:%d)", req.Method, baseURI, user.UserID)
 
 	f, err := s.db.DownloadFile(user, token.Set, token.File, token.Thumb)
 	if err != nil {
