@@ -78,6 +78,10 @@ func New(dir string, passphrase []byte) *Database {
 		db.storage = secure.NewStorage(dir, nil)
 	}
 
+	if _, err := os.Stat(filepath.Join(dir, "metadata")); err == nil {
+		log.Fatal("Old database format detected. Please read https://github.com/c2FmZQ/c2FmZQ/commit/b55a977c26bdcfec9453d5942c6009a5f80b6d23")
+	}
+
 	// Fail silently if it already exists.
 	db.storage.CreateEmptyFile(db.filePath(userListFile), []userList{})
 	db.CreateEmptyQuotaFile()
