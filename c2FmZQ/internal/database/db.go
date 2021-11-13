@@ -250,7 +250,7 @@ func (d *Database) UserIDs() ([]int64, error) {
 }
 
 // DumpUsers shows information about all the users to stdout.
-func (d *Database) DumpUsers() {
+func (d *Database) DumpUsers(details bool) {
 	var ul []userList
 	if err := d.storage.ReadDataFile(d.filePath(userListFile), &ul); err != nil {
 		log.Errorf("ReadDataFile: %v", err)
@@ -262,16 +262,18 @@ func (d *Database) DumpUsers() {
 			continue
 		}
 		fmt.Printf("ID %d [%s]: %s\n", u.UserID, u.Email, d.filePath(user.home(userFile)))
-		fmt.Printf("  -contacts: %s\n", d.filePath(user.home(contactListFile)))
-		fmt.Printf("  -trash: %s\n", d.fileSetPath(user, stingle.TrashSet))
-		fmt.Printf("  -gallery: %s\n", d.fileSetPath(user, stingle.GallerySet))
-		albums, err := d.AlbumRefs(user)
-		if err != nil {
-			log.Errorf("AlbumRefs(%q): %v", u.Email, err)
-			continue
-		}
-		for k, v := range albums {
-			fmt.Printf("  -album %s: %s\n", k, v.File)
+		if details {
+			fmt.Printf("  -contacts: %s\n", d.filePath(user.home(contactListFile)))
+			fmt.Printf("  -trash: %s\n", d.fileSetPath(user, stingle.TrashSet))
+			fmt.Printf("  -gallery: %s\n", d.fileSetPath(user, stingle.GallerySet))
+			albums, err := d.AlbumRefs(user)
+			if err != nil {
+				log.Errorf("AlbumRefs(%q): %v", u.Email, err)
+				continue
+			}
+			for k, v := range albums {
+				fmt.Printf("  -album %s: %s\n", k, v.File)
+			}
 		}
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"crypto/sha1"
+	"encoding/base32"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -13,6 +14,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/mdp/qrterminal"
+	"github.com/pquerna/otp/totp"
 	"github.com/urfave/cli/v2" // cli
 	"golang.org/x/term"
 
@@ -84,6 +87,13 @@ func main() {
 				Name:   "users",
 				Usage:  "Show the list of users.",
 				Action: showUsers,
+				Flags: []cli.Flag{
+					&cli.BoolFlag{
+						Name:    "long",
+						Usage:   "Show details.",
+						Aliases: []string{"l"},
+					},
+				},
 			},
 			&cli.Command{
 				Name:    "cat",
@@ -181,6 +191,26 @@ func main() {
 					},
 				},
 			},
+			&cli.Command{
+				Name:   "otp",
+				Usage:  "Show, set, or clear a user's OTP key. (EXPERIMENTAL)",
+				Action: changeUserOTPKey,
+				Flags: []cli.Flag{
+					&cli.Int64Flag{
+						Name:    "userid",
+						Usage:   "The userid to update.",
+						Aliases: []string{"u"},
+					},
+					&cli.BoolFlag{
+						Name:  "set",
+						Usage: "OTP should be enabled for this user.",
+					},
+					&cli.BoolFlag{
+						Name:  "clear",
+						Usage: "OTP should be disabled for this user.",
+					},
+				},
+			},
 		},
 	}
 
@@ -239,7 +269,7 @@ func showUsers(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	db.DumpUsers()
+	db.DumpUsers(c.Bool("long"))
 	return nil
 }
 
@@ -622,6 +652,97 @@ func renameUser(c *cli.Context) error {
 		return cli.ShowSubcommandHelp(c)
 	}
 	return db.RenameUser(id, email)
+}
+
+func changeUserOTPKey(c *cli.Context) error {
+	db, err := initDB(c)
+	if err != nil {
+		return err
+	}
+	defer db.Wipe()
+	id := c.Int64("userid")
+	if id <= 0 {
+		return cli.ShowSubcommandHelp(c)
+	}
+	user, err := db.UserByID(id)
+	if err != nil {
+		return err
+	}
+	changed := false
+	if c.Bool("clear") {
+		if user.OTPKey == "" {
+			log.Infof("User's OTP Key is not set")
+		} else {
+			user.OTPKey = ""
+			changed = true
+		}
+	}
+	if c.Bool("set") {
+		if user.OTPKey != "" {
+			log.Infof("User's OTP Key is already set")
+		} else {
+			key, err := totp.Generate(totp.GenerateOpts{
+				Issuer:      "c2FmZQ",
+				AccountName: user.Email,
+			})
+			if err != nil {
+				return err
+			}
+			user.OTPKey = key.Secret()
+			changed = true
+		}
+	}
+	if changed {
+		if err := db.UpdateUser(user); err != nil {
+			return err
+		}
+	}
+
+	if user.OTPKey == "" {
+		log.Infof("User's OTP is disabled")
+		return nil
+	}
+
+	opts := totp.GenerateOpts{
+		Issuer:      "c2FmZQ",
+		AccountName: user.Email,
+	}
+	if opts.Secret, err = base32.StdEncoding.WithPadding(base32.NoPadding).DecodeString(user.OTPKey); err != nil {
+		return err
+	}
+	key, err := totp.Generate(opts)
+	if err != nil {
+		return err
+	}
+
+	var buf strings.Builder
+	qrterminal.GenerateHalfBlock(key.URL(), qrterminal.L, &buf)
+	qr := buf.String()
+	// The generated QR code is designed for a terminal with a dark
+	// background. If the terminal has a light background, it looks
+	// awkward (but still works). For convenience, we'll show the
+	// QR code in its original version and with reversed colors.
+	rev := strings.Map(func(r rune) rune {
+		switch r {
+		case '█':
+			return ' '
+		case ' ':
+			return '█'
+		case '▀':
+			return '▄'
+		case '▄':
+			return '▀'
+		default:
+			return r
+		}
+	}, qr)
+	// Show QR code with original and reverse color side by side.
+	s1, s2 := strings.Split(qr, "\n"), strings.Split(rev, "\n")
+	for i := range s1 {
+		fmt.Println(s1[i], s2[i])
+	}
+	fmt.Printf("TOTP KEY: %s\n\n", user.OTPKey)
+	return nil
 }
 
 func changePassphrase(c *cli.Context) error {

@@ -5,8 +5,10 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
+	"github.com/pquerna/otp/totp"
 	"golang.org/x/crypto/bcrypt"
 
 	"c2FmZQ/internal/database"
@@ -82,7 +84,7 @@ func (s *Server) handleCreateAccount(req *http.Request) *stingle.Response {
 //  - stingle.Response(ok)
 //     Part(salt, The salt used to hash the password)
 func (s *Server) handlePreLogin(req *http.Request) *stingle.Response {
-	email := req.PostFormValue("email")
+	email, _ := parseOTP(req.PostFormValue("email"))
 	u, err := s.db.User(email)
 	if err != nil {
 		return stingle.ResponseNOK()
@@ -108,7 +110,7 @@ func (s *Server) handlePreLogin(req *http.Request) *stingle.Response {
 //      Part(isKeyBackedUp, Whether the user's secret key is in keyBundle)
 //      Part(homeFolder, A "Home folder" used on the app's device)
 func (s *Server) handleLogin(req *http.Request) *stingle.Response {
-	email := req.PostFormValue("email")
+	email, passcode := parseOTP(req.PostFormValue("email"))
 	pass := req.PostFormValue("password")
 	u, err := s.db.User(email)
 	if err != nil {
@@ -119,7 +121,10 @@ func (s *Server) handleLogin(req *http.Request) *stingle.Response {
 		log.Errorf("base64.StdEncoding.DecodeString: %v", err)
 		return stingle.ResponseNOK().AddError("Invalid credentials")
 	}
-	if err != nil || bcrypt.CompareHashAndPassword(hashed, []byte(pass)) != nil {
+	pwdOK := bcrypt.CompareHashAndPassword(hashed, []byte(pass)) == nil
+	otpOK := validateOTP(u.OTPKey, passcode)
+	log.Debugf("UserID:%d pwdOK:%v otpOK:%v", u.UserID, pwdOK, otpOK)
+	if !pwdOK || !otpOK {
 		return stingle.ResponseNOK().AddError("Invalid credentials")
 	}
 	tk, err := s.db.DecryptTokenKey(u.TokenKey)
@@ -386,4 +391,21 @@ func (s *Server) handleReuploadKeys(user database.User, req *http.Request) *stin
 		return stingle.ResponseNOK()
 	}
 	return stingle.ResponseOK()
+}
+
+// parseOTP parses an email address in the form of passcode%user@domain and
+// returns the email address and the passcode.
+func parseOTP(v string) (email string, passcode string) {
+	p := strings.SplitN(v, "%", 2)
+	if len(p) == 2 {
+		return p[1], p[0]
+	}
+	return v, ""
+}
+
+func validateOTP(key, passcode string) bool {
+	if key == "" && passcode == "" {
+		return true
+	}
+	return totp.Validate(passcode, key)
 }

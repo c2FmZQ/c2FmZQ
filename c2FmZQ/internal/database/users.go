@@ -55,6 +55,8 @@ type User struct {
 	// The server's secret key used for encrypting tokens for this user,
 	// encrypted with master key.
 	TokenKey string `json:"serverTokenKey"`
+	// The OTP key for this user.
+	OTPKey string `json:"otpKey,omitempty"`
 }
 
 // A user's contact list information.
