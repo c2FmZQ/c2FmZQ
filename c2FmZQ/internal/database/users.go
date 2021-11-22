@@ -113,7 +113,7 @@ func (d *Database) AddUser(u User) (retErr error) {
 		log.Errorf("d.storage.OpenForUpdate: %v", err)
 		return err
 	}
-	defer commit(true, &retErr)
+	defer commit(false, &retErr)
 	uids := make(map[int64]bool)
 	for _, i := range ul {
 		if i.Email == u.Email {
@@ -126,7 +126,6 @@ func (d *Database) AddUser(u User) (retErr error) {
 	for {
 		bi, err := rand.Int(rand.Reader, big.NewInt(int64(math.MaxInt32-1000000)))
 		if err != nil {
-			commit(false, nil)
 			return err
 		}
 		if uid = bi.Int64() + 1000000; !uids[uid] {
@@ -166,7 +165,7 @@ func (d *Database) AddUser(u User) (retErr error) {
 	if err := d.storage.CreateEmptyFile(d.filePath(u.home(contactListFile)), ContactList{}); err != nil {
 		return err
 	}
-	return nil
+	return commit(true, nil)
 }
 
 // UpdateUser adds or updates a user object.
