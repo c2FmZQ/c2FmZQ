@@ -18,6 +18,7 @@ import (
 	"c2FmZQ/internal/database"
 	"c2FmZQ/internal/log"
 	"c2FmZQ/internal/server/basicauth"
+	"c2FmZQ/internal/server/limit"
 	"c2FmZQ/internal/stingle"
 	"c2FmZQ/internal/stingle/token"
 )
@@ -69,24 +70,26 @@ func init() {
 
 // An HTTP server that implements the Stingle server API.
 type Server struct {
-	AllowCreateAccount bool
-	BaseURL            string
-	Redirect404        string
-	mux                *http.ServeMux
-	srv                *http.Server
-	db                 *database.Database
-	addr               string
-	basicAuth          *basicauth.BasicAuth
-	pathPrefix         string
+	AllowCreateAccount    bool
+	BaseURL               string
+	Redirect404           string
+	MaxConcurrentRequests int
+	mux                   *http.ServeMux
+	srv                   *http.Server
+	db                    *database.Database
+	addr                  string
+	basicAuth             *basicauth.BasicAuth
+	pathPrefix            string
 }
 
 // New returns an instance of Server that's fully initialized and ready to run.
 func New(db *database.Database, addr, htdigest, pathPrefix string) *Server {
 	s := &Server{
-		mux:        http.NewServeMux(),
-		db:         db,
-		addr:       addr,
-		pathPrefix: pathPrefix,
+		MaxConcurrentRequests: 5,
+		mux:                   http.NewServeMux(),
+		db:                    db,
+		addr:                  addr,
+		pathPrefix:            pathPrefix,
 	}
 	if htdigest != "" {
 		var err error
@@ -137,6 +140,7 @@ func New(db *database.Database, addr, htdigest, pathPrefix string) *Server {
 func (s *Server) wrapHandler() http.Handler {
 	handler := http.Handler(s.mux)
 	handler = gziphandler.GzipHandler(handler)
+	handler = limit.New(s.MaxConcurrentRequests, handler)
 	handler = promhttp.InstrumentHandlerRequestSize(reqSize, handler)
 	handler = promhttp.InstrumentHandlerResponseSize(respSize, handler)
 	return handler

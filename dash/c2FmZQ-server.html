@@ -47,8 +47,8 @@
 <script>
 new PromConsole.Graph({
   node: document.querySelector("#requestGraph"),
-  expr: "sum by (job) (rate(server_request_size_count{job='c2FmZQ-server'}[5m]))",
-  name: "Requests",
+  expr: "sum by (job,code) (rate(server_request_size_count{job='c2FmZQ-server'}[5m]))",
+  name: "Requests-[[code]]",
   yAxisFormatter: PromConsole.NumberFormatter.humanizeNoSmallPrefix,
   yHoverFormatter: PromConsole.NumberFormatter.humanizeNoSmallPrefix,
   yUnits: "/s",
@@ -66,10 +66,10 @@ new PromConsole.Graph({
 new PromConsole.Graph({
   node: document.querySelector("#requestBytesGraph"),
   expr: [
-     "sum by (job) (rate(server_request_size_sum{job='c2FmZQ-server'}[5m]))",
-     "sum by (job) (rate(server_response_size_sum{job='c2FmZQ-server'}[5m]))"
+     "sum by (job,code) (rate(server_request_size_sum{job='c2FmZQ-server'}[5m]))",
+     "sum by (job,code) (rate(server_response_size_sum{job='c2FmZQ-server'}[5m]))"
   ],
-  name: ["In", "Out"],
+  name: ["In-[[code]]", "Out-[[code]]"],
   yAxisFormatter: PromConsole.NumberFormatter.humanizeNoSmallPrefix,
   yHoverFormatter: PromConsole.NumberFormatter.humanizeNoSmallPrefix,
   yUnits: "/s",
