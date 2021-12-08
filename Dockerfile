@@ -1,4 +1,4 @@
-FROM golang:1.17.2-alpine3.14 AS build
+FROM golang:1.17.4-alpine3.15 AS build
 MAINTAINER rthellend@gmail.com
 RUN apk update && apk upgrade
 
@@ -11,7 +11,7 @@ ADD c2FmZQ /app/go/src/c2FmZQ
 RUN go install ./c2FmZQ-server
 RUN go install ./c2FmZQ-server/inspect
 
-FROM alpine:3.14
+FROM alpine:3.15
 RUN apk update && apk upgrade
 RUN mkdir -p /app/bin
 COPY --from=build /go/bin/c2FmZQ-server /go/bin/inspect /app/bin/
