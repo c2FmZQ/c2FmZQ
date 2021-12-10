@@ -114,12 +114,12 @@ func New(db *database.Database, addr, htdigest, pathPrefix string) *Server {
 	s.mux.HandleFunc(pathPrefix+"/v2/keys/reuploadKeys", s.auth(s.handleReuploadKeys))
 
 	s.mux.HandleFunc(pathPrefix+"/v2/sync/getUpdates", s.auth(s.handleGetUpdates))
-	s.mux.HandleFunc(pathPrefix+"/v2/sync/upload", s.handleUpload)
+	s.mux.HandleFunc(pathPrefix+"/v2/sync/upload", s.method("POST", s.handleUpload))
 	s.mux.HandleFunc(pathPrefix+"/v2/sync/moveFile", s.auth(s.handleMoveFile))
 	s.mux.HandleFunc(pathPrefix+"/v2/sync/emptyTrash", s.auth(s.handleEmptyTrash))
 	s.mux.HandleFunc(pathPrefix+"/v2/sync/delete", s.auth(s.handleDelete))
-	s.mux.HandleFunc(pathPrefix+"/v2/sync/download", s.handleDownload)
-	s.mux.HandleFunc(pathPrefix+"/v2/download/", s.handleTokenDownload)
+	s.mux.HandleFunc(pathPrefix+"/v2/sync/download", s.method("POST", s.handleDownload))
+	s.mux.HandleFunc(pathPrefix+"/v2/download/", s.method("GET", s.handleTokenDownload))
 	s.mux.HandleFunc(pathPrefix+"/v2/sync/getDownloadUrls", s.auth(s.handleGetDownloadUrls))
 	s.mux.HandleFunc(pathPrefix+"/v2/sync/getUrl", s.auth(s.handleGetURL))
 
@@ -257,9 +257,21 @@ func (s *Server) setDeadline(ctx context.Context, t time.Time) {
 	c.SetDeadline(t)
 }
 
+// method wraps handlers to enforce a specific method.
+func (s *Server) method(method string, next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		if req.Method != method {
+			reqStatus.WithLabelValues(req.Method, req.URL.String(), "nok").Inc()
+			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		next(w, req)
+	}
+}
+
 // noauth wraps handlers that don't require authentication.
 func (s *Server) noauth(f func(*http.Request) *stingle.Response) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
+	return s.method("POST", func(w http.ResponseWriter, req *http.Request) {
 		timer := prometheus.NewTimer(reqLatency.WithLabelValues(req.Method, req.URL.String()))
 		defer timer.ObserveDuration()
 		s.setDeadline(req.Context(), time.Now().Add(30*time.Second))
@@ -271,7 +283,7 @@ func (s *Server) noauth(f func(*http.Request) *stingle.Response) http.HandlerFun
 			log.Errorf("Send: %v", err)
 		}
 		reqStatus.WithLabelValues(req.Method, req.URL.String(), sr.Status).Inc()
-	}
+	})
 }
 
 // checkToken validates the signed token that was given to the client when it
@@ -304,7 +316,7 @@ func (s *Server) checkToken(tok, scope string) (token.Token, database.User, erro
 // auth wraps handlers that require authentication, checking the token, and
 // passing the authenticated user to the underlying handler.
 func (s *Server) auth(f func(database.User, *http.Request) *stingle.Response) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
+	return s.method("POST", func(w http.ResponseWriter, req *http.Request) {
 		timer := prometheus.NewTimer(reqLatency.WithLabelValues(req.Method, req.URL.String()))
 		defer timer.ObserveDuration()
 		s.setDeadline(req.Context(), time.Now().Add(30*time.Second))
@@ -327,7 +339,7 @@ func (s *Server) auth(f func(database.User, *http.Request) *stingle.Response) ht
 			log.Errorf("Send: %v", err)
 		}
 		reqStatus.WithLabelValues(req.Method, req.URL.String(), sr.Status).Inc()
-	}
+	})
 }
 
 // handleNotFound handles requests for undefined endpoints.
