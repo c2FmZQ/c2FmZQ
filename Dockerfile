@@ -1,4 +1,4 @@
-FROM golang:1.17.4-alpine3.15 AS build
+FROM golang:1.17.5-alpine3.15 AS build
 MAINTAINER rthellend@gmail.com
 RUN apk update && apk upgrade
 
@@ -8,6 +8,7 @@ WORKDIR /app/go/src/c2FmZQ
 RUN go mod download
 
 ADD c2FmZQ /app/go/src/c2FmZQ
+RUN CGO_ENABLED=0 go test ./internal/server/...
 RUN go install ./c2FmZQ-server
 RUN go install ./c2FmZQ-server/inspect
 
