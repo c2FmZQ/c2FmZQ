@@ -11,9 +11,11 @@ import (
 	"time"
 
 	"github.com/NYTimes/gziphandler"
+	"github.com/hashicorp/golang-lru"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"golang.org/x/crypto/acme/autocert"
+	"golang.org/x/time/rate"
 
 	"c2FmZQ/internal/database"
 	"c2FmZQ/internal/log"
@@ -80,6 +82,8 @@ type Server struct {
 	addr                  string
 	basicAuth             *basicauth.BasicAuth
 	pathPrefix            string
+	preLoginCache         *lru.Cache
+	checkKeyCache         *lru.Cache
 }
 
 // New returns an instance of Server that's fully initialized and ready to run.
@@ -91,6 +95,15 @@ func New(db *database.Database, addr, htdigest, pathPrefix string) *Server {
 		addr:                  addr,
 		pathPrefix:            pathPrefix,
 	}
+	cache, err := lru.New(10000)
+	if err != nil {
+		log.Fatalf("lru.New: %v", err)
+	}
+	s.preLoginCache = cache
+	if cache, err = lru.New(10000); err != nil {
+		log.Fatalf("lru.New: %v", err)
+	}
+	s.checkKeyCache = cache
 	if htdigest != "" {
 		var err error
 		if s.basicAuth, err = basicauth.New(htdigest); err != nil {
@@ -271,6 +284,7 @@ func (s *Server) method(method string, next http.HandlerFunc) http.HandlerFunc {
 
 // noauth wraps handlers that don't require authentication.
 func (s *Server) noauth(f func(*http.Request) *stingle.Response) http.HandlerFunc {
+	rl := rate.NewLimiter(rate.Limit(0.5), 1)
 	return s.method("POST", func(w http.ResponseWriter, req *http.Request) {
 		timer := prometheus.NewTimer(reqLatency.WithLabelValues(req.Method, req.URL.String()))
 		defer timer.ObserveDuration()
@@ -278,6 +292,9 @@ func (s *Server) noauth(f func(*http.Request) *stingle.Response) http.HandlerFun
 		defer s.setDeadline(req.Context(), time.Time{})
 		log.Infof("%s %s", req.Method, req.URL)
 		req.ParseForm()
+		if err := rl.Wait(req.Context()); err != nil {
+			return
+		}
 		sr := f(req)
 		if err := sr.Send(w); err != nil {
 			log.Errorf("Send: %v", err)

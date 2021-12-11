@@ -24,6 +24,26 @@ func createAccountAndLogin(sock, email string) (*client, error) {
 	return c, nil
 }
 
+func TestPreLoginFakeSalt(t *testing.T) {
+	sock, shutdown := startServer(t)
+	defer shutdown()
+	c := newClient(sock)
+
+	form := url.Values{}
+	form.Set("email", "foo")
+	sr, err := c.sendRequest("/v2/login/preLogin", form)
+	if err != nil || sr.Status != "ok" {
+		t.Fatalf("preLogin failed: %v %v", err, sr)
+	}
+	salt := sr.Part("salt").(string)
+	if sr, err = c.sendRequest("/v2/login/preLogin", form); err != nil || sr.Status != "ok" {
+		t.Fatalf("preLogin failed: %v %v", err, sr)
+	}
+	if want, got := salt, sr.Part("salt").(string); want != got {
+		t.Errorf("Salt mismatch, want %s, got %s", want, got)
+	}
+}
+
 func TestLogin(t *testing.T) {
 	sock, shutdown := startServer(t)
 	defer shutdown()

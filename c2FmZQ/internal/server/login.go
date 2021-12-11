@@ -3,6 +3,7 @@ package server
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"net/http"
 	"strings"
@@ -39,14 +40,7 @@ const (
 // Returns:
 //  - stingle.Response(ok)
 func (s *Server) handleCreateAccount(req *http.Request) *stingle.Response {
-	if !s.AllowCreateAccount {
-		return stingle.ResponseNOK().
-			AddError("This server does not allow new accounts to be created")
-	}
-	email := req.PostFormValue("email")
-	if _, err := s.db.User(email); err == nil {
-		return stingle.ResponseNOK()
-	}
+	defer time.Sleep(time.Duration(time.Now().UnixNano()%200) * time.Millisecond)
 	pk, err := stingle.DecodeKeyBundle(req.PostFormValue("keyBundle"))
 	if err != nil {
 		return stingle.ResponseNOK()
@@ -56,7 +50,13 @@ func (s *Server) handleCreateAccount(req *http.Request) *stingle.Response {
 		log.Errorf("bcrypt.GenerateFromPassword: %v", err)
 		return stingle.ResponseNOK()
 	}
-
+	email := req.PostFormValue("email")
+	if _, err := s.db.User(email); err == nil {
+		return stingle.ResponseNOK()
+	}
+	if !s.AllowCreateAccount {
+		return stingle.ResponseNOK()
+	}
 	if err := s.db.AddUser(
 		database.User{
 			Email:          email,
@@ -84,12 +84,21 @@ func (s *Server) handleCreateAccount(req *http.Request) *stingle.Response {
 //  - stingle.Response(ok)
 //     Part(salt, The salt used to hash the password)
 func (s *Server) handlePreLogin(req *http.Request) *stingle.Response {
+	defer time.Sleep(time.Duration(time.Now().UnixNano()%200) * time.Millisecond)
 	email, _ := parseOTP(req.PostFormValue("email"))
-	u, err := s.db.User(email)
-	if err != nil {
+	if u, err := s.db.User(email); err == nil {
+		return stingle.ResponseOK().AddPart("salt", u.Salt)
+	}
+	if v, ok := s.preLoginCache.Get(email); ok {
+		return stingle.ResponseOK().AddPart("salt", v.(string))
+	}
+	fakeSalt := make([]byte, 16)
+	if _, err := rand.Read(fakeSalt); err != nil {
 		return stingle.ResponseNOK()
 	}
-	return stingle.ResponseOK().AddPart("salt", u.Salt)
+	v := strings.ToUpper(hex.EncodeToString(fakeSalt))
+	s.preLoginCache.Add(email, v)
+	return stingle.ResponseOK().AddPart("salt", v)
 }
 
 // handleLogin handles the /v2/login/login endpoint.
@@ -251,19 +260,35 @@ func (s *Server) handleGetServerPK(user database.User, req *http.Request) *sting
 //      Part(isKeyBackedUp, Whether the encrypted secret of the user in on the server)
 //      Part(serverPK, The public key of the server associated with this account)
 func (s *Server) handleCheckKey(req *http.Request) *stingle.Response {
+	defer time.Sleep(time.Duration(time.Now().UnixNano()%200) * time.Millisecond)
 	email := req.PostFormValue("email")
-	u, err := s.db.User(email)
-	if err != nil {
-		return stingle.ResponseNOK()
-	}
-	rnd := make([]byte, 32)
+	rnd := make([]byte, 64)
 	if _, err := rand.Read(rnd); err != nil {
 		return stingle.ResponseNOK()
 	}
+	var (
+		isBackup string
+		pk       stingle.PublicKey
+		serverPK stingle.PublicKey
+	)
+	if u, err := s.db.User(email); err == nil {
+		pk = u.PublicKey
+		serverPK = u.ServerPublicKey
+		isBackup = u.IsBackup
+	} else {
+		isBackup = "1"
+		pk = stingle.PublicKeyFromBytes(rnd[:32])
+		if v, ok := s.checkKeyCache.Get(email); ok {
+			serverPK = v.(stingle.PublicKey)
+		} else {
+			serverPK = stingle.PublicKeyFromBytes(rnd[32:])
+			s.checkKeyCache.Add(email, serverPK)
+		}
+	}
 	return stingle.ResponseOK().
-		AddPart("challenge", u.PublicKey.SealBox(append([]byte("validkey_"), rnd...))).
-		AddPart("isKeyBackedUp", u.IsBackup).
-		AddPart("serverPK", u.ServerPublicKeyForExport())
+		AddPart("challenge", pk.SealBox(append([]byte("validkey_"), rnd[:16]...))).
+		AddPart("isKeyBackedUp", isBackup).
+		AddPart("serverPK", base64.StdEncoding.EncodeToString(serverPK.ToBytes()))
 }
 
 // handleRecoverAccount handles the /v2/login/recoverAccount endpoint, which
@@ -284,6 +309,7 @@ func (s *Server) handleCheckKey(req *http.Request) *stingle.Response {
 //  - stingle.Response(ok)
 //      Part(result, OK)
 func (s *Server) handleRecoverAccount(req *http.Request) *stingle.Response {
+	defer time.Sleep(time.Duration(time.Now().UnixNano()%200) * time.Millisecond)
 	email := req.PostFormValue("email")
 	user, err := s.db.User(email)
 	if err != nil {
