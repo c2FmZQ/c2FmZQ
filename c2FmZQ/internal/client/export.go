@@ -105,7 +105,11 @@ func (c *Client) Cat(patterns []string) error {
 }
 
 func (c *Client) catFile(item ListItem) error {
-	f, err := os.Open(item.FilePath)
+	var f io.ReadCloser
+	var err error
+	if f, err = os.Open(item.FilePath); errors.Is(err, os.ErrNotExist) {
+		f, err = c.download(item.FSFile.File, item.Set, "0")
+	}
 	if err != nil {
 		return err
 	}
