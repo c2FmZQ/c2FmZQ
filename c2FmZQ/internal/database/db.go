@@ -128,6 +128,30 @@ func (d *Database) Hash(in []byte) []byte {
 	return h[:]
 }
 
+// Encrypt encrypts an arbitrary message with the master key.
+func (d *Database) Encrypt(m []byte) (string, error) {
+	if d.masterKey == nil {
+		return base64.StdEncoding.EncodeToString(m), nil
+	}
+	b, err := d.masterKey.Encrypt(m)
+	if err != nil {
+		return "", err
+	}
+	return base64.StdEncoding.EncodeToString(b), nil
+}
+
+// Decrypt decrypts an arbitrary message with the master key.
+func (d *Database) Decrypt(m string) ([]byte, error) {
+	b, err := base64.StdEncoding.DecodeString(m)
+	if err != nil {
+		return nil, err
+	}
+	if d.masterKey == nil {
+		return b, nil
+	}
+	return d.masterKey.Decrypt(b)
+}
+
 // filePath returns a cryptographically secure hash of a logical file name.
 func (d *Database) filePath(elems ...string) string {
 	if d.masterKey != nil {
@@ -286,7 +310,11 @@ func (d *Database) DumpUsers(details bool) {
 			log.Errorf("User(%q): %v", u.Email, err)
 			continue
 		}
-		fmt.Printf("ID %d [%s]: %s\n", u.UserID, u.Email, d.filePath(user.home(userFile)))
+		disabled := ""
+		if user.LoginDisabled {
+			disabled = " DISABLED"
+		}
+		fmt.Printf("ID %d%s [%s]: %s\n", u.UserID, disabled, u.Email, d.filePath(user.home(userFile)))
 		if details {
 			fmt.Printf("  -contacts: %s\n", d.filePath(user.home(contactListFile)))
 			fmt.Printf("  -trash: %s\n", d.fileSetPath(user, stingle.TrashSet))

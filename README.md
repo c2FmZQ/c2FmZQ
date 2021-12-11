@@ -8,6 +8,9 @@
   * [Connecting the Stingle Photos app to this server](#stingle)
   * [Scale and performance](#scale)
   * [How to run the server](#run-server)
+  * [Experimental features](#experimental)
+    * [One-time passwords (OTP)](#totp)
+    * [Decoy / duress passwords](#decoy)
 * [c2FmZQ Client](#c2FmZQ-client)
   * [Mount as fuse filesystem](#fuse)
   * [Connecting to stingle.org account](#connect-to-stingle)
@@ -196,6 +199,50 @@ cd c2FmZQ/c2FmZQ-server
 GOOS=windows GOARCH=amd64 go build -o c2FmZQ-server.exe
 GOOS=linux GOARCH=arm go build -o c2FmZQ-server-arm
 GOOS=darwin GOARCH=arm64 go build -o c2FmZQ-server-darwin
+```
+
+---
+
+## <a name="experimental"></a>Experimental features
+
+The following features are experimental and could change or disappear in the future.
+
+### <a name="totp"></a>One-time passwords (OTP)
+
+[One-time passwords](https://en.wikipedia.org/wiki/Time-based_One-Time_Password) are
+extra numeric passcodes that change every 30 seconds. They are a form of second factor
+authentication (2FA).
+
+To enable, use the `inspect otp` command.
+
+```
+docker exec -it c2fmzq-server inspect otp
+```
+
+Use the `--set` flag to enable otp, or `--clear` to disable it.
+
+The `inspect otp` command will display a QR code on the screen. Scan it with an
+authenticator app like [Google Authenticator](https://play.google.com/store/apps/details?id=com.google.android.apps.authenticator2)
+or [Authy](https://play.google.com/store/apps/details?id=com.authy.authy).
+
+Then, login with *passcode*%email instead of just email.
+
+---
+
+### <a name="decoy"></a>Decoy / duress passwords
+
+Decoy passwords can be associated with any normal account. When a
+decoy password is used to login, the login is successful, but the user
+is actually logged in with a different account, not their normal account.
+
+Note that logging in with decoy passwords is not as safe as normal accounts
+because the passwords have to be known by the server. So, someone with access to
+the server metadata could access the files in any decoy account.
+
+To enable, use the `inspect decoy` command.
+
+```
+docker exec -it c2fmzq-server inspect decoy
 ```
 
 ---

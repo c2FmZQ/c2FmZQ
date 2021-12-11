@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 
@@ -61,7 +62,7 @@ func (s *Server) handleCreateAccount(req *http.Request) *stingle.Response {
 	if !s.AllowCreateAccount {
 		return stingle.ResponseNOK()
 	}
-	if err := s.db.AddUser(
+	if _, err := s.db.AddUser(
 		database.User{
 			Email:          email,
 			HashedPassword: base64.StdEncoding.EncodeToString(hashed),
@@ -90,7 +91,7 @@ func (s *Server) handleCreateAccount(req *http.Request) *stingle.Response {
 func (s *Server) handlePreLogin(req *http.Request) *stingle.Response {
 	defer time.Sleep(time.Duration(time.Now().UnixNano()%200) * time.Millisecond)
 	email, _ := parseOTP(req.PostFormValue("email"))
-	if u, err := s.db.User(email); err == nil {
+	if u, err := s.db.User(email); err == nil && !u.LoginDisabled {
 		return stingle.ResponseOK().AddPart("salt", u.Salt)
 	}
 	if v, ok := s.preLoginCache.Get(email); ok {
@@ -129,16 +130,28 @@ func (s *Server) handleLogin(req *http.Request) *stingle.Response {
 	if err != nil {
 		return stingle.ResponseNOK().AddError("Invalid credentials")
 	}
+	if u.LoginDisabled {
+		return stingle.ResponseNOK().AddError("Invalid credentials")
+	}
 	hashed, err := base64.StdEncoding.DecodeString(u.HashedPassword)
 	if err != nil {
 		log.Errorf("base64.StdEncoding.DecodeString: %v", err)
 		return stingle.ResponseNOK().AddError("Invalid credentials")
 	}
-	pwdOK := bcrypt.CompareHashAndPassword(hashed, []byte(pass)) == nil
-	otpOK := validateOTP(u.OTPKey, passcode)
-	log.Debugf("UserID:%d pwdOK:%v otpOK:%v", u.UserID, pwdOK, otpOK)
-	if !pwdOK || !otpOK {
-		return stingle.ResponseNOK().AddError("Invalid credentials")
+	pwCh, otpCh := make(chan bool), make(chan bool)
+	decoyCh := make(chan *database.User)
+	go func() { pwCh <- bcrypt.CompareHashAndPassword(hashed, []byte(pass)) == nil }()
+	go func() { otpCh <- validateOTP(u.OTPKey, passcode) }()
+	go func() { decoyCh <- s.decoyLogin(u, pass) }()
+	pwOK, otpOK := <-pwCh, <-otpCh
+	decoyUser := <-decoyCh
+
+	log.Debugf("UserID:%d pwOK:%v otpOK:%v", u.UserID, pwOK, otpOK)
+	if !pwOK || !otpOK {
+		if decoyUser == nil {
+			return stingle.ResponseNOK().AddError("Invalid credentials")
+		}
+		u = *decoyUser
 	}
 	tk, err := s.db.DecryptTokenKey(u.TokenKey)
 	if err != nil {
@@ -153,6 +166,45 @@ func (s *Server) handleLogin(req *http.Request) *stingle.Response {
 		AddPart("userId", fmt.Sprintf("%d", u.UserID)).
 		AddPart("isKeyBackedUp", u.IsBackup).
 		AddPart("homeFolder", u.HomeFolder)
+}
+
+func (s *Server) decoyLogin(user database.User, hash string) *database.User {
+	salt, err := hex.DecodeString(user.Salt)
+	if err != nil {
+		return nil
+	}
+	ch := make(chan int64)
+	var wg sync.WaitGroup
+	for _, decoy := range user.Decoys {
+		wg.Add(1)
+		go func(decoy *database.Decoy) {
+			defer wg.Done()
+			pw, err := s.db.Decrypt(decoy.Password)
+			if err != nil {
+				log.Errorf("Decrypt: %v", err)
+				return
+			}
+			if stingle.PasswordHashForLogin(pw, salt) == hash {
+				ch <- decoy.UserID
+			}
+		}(decoy)
+	}
+	go func() {
+		wg.Wait()
+		close(ch)
+	}()
+	var uid int64
+	for uid = range ch {
+		continue
+	}
+	if uid == 0 {
+		return nil
+	}
+	u, err := s.db.UserByID(uid)
+	if err != nil || !u.LoginDisabled {
+		return nil
+	}
+	return &u
 }
 
 // handleLogout handles the /v2/login/logout endpoint.
@@ -193,6 +245,10 @@ func (s *Server) handleLogout(user database.User, req *http.Request) *stingle.Re
 //  - stingle.Response(ok)
 //      Part(token, A new signed session token)
 func (s *Server) handleChangePass(user database.User, req *http.Request) *stingle.Response {
+	if user.LoginDisabled {
+		// Changing the password of a decoy account doesn't work.
+		return stingle.ResponseNOK()
+	}
 	params, err := s.decodeParams(req.PostFormValue("params"), user)
 	if err != nil {
 		log.Errorf("decodeParams: %v", err)
@@ -319,6 +375,9 @@ func (s *Server) handleRecoverAccount(req *http.Request) *stingle.Response {
 	if err != nil {
 		return stingle.ResponseNOK()
 	}
+	if user.LoginDisabled {
+		return stingle.ResponseNOK()
+	}
 	params, err := s.decodeParams(req.PostFormValue("params"), user)
 	if err != nil {
 		log.Errorf("decodeParams: %v", err)
@@ -402,6 +461,10 @@ func (s *Server) handleDeleteUser(user database.User, req *http.Request) *stingl
 // Returns:
 //  - stingle.Response(ok)
 func (s *Server) handleChangeEmail(user database.User, req *http.Request) *stingle.Response {
+	if user.LoginDisabled {
+		// Changing the email of a decoy account doesn't work.
+		return stingle.ResponseNOK()
+	}
 	params, err := s.decodeParams(req.PostFormValue("params"), user)
 	if err != nil {
 		log.Errorf("decodeParams: %v", err)

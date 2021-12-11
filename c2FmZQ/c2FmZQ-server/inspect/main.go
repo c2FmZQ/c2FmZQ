@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"crypto/sha1"
+	"crypto/subtle"
 	"encoding/base32"
 	"encoding/base64"
 	"errors"
@@ -251,6 +252,35 @@ func main() {
 					},
 				},
 			},
+			&cli.Command{
+				Name:     "decoy",
+				Category: "Users",
+				Usage:    "Show, set, change, or clear a user's decoy password.",
+				Action:   changeUserDecoy,
+				Flags: []cli.Flag{
+					&cli.Int64Flag{
+						Name:    "userid",
+						Usage:   "The userid to update.",
+						Aliases: []string{"u"},
+					},
+					&cli.BoolFlag{
+						Name:  "set",
+						Usage: "Set a decoy password.",
+					},
+					&cli.BoolFlag{
+						Name:  "change",
+						Usage: "Change a decoy password.",
+					},
+					&cli.BoolFlag{
+						Name:  "clear",
+						Usage: "Clear a decoy password.",
+					},
+					&cli.BoolFlag{
+						Name:  "show",
+						Usage: "show decoy passwords.",
+					},
+				},
+			},
 		},
 	}
 
@@ -284,24 +314,6 @@ func prompt(msg string) string {
 	fmt.Print(msg)
 	reply, _ := bufio.NewReader(os.Stdin).ReadString('\n')
 	return strings.TrimSpace(reply)
-}
-
-func userSK(db *database.Database, email string) (*stingle.SecretKey, error) {
-	user, err := db.User(email)
-	if err != nil {
-		return nil, err
-	}
-	fmt.Print("Enter user's password: ")
-	password, err := term.ReadPassword(int(os.Stdin.Fd()))
-	fmt.Println()
-	if err != nil {
-		return nil, err
-	}
-	sk, err := stingle.DecodeSecretKeyBundle(password, user.KeyBundle)
-	if err != nil {
-		return nil, err
-	}
-	return sk, nil
 }
 
 func promptPassword(msg string) string {
@@ -598,6 +610,13 @@ func changeMasterKey(c *cli.Context) error {
 		if err != nil {
 			return err
 		}
+		for _, v := range u.Decoys {
+			np, err := reEncryptString(v.Password)
+			if err != nil {
+				return err
+			}
+			v.Password = np
+		}
 		if err := db.UpdateUser(u); err != nil {
 			return err
 		}
@@ -774,6 +793,149 @@ func changeUserOTPKey(c *cli.Context) error {
 		fmt.Println(s1[i], s2[i])
 	}
 	fmt.Printf("TOTP KEY: %s\n\n", user.OTPKey)
+	return nil
+}
+
+func changeUserDecoy(c *cli.Context) error {
+	db, err := initDB(c)
+	if err != nil {
+		return err
+	}
+	defer db.Wipe()
+	id := c.Int64("userid")
+	if id <= 0 {
+		return cli.ShowSubcommandHelp(c)
+	}
+	user, err := db.UserByID(id)
+	if err != nil {
+		return err
+	}
+	find := func(pass string) (int, *database.Decoy) {
+		for i, d := range user.Decoys {
+			p, err := db.Decrypt(d.Password)
+			if err != nil {
+				log.Errorf("Decrypt: %v", err)
+				continue
+			}
+			if subtle.ConstantTimeCompare(p, []byte(pass)) == 1 {
+				return i, d
+			}
+		}
+		return 0, nil
+	}
+	changed := false
+	if c.Bool("clear") {
+		pass := promptPassword("Enter password to DELETE: ")
+		if index, decoy := find(pass); decoy != nil {
+			del, err := db.UserByID(decoy.UserID)
+			if err != nil {
+				return err
+			}
+			if !del.LoginDisabled {
+				return errors.New("active account")
+			}
+			if err := db.DeleteUser(del); err != nil {
+				return err
+			}
+			user.Decoys = append(user.Decoys[:index], user.Decoys[index+1:]...)
+			changed = true
+		} else {
+			return errors.New("invalid password")
+		}
+	}
+	if c.Bool("change") {
+		oldpass := promptPassword("Enter OLD password: ")
+		if _, decoy := find(oldpass); decoy != nil {
+			newpass := promptPassword("Enter NEW password: ")
+			if _, d := find(newpass); d != nil {
+				return errors.New("password already exists")
+			}
+			p, err := db.Encrypt([]byte(newpass))
+			if err != nil {
+				return err
+			}
+			decoy.Password = p
+			du, err := db.UserByID(decoy.UserID)
+			if err != nil {
+				return err
+			}
+			sk, err := stingle.DecodeSecretKeyBundle([]byte(oldpass), du.KeyBundle)
+			if err != nil {
+				return err
+			}
+			du.KeyBundle = stingle.MakeSecretKeyBundle([]byte(newpass), sk)
+			sk.Wipe()
+			etk, err := db.NewEncryptedTokenKey()
+			if err != nil {
+				return err
+			}
+			du.TokenKey = etk
+			if err := db.UpdateUser(du); err != nil {
+				return err
+			}
+			changed = true
+		} else {
+			return errors.New("invalid password")
+		}
+	}
+	if c.Bool("set") {
+		pass := promptPassword("Enter NEW password: ")
+		if _, decoy := find(pass); decoy != nil {
+			return errors.New("password already exists")
+		}
+		sk := stingle.MakeSecretKey()
+		pk := sk.PublicKey()
+		bundle := stingle.MakeSecretKeyBundle([]byte(pass), sk)
+		sk.Wipe()
+		uid, err := db.AddUser(
+			database.User{
+				LoginDisabled: true,
+				Email:         fmt.Sprintf("!%x", sha1.Sum(pk.ToBytes())),
+				KeyBundle:     bundle,
+				IsBackup:      "1",
+				PublicKey:     pk,
+			})
+		if err != nil {
+			return err
+		}
+		du, err := db.UserByID(uid)
+		if err != nil {
+			return err
+		}
+		du.Email = user.Email
+		if err := db.UpdateUser(du); err != nil {
+			return err
+		}
+		epass, err := db.Encrypt([]byte(pass))
+		if err != nil {
+			return err
+		}
+		user.Decoys = append(user.Decoys, &database.Decoy{
+			UserID:   uid,
+			Password: epass,
+		})
+		changed = true
+	}
+	if changed {
+		if err := db.UpdateUser(user); err != nil {
+			return err
+		}
+	}
+
+	switch n := len(user.Decoys); n {
+	case 0:
+		fmt.Printf("User %d has no decoy passwords.\n", id)
+	case 1:
+		fmt.Printf("User %d has 1 decoy password.\n", id)
+	default:
+		fmt.Printf("User %d has %d decoy passwords.\n", id, n)
+	}
+	if c.Bool("show") {
+		for _, d := range user.Decoys {
+			p, _ := db.Decrypt(d.Password)
+			fmt.Printf("  %s (%s): %d\n", d.Password, p, d.UserID)
+		}
+	}
 	return nil
 }
 

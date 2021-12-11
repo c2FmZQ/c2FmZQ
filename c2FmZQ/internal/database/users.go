@@ -32,6 +32,8 @@ type userList struct {
 
 // Encapsulates all the information about a user account.
 type User struct {
+	// Whether login with this account is disabled.
+	LoginDisabled bool `json:"loginDisabled"`
 	// The unique user ID of the user.
 	UserID int64 `json:"userId"`
 	// The unique email address of the user.
@@ -58,6 +60,16 @@ type User struct {
 	TokenKey string `json:"serverTokenKey"`
 	// The OTP key for this user.
 	OTPKey string `json:"otpKey,omitempty"`
+	// Decoy accounts that the user can access with different passwords.
+	Decoys []*Decoy `json:"decoys,omitempty"`
+}
+
+// A decoy account's information.
+type Decoy struct {
+	// The UserID of the decoy account.
+	UserID int64 `json:"userId"`
+	// The encrypted password.
+	Password string `json:"password"`
 }
 
 // A user's contact list information.
@@ -105,20 +117,20 @@ func homeByUserID(userID int64, elems ...string) string {
 }
 
 // AddUser creates a new user account for u.
-func (d *Database) AddUser(u User) (retErr error) {
+func (d *Database) AddUser(u User) (userID int64, retErr error) {
 	defer recordLatency("AddUser")()
 
 	var ul []userList
 	commit, err := d.storage.OpenForUpdate(d.filePath(userListFile), &ul)
 	if err != nil {
 		log.Errorf("d.storage.OpenForUpdate: %v", err)
-		return err
+		return 0, err
 	}
 	defer commit(false, &retErr)
 	uids := make(map[int64]bool)
 	for _, i := range ul {
 		if i.Email == u.Email {
-			return os.ErrExist
+			return 0, os.ErrExist
 		}
 		uids[i.UserID] = true
 	}
@@ -127,7 +139,7 @@ func (d *Database) AddUser(u User) (retErr error) {
 	for {
 		bi, err := rand.Int(rand.Reader, big.NewInt(int64(math.MaxInt32-1000000)))
 		if err != nil {
-			return err
+			return 0, err
 		}
 		if uid = bi.Int64() + 1000000; !uids[uid] {
 			break
@@ -136,37 +148,41 @@ func (d *Database) AddUser(u User) (retErr error) {
 	ul = append(ul, userList{UserID: uid, Email: u.Email})
 
 	u.UserID = uid
-	u.HomeFolder = hex.EncodeToString(d.Hash([]byte(u.Email)))
+	hf := make([]byte, 16)
+	if _, err := rand.Read(hf); err != nil {
+		return 0, err
+	}
+	u.HomeFolder = hex.EncodeToString(hf)
 	ssk := stingle.MakeSecretKey()
 	defer ssk.Wipe()
 	essk, err := d.EncryptSecretKey(ssk)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	u.ServerSecretKey = essk
 	u.ServerPublicKey = ssk.PublicKey()
 	tk := token.MakeKey()
 	defer tk.Wipe()
 	if u.TokenKey, err = d.EncryptTokenKey(tk); err != nil {
-		return err
+		return 0, err
 	}
 	if err := d.storage.SaveDataFile(d.filePath(u.home(userFile)), u); err != nil {
-		return err
+		return 0, err
 	}
 
 	if err := d.storage.CreateEmptyFile(d.fileSetPath(u, stingle.TrashSet), FileSet{}); err != nil {
-		return err
+		return 0, err
 	}
 	if err := d.storage.CreateEmptyFile(d.fileSetPath(u, stingle.GallerySet), FileSet{}); err != nil {
-		return err
+		return 0, err
 	}
 	if err := d.storage.CreateEmptyFile(d.filePath(u.home(albumManifest)), AlbumManifest{}); err != nil {
-		return err
+		return 0, err
 	}
 	if err := d.storage.CreateEmptyFile(d.filePath(u.home(contactListFile)), ContactList{}); err != nil {
-		return err
+		return 0, err
 	}
-	return commit(true, nil)
+	return u.UserID, commit(true, nil)
 }
 
 // UpdateUser adds or updates a user object.
@@ -230,7 +246,6 @@ func (d *Database) RenameUser(id int64, newEmail string) (retErr error) {
 		if ul[i].UserID == id {
 			ul[i].Email = newEmail
 			u.Email = newEmail
-			u.HomeFolder = hex.EncodeToString(d.Hash([]byte(u.Email)))
 			return commit(true, nil)
 		}
 	}
@@ -271,26 +286,12 @@ func (d *Database) NewEncryptedTokenKey() (string, error) {
 
 // EncryptTokenKey encrypts a TokenKey.
 func (d *Database) EncryptTokenKey(key *token.Key) (string, error) {
-	if d.masterKey == nil {
-		return base64.StdEncoding.EncodeToString(key[:]), nil
-	}
-	b, err := d.masterKey.Encrypt(key[:])
-	if err != nil {
-		return "", err
-	}
-	return base64.StdEncoding.EncodeToString(b), nil
+	return d.Encrypt(key[:])
 }
 
 // DecryptTokenKey decrypts an encrypted TokenKey.
 func (d *Database) DecryptTokenKey(key string) (*token.Key, error) {
-	b, err := base64.StdEncoding.DecodeString(key)
-	if err != nil {
-		return nil, err
-	}
-	if d.masterKey == nil {
-		return token.KeyFromBytes(b), nil
-	}
-	k, err := d.masterKey.Decrypt(b)
+	k, err := d.Decrypt(key)
 	if err != nil {
 		return nil, err
 	}
@@ -299,26 +300,12 @@ func (d *Database) DecryptTokenKey(key string) (*token.Key, error) {
 
 // EncryptSecretKey encrypts a SecretKey.
 func (d *Database) EncryptSecretKey(sk *stingle.SecretKey) (string, error) {
-	if d.masterKey == nil {
-		return base64.StdEncoding.EncodeToString(sk.ToBytes()), nil
-	}
-	b, err := d.masterKey.Encrypt(sk.ToBytes())
-	if err != nil {
-		return "", err
-	}
-	return base64.StdEncoding.EncodeToString(b), nil
+	return d.Encrypt(sk.ToBytes())
 }
 
 // DecryptSecretKey decrypts an encrypted SecretKey.
 func (d *Database) DecryptSecretKey(key string) (*stingle.SecretKey, error) {
-	b, err := base64.StdEncoding.DecodeString(key)
-	if err != nil {
-		return nil, err
-	}
-	if d.masterKey == nil {
-		return stingle.SecretKeyFromBytes(b), nil
-	}
-	k, err := d.masterKey.Decrypt(b)
+	k, err := d.Decrypt(key)
 	if err != nil {
 		return nil, err
 	}

@@ -18,7 +18,8 @@ func addUser(db *database.Database, email string, pk stingle.PublicKey) error {
 		IsBackup:       "0",
 		PublicKey:      pk,
 	}
-	return db.AddUser(u)
+	_, err := db.AddUser(u)
+	return err
 }
 
 func TestUsers(t *testing.T) {
