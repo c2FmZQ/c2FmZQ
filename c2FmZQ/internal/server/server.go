@@ -115,6 +115,7 @@ func New(db *database.Database, addr, htdigest, pathPrefix string) *Server {
 	}
 
 	s.mux.HandleFunc("/", s.handleNotFound)
+	s.mux.HandleFunc(pathPrefix+"/v2/", s.noauth(s.handleNotImplemented))
 	s.mux.HandleFunc(pathPrefix+"/v2/register/createAccount", s.noauth(s.handleCreateAccount))
 	s.mux.HandleFunc(pathPrefix+"/v2/login/preLogin", s.noauth(s.handlePreLogin))
 	s.mux.HandleFunc(pathPrefix+"/v2/login/login", s.noauth(s.handleLogin))
@@ -375,4 +376,10 @@ func (s *Server) handleNotFound(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNotFound)
+}
+
+// handleNotImplemented returns an error to the user saying this functionality
+// is not implemented.
+func (s *Server) handleNotImplemented(req *http.Request) *stingle.Response {
+	return stingle.ResponseNOK().AddError("This functionality is not yet implemented in the server")
 }
