@@ -124,6 +124,7 @@ func New(db *database.Database, addr, htdigest, pathPrefix string) *Server {
 	s.mux.HandleFunc(pathPrefix+"/v2/login/checkKey", s.noauth(s.handleCheckKey))
 	s.mux.HandleFunc(pathPrefix+"/v2/login/recoverAccount", s.noauth(s.handleRecoverAccount))
 	s.mux.HandleFunc(pathPrefix+"/v2/login/deleteUser", s.auth(s.handleDeleteUser))
+	s.mux.HandleFunc(pathPrefix+"/v2/login/changeEmail", s.auth(s.handleChangeEmail))
 	s.mux.HandleFunc(pathPrefix+"/v2/keys/getServerPK", s.auth(s.handleGetServerPK))
 	s.mux.HandleFunc(pathPrefix+"/v2/keys/reuploadKeys", s.auth(s.handleReuploadKeys))
 

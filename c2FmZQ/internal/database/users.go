@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"io/fs"
 	"math"
 	"math/big"
 	"os"
@@ -184,18 +185,47 @@ func (d *Database) UpdateUser(u User) error {
 // RenameUser changes a user's email address.
 func (d *Database) RenameUser(id int64, newEmail string) (retErr error) {
 	defer recordLatency("RenameUser")()
+	if newEmail == "" {
+		return fs.ErrInvalid
+	}
+
 	files := []string{
 		d.filePath(userListFile),
 		d.filePath(homeByUserID(id, userFile)),
 	}
 	var ul []userList
 	var u User
-	commit, err := d.storage.OpenManyForUpdate(files, []interface{}{&ul, &u})
+	objects := []interface{}{&ul, &u}
+
+	var cl ContactList
+	if err := d.storage.ReadDataFile(d.filePath(homeByUserID(id, contactListFile)), &cl); err != nil {
+		return err
+	}
+	var contactlists []*ContactList
+	for cid := range cl.In {
+		files = append(files, d.filePath(homeByUserID(cid, contactListFile)))
+		t := &ContactList{}
+		contactlists = append(contactlists, t)
+		objects = append(objects, t)
+	}
+
+	commit, err := d.storage.OpenManyForUpdate(files, objects)
 	if err != nil {
 		log.Errorf("d.storage.OpenManyForUpdate: %v", err)
 		return err
 	}
 	defer commit(false, &retErr)
+	for _, u := range ul {
+		if u.Email == newEmail {
+			return fs.ErrExist
+		}
+	}
+	for _, cl := range contactlists {
+		if c, ok := cl.Contacts[id]; ok {
+			c.Email = newEmail
+			c.DateModified = nowInMS()
+		}
+	}
 	for i := range ul {
 		if ul[i].UserID == id {
 			ul[i].Email = newEmail

@@ -67,6 +67,9 @@ func TestLogin(t *testing.T) {
 	if err := c.changePass(); err != nil {
 		t.Fatalf("c.changePass failed: %v", err)
 	}
+	if err := c.changeEmail(); err != nil {
+		t.Fatalf("c.changeEmail failed: %v", err)
+	}
 	if err := c.recoverAccount(); err != nil {
 		t.Fatalf("c.recoverAccount failed: %v", err)
 	}
@@ -79,6 +82,9 @@ func TestLogin(t *testing.T) {
 	c.token = "BadToken"
 	if err := c.changePass(); err == nil {
 		t.Error("c.changePass should have failed but succeeded")
+	}
+	if err := c.changeEmail(); err == nil {
+		t.Error("c.changeEmail should have failed but succeeded")
 	}
 	c.secretKey = stingle.MakeSecretKeyForTest()
 	if err := c.recoverAccount(); err == nil {
@@ -245,6 +251,29 @@ func (c *client) changePass() error {
 		return fmt.Errorf("login: invalid token: %#v", sr.Part("token"))
 	}
 	c.token = token
+	return nil
+}
+
+func (c *client) changeEmail() error {
+	params := make(map[string]string)
+	params["newEmail"] = "NEWEMAIL"
+
+	form := url.Values{}
+	form.Set("token", c.token)
+	form.Set("params", c.encodeParams(params))
+
+	sr, err := c.sendRequest("/v2/login/changeEmail", form)
+	if err != nil {
+		return err
+	}
+	if sr.Status != "ok" {
+		return sr
+	}
+	email, ok := sr.Part("email").(string)
+	if !ok || email == "" {
+		return fmt.Errorf("login: invalid email: %#v", sr.Part("email"))
+	}
+	c.email = email
 	return nil
 }
 

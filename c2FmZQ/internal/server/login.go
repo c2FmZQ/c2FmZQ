@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/pquerna/otp/totp"
 	"golang.org/x/crypto/bcrypt"
@@ -51,6 +52,9 @@ func (s *Server) handleCreateAccount(req *http.Request) *stingle.Response {
 		return stingle.ResponseNOK()
 	}
 	email := req.PostFormValue("email")
+	if email != cleanUnicode(email) {
+		return stingle.ResponseNOK()
+	}
 	if _, err := s.db.User(email); err == nil {
 		return stingle.ResponseNOK()
 	}
@@ -384,6 +388,35 @@ func (s *Server) handleDeleteUser(user database.User, req *http.Request) *stingl
 	return stingle.ResponseOK()
 }
 
+// handleChangeEmail handles the /v2/login/changeEmail endpoint.
+//
+// Arguments:
+//  - user: The authenticated user.
+//  - req: The http request.
+//
+// Form arguments:
+//  - token: The signed session token.
+//  - params: Encrypted parameters:
+//     - newEmail: The new email address.
+//
+// Returns:
+//  - stingle.Response(ok)
+func (s *Server) handleChangeEmail(user database.User, req *http.Request) *stingle.Response {
+	params, err := s.decodeParams(req.PostFormValue("params"), user)
+	if err != nil {
+		log.Errorf("decodeParams: %v", err)
+		return stingle.ResponseNOK()
+	}
+	newEmail := params["newEmail"]
+	if newEmail != cleanUnicode(newEmail) {
+		return stingle.ResponseNOK()
+	}
+	if err := s.db.RenameUser(user.UserID, newEmail); err != nil {
+		return stingle.ResponseNOK()
+	}
+	return stingle.ResponseOK().AddPart("email", newEmail)
+}
+
 // handleReuploadKeys handles the /v2/keys/reuploadKeys endpoint. It is used
 // when the user changes the "Backup my keys" setting.
 //
@@ -434,4 +467,13 @@ func validateOTP(key, passcode string) bool {
 		return true
 	}
 	return totp.Validate(passcode, key)
+}
+
+func cleanUnicode(s string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsPrint(r) {
+			return r
+		}
+		return -1
+	}, s)
 }

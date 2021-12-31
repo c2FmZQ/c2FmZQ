@@ -98,3 +98,57 @@ func TestUsers(t *testing.T) {
 		t.Fatalf("Unexpected deleted contact id: want %s, got %s", want, got)
 	}
 }
+
+func TestRenameUser(t *testing.T) {
+	dir := t.TempDir()
+	db := database.New(dir, nil)
+	database.CurrentTimeForTesting = 10000
+
+	// Add, lookup, modify users.
+	emails := []string{"alice@", "bob@", "carol@"}
+	keys := make(map[string]*stingle.SecretKey)
+	users := make(map[string]database.User)
+	for _, e := range emails {
+		keys[e] = stingle.MakeSecretKeyForTest()
+		if err := addUser(db, e, keys[e].PublicKey()); err != nil {
+			t.Fatalf("addUser(%q, pk) failed: %v", e, err)
+		}
+		u, err := db.User(e)
+		if err != nil {
+			t.Fatalf("User(%q) failed: %v", e, err)
+		}
+		users[e] = u
+	}
+
+	for _, e := range emails[1:] {
+		if _, err := db.AddContact(users[e], "alice@"); err != nil {
+			t.Fatalf("AddContact(%q, %q) failed: %v", e, "alice@", err)
+		}
+	}
+	database.CurrentTimeForTesting = 20000
+
+	alice := users["alice@"]
+	if err := db.RenameUser(alice.UserID, "notalice@"); err != nil {
+		t.Fatalf("db.RenameUser failed: %v", err)
+	}
+	if u, err := db.User("notalice@"); err != nil {
+		t.Fatalf("db.User(notalice) failed: %v", err)
+	} else if want, got := alice.UserID, u.UserID; want != got {
+		t.Errorf("Unexpected userID after rename. Want %d, got %d", want, got)
+	}
+
+	cu, err := db.ContactUpdates(users["bob@"], 0)
+	if err != nil {
+		t.Errorf("ContactUpdates(%q) failed: %v", "bob@", err)
+	}
+	if want, got := 1, len(cu); want != got {
+		t.Fatalf("Unexpected number of contacts: want %d, got %d", want, got)
+	}
+	if want, got := "notalice@", cu[0].Email; want != got {
+		t.Errorf("Unexpected contact email. want %q, got %q", want, got)
+	}
+	if want, got := "20000", cu[0].DateModified.String(); want != got {
+		t.Errorf("Unexpected contact date modified. want %v, got %v", want, got)
+	}
+
+}
