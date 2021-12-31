@@ -52,7 +52,7 @@ func (s *Server) handleCreateAccount(req *http.Request) *stingle.Response {
 		return stingle.ResponseNOK()
 	}
 	email := req.PostFormValue("email")
-	if email != cleanUnicode(email) {
+	if !validateEmail(email) {
 		return stingle.ResponseNOK()
 	}
 	if _, err := s.db.User(email); err == nil {
@@ -408,10 +408,11 @@ func (s *Server) handleChangeEmail(user database.User, req *http.Request) *sting
 		return stingle.ResponseNOK()
 	}
 	newEmail := params["newEmail"]
-	if newEmail != cleanUnicode(newEmail) {
+	if !validateEmail(newEmail) {
 		return stingle.ResponseNOK()
 	}
 	if err := s.db.RenameUser(user.UserID, newEmail); err != nil {
+		log.Errorf("RenameUser: %v", err)
 		return stingle.ResponseNOK()
 	}
 	return stingle.ResponseOK().AddPart("email", newEmail)
@@ -467,6 +468,10 @@ func validateOTP(key, passcode string) bool {
 		return true
 	}
 	return totp.Validate(passcode, key)
+}
+
+func validateEmail(email string) bool {
+	return len(email) > 0 && len(email) <= 64 && email == cleanUnicode(email)
 }
 
 func cleanUnicode(s string) string {
