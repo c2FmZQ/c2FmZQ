@@ -60,7 +60,7 @@ func (c *Client) Sync(dryrun bool) error {
 	}
 	if d.AlbumsToAdd == nil && d.AlbumsToRemove == nil && d.AlbumsToRename == nil && d.AlbumPermsToChange == nil &&
 		d.FilesToAdd == nil && d.FilesToMove == nil && d.FilesToDelete == nil {
-		c.Print("Already synced.")
+		c.Print("No changes to sync.")
 		return nil
 	}
 	if err := c.applyDiffs(d, dryrun); err != nil {
@@ -117,7 +117,7 @@ func (c *Client) applyDiffs(d *albumDiffs, dryrun bool) error {
 }
 
 func (c *Client) applyAlbumsToAdd(albums []*stingle.Album, dryrun bool) error {
-	c.showAlbumsToSync("Albums to add:", albums)
+	c.showAlbumsToSync("Albums to create:", albums)
 	if dryrun {
 		return nil
 	}
@@ -156,7 +156,7 @@ func (c *Client) applyAlbumPermsToChange(albums []*stingle.Album, dryrun bool) e
 }
 
 func (c *Client) applyFilesToAdd(files []FileLoc, al AlbumList, dryrun bool) error {
-	c.showFilesToSync("Files to add:", files, al)
+	c.showFilesToSync("Files to upload:", files, al)
 	if dryrun {
 		return nil
 	}
@@ -194,11 +194,15 @@ func (c *Client) applyFilesToMove(moves []MoveItem, al AlbumList, dryrun bool) e
 		if err != nil {
 			dst = fmt.Sprintf("Set:%s Album:%s", i.key.SetTo, i.key.AlbumIDTo)
 		}
-		op := "Moving"
-		if !i.key.Moving {
+		var op string
+		switch {
+		case src == dst:
+			op = "Renaming"
+		case i.key.Moving:
+			op = "Moving"
+		default:
 			op = "Copying"
 		}
-		var files []string
 		for _, f := range i.files {
 			sk := c.SecretKey()
 			if i.key.AlbumIDTo != "" {
@@ -215,9 +219,8 @@ func (c *Client) applyFilesToMove(moves []MoveItem, al AlbumList, dryrun bool) e
 			if err != nil {
 				n = f.File
 			}
-			files = append(files, sanitize(n))
+			c.Printf("* %s %s -> %s\n", op, filepath.Join(src, "["+f.File+"]"), filepath.Join(dst, sanitize(n)))
 		}
-		c.Printf("* %s %s -> %s: %s\n", op, src, dst, strings.Join(files, ","))
 	}
 	if dryrun {
 		return nil
@@ -245,7 +248,7 @@ func (c *Client) applyFilesToDelete(files []string, al AlbumList, dryrun bool) e
 }
 
 func (c *Client) applyAlbumsToRemove(albums []*stingle.Album, dryrun bool) error {
-	c.showAlbumsToSync("Albums to remove:", albums)
+	c.showAlbumsToSync("Albums to delete:", albums)
 	if dryrun {
 		return nil
 	}

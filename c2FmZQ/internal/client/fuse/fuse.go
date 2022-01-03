@@ -4,6 +4,7 @@
 package fuse
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -48,13 +49,23 @@ func Mount(c *client.Client, mnt string, readOnly bool) error {
 	}
 	defer conn.Close()
 	log.Infof("Mounted %s", mnt)
+	c.SetWriter(writer{})
 
 	go func() {
 		ch := make(chan os.Signal, 1)
 		signal.Notify(ch, unix.SIGINT)
 		signal.Notify(ch, unix.SIGTERM)
-		sig := <-ch
-		log.Infof("Received signal %d (%s)", sig, sig)
+		c.Sync(false)
+	L:
+		for {
+			select {
+			case <-time.After(time.Minute):
+				c.Sync(false)
+			case sig := <-ch:
+				log.Infof("Received signal %d (%s)", sig, sig)
+				break L
+			}
+		}
 		log.Infof("Unmounting %s", mnt)
 		if err := Unmount(mnt); err != nil {
 			log.Errorf("fuse.Unmount(%q): %v", mnt, err)
@@ -69,6 +80,13 @@ func Mount(c *client.Client, mnt string, readOnly bool) error {
 	}
 	srv := fs.New(conn, conf)
 	return srv.Serve(initFS(c, srv, mnt))
+}
+
+type writer struct{}
+
+func (writer) Write(b []byte) (n int, err error) {
+	log.Info(string(bytes.TrimSuffix(b, []byte{'\n'})))
+	return len(b), nil
 }
 
 // Unmount unmounts the client filesystem.

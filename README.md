@@ -287,8 +287,8 @@ write operations with some caveats.
 * Once a new file is closed, it is read-only (regardless of file permissions).
   The only way to modify a file after that is to delete it or replace it. Renames
   are OK.
-* While the fuse filesystem is mounted, data isn't automatically uploaded to the
-  cloud/remote server, but remote content will be streamed for reading if a local
+* While the fuse filesystem is mounted, data is automatically synchronized with the
+  cloud/remote server every minute. Remote content is streamed for reading if a local
   copy doesn't exist.
 
 ```bash
