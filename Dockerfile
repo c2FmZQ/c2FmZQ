@@ -1,4 +1,4 @@
-FROM golang:1.17.5-alpine3.15 AS build
+FROM golang:1.17.6-alpine3.15 AS build
 MAINTAINER rthellend@gmail.com
 RUN apk update && apk upgrade
 
