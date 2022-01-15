@@ -84,9 +84,10 @@ func main() {
 		},
 		Commands: []*cli.Command{
 			&cli.Command{
-				Name:   "users",
-				Usage:  "Show the list of users.",
-				Action: showUsers,
+				Name:     "users",
+				Category: "Users",
+				Usage:    "Show the list of users.",
+				Action:   showUsers,
 				Flags: []cli.Flag{
 					&cli.BoolFlag{
 						Name:    "long",
@@ -96,50 +97,85 @@ func main() {
 				},
 			},
 			&cli.Command{
-				Name:    "cat",
-				Aliases: []string{"show", "dump"},
-				Usage:   "Show the content of files.",
-				Action:  catFile,
+				Name:     "cat",
+				Category: "System",
+				Aliases:  []string{"show", "dump"},
+				Usage:    "Show the content of database files.",
+				Action:   catFile,
 			},
 			&cli.Command{
-				Name:   "key",
-				Usage:  "Decrypt a user's secret key.",
-				Action: decrypt,
-			},
-			&cli.Command{
-				Name:   "header",
-				Usage:  "Decrypt a file header.",
-				Action: decryptHeader,
-				Flags: []cli.Flag{
-					&cli.StringFlag{
-						Name:     "user",
-						Usage:    "user's email address",
-						Required: true,
+				Name:     "edit",
+				Category: "Users",
+				Usage:    "Edit database files.",
+				Subcommands: []*cli.Command{
+					&cli.Command{
+						Name:      "albums",
+						Aliases:   []string{"album"},
+						Usage:     "Edit a user's album list.",
+						ArgsUsage: " ",
+						Action:    editAlbums,
+						Flags: []cli.Flag{
+							&cli.Int64Flag{
+								Name:    "userid",
+								Usage:   "The userid of the user.",
+								Aliases: []string{"u"},
+							},
+						},
+					},
+					&cli.Command{
+						Name:      "contacts",
+						Aliases:   []string{"contact"},
+						Usage:     "Edit a user's contact list.",
+						ArgsUsage: " ",
+						Action:    editContacts,
+						Flags: []cli.Flag{
+							&cli.Int64Flag{
+								Name:    "userid",
+								Usage:   "The userid of the user.",
+								Aliases: []string{"u"},
+							},
+						},
+					},
+					&cli.Command{
+						Name:      "fileset",
+						Aliases:   []string{"fs"},
+						Usage:     "Edit a fileset.",
+						ArgsUsage: "<file>",
+						Action:    editFileset,
+					},
+					&cli.Command{
+						Name:      "quotas",
+						Aliases:   []string{"quota"},
+						Usage:     "Edit quotas.",
+						ArgsUsage: " ",
+						Action:    editQuotas,
+					},
+					&cli.Command{
+						Name:      "user",
+						Usage:     "Edit a user file.",
+						Action:    editUser,
+						ArgsUsage: " ",
+						Flags: []cli.Flag{
+							&cli.Int64Flag{
+								Name:    "userid",
+								Usage:   "The userid of the user.",
+								Aliases: []string{"u"},
+							},
+						},
+					},
+					&cli.Command{
+						Name:    "userlist",
+						Aliases: []string{"ul"},
+						Usage:   "Edit the user list.",
+						Action:  editUserList,
 					},
 				},
 			},
 			&cli.Command{
-				Name:   "file",
-				Usage:  "Decrypt a file.",
-				Action: decryptFile,
-				Flags: []cli.Flag{
-					&cli.StringFlag{
-						Name:     "user",
-						Usage:    "user's email address",
-						Required: true,
-					},
-				},
-			},
-			&cli.Command{
-				Name:    "quotas",
-				Aliases: []string{"quota"},
-				Usage:   "Edit quotas.",
-				Action:  editQuotas,
-			},
-			&cli.Command{
-				Name:   "orphans",
-				Usage:  "Find orphans files.",
-				Action: findOrphanFiles,
+				Name:     "orphans",
+				Category: "System",
+				Usage:    "Find orphans files.",
+				Action:   findOrphanFiles,
 				Flags: []cli.Flag{
 					&cli.BoolFlag{
 						Name:  "delete",
@@ -148,9 +184,10 @@ func main() {
 				},
 			},
 			&cli.Command{
-				Name:   "change-passphrase",
-				Usage:  "Change the passphrase that protects the database's master key.",
-				Action: changePassphrase,
+				Name:     "change-passphrase",
+				Category: "System",
+				Usage:    "Change the passphrase that protects the database's master key.",
+				Action:   changePassphrase,
 				Flags: []cli.Flag{
 					&cli.StringFlag{
 						Name:  "new-passphrase-command",
@@ -165,9 +202,10 @@ func main() {
 				},
 			},
 			&cli.Command{
-				Name:   "change-master-key",
-				Usage:  "Re-encrypt all the data with a new master key. This can take a while.",
-				Action: changeMasterKey,
+				Name:     "change-master-key",
+				Category: "System",
+				Usage:    "Re-encrypt all the data with a new master key. This can take a while.",
+				Action:   changeMasterKey,
 				Flags: []cli.Flag{
 					&cli.StringFlag{
 						Name:  "format",
@@ -177,9 +215,10 @@ func main() {
 				},
 			},
 			&cli.Command{
-				Name:   "rename-user",
-				Usage:  "Change the email address of a user.",
-				Action: renameUser,
+				Name:     "rename-user",
+				Category: "System",
+				Usage:    "Change the email address of a user.",
+				Action:   renameUser,
 				Flags: []cli.Flag{
 					&cli.Int64Flag{
 						Name:  "userid",
@@ -192,9 +231,10 @@ func main() {
 				},
 			},
 			&cli.Command{
-				Name:   "otp",
-				Usage:  "Show, set, or clear a user's OTP key. (EXPERIMENTAL)",
-				Action: changeUserOTPKey,
+				Name:     "otp",
+				Category: "Users",
+				Usage:    "Show, set, or clear a user's OTP key.",
+				Action:   changeUserOTPKey,
 				Flags: []cli.Flag{
 					&cli.Int64Flag{
 						Name:    "userid",
@@ -264,6 +304,17 @@ func userSK(db *database.Database, email string) (*stingle.SecretKey, error) {
 	return sk, nil
 }
 
+func promptPassword(msg string) string {
+	fmt.Print(msg)
+	password, err := term.ReadPassword(int(os.Stdin.Fd()))
+	fmt.Println()
+	if err != nil {
+		log.Errorf("term.ReadPassword: %v", err)
+		return ""
+	}
+	return string(password)
+}
+
 func showUsers(c *cli.Context) error {
 	db, err := initDB(c)
 	if err != nil {
@@ -284,92 +335,6 @@ func catFile(c *cli.Context) error {
 		}
 	}
 	return nil
-}
-
-func decrypt(c *cli.Context) error {
-	db, err := initDB(c)
-	if err != nil {
-		return err
-	}
-	for _, u := range c.Args().Slice() {
-		if _, err := userSK(db, u); err != nil {
-			return err
-		}
-		log.Info("user's secret key successfully decrypted")
-	}
-	return nil
-}
-
-func decryptHeader(c *cli.Context) error {
-	db, err := initDB(c)
-	if err != nil {
-		return err
-	}
-	sk, err := userSK(db, c.String("user"))
-	if err != nil {
-		log.Errorf("%s: %v", c.String("user"), err)
-	}
-	for _, h := range c.Args().Slice() {
-		log.Infof("Decoding %s", h)
-		hdrs, err := stingle.DecryptBase64Headers(h, sk)
-		if err != nil {
-			return cli.Exit(err, 1)
-		}
-		log.Infof("File: %#v", hdrs[0])
-		log.Infof("Thumb: %#v", hdrs[1])
-	}
-	return nil
-}
-
-func decryptFile(c *cli.Context) error {
-	db, err := initDB(c)
-	if err != nil {
-		return err
-	}
-	sk, err := userSK(db, c.String("user"))
-	if err != nil {
-		log.Errorf("%s: %v", c.String("user"), err)
-	}
-	for _, f := range c.Args().Slice() {
-		fn := filepath.Join(db.Dir(), f)
-
-		in, err := os.Open(fn)
-		if err != nil {
-			return err
-		}
-		hdr, err := stingle.DecryptHeader(in, sk)
-		if err != nil {
-			return err
-		}
-		defer hdr.Wipe()
-		out, err := os.CreateTemp("", "decryptedfile-*")
-		if err != nil {
-			in.Close()
-			return err
-		}
-		r := stingle.DecryptFile(in, hdr)
-		if _, err := io.Copy(out, r); err != nil {
-			in.Close()
-			out.Close()
-			return err
-		}
-		if err := in.Close(); err != nil {
-			return err
-		}
-		if err := out.Close(); err != nil {
-			return err
-		}
-		log.Infof("Decrypted %s to %s", fn, out.Name())
-	}
-	return nil
-}
-
-func editQuotas(c *cli.Context) error {
-	db, err := initDB(c)
-	if err != nil {
-		return err
-	}
-	return db.EditQuotas()
 }
 
 func findOrphanFiles(c *cli.Context) error {
@@ -652,6 +617,73 @@ func renameUser(c *cli.Context) error {
 		return cli.ShowSubcommandHelp(c)
 	}
 	return db.RenameUser(id, email)
+}
+
+func editUserList(c *cli.Context) error {
+	db, err := initDB(c)
+	if err != nil {
+		return err
+	}
+	return db.EditUserList()
+}
+
+func editQuotas(c *cli.Context) error {
+	db, err := initDB(c)
+	if err != nil {
+		return err
+	}
+	return db.EditQuotas()
+}
+
+func editUser(c *cli.Context) error {
+	db, err := initDB(c)
+	if err != nil {
+		return err
+	}
+	uid := c.Int64("userid")
+	if uid <= 0 {
+		cli.ShowSubcommandHelp(c)
+		return nil
+	}
+	return db.EditUser(uid)
+}
+
+func editAlbums(c *cli.Context) error {
+	db, err := initDB(c)
+	if err != nil {
+		return err
+	}
+	uid := c.Int64("userid")
+	if uid <= 0 {
+		cli.ShowSubcommandHelp(c)
+		return nil
+	}
+	return db.EditAlbums(uid)
+}
+
+func editContacts(c *cli.Context) error {
+	db, err := initDB(c)
+	if err != nil {
+		return err
+	}
+	uid := c.Int64("userid")
+	if uid <= 0 {
+		cli.ShowSubcommandHelp(c)
+		return nil
+	}
+	return db.EditContacts(uid)
+}
+
+func editFileset(c *cli.Context) error {
+	db, err := initDB(c)
+	if err != nil {
+		return err
+	}
+	if c.Args().Len() != 1 {
+		cli.ShowSubcommandHelp(c)
+		return nil
+	}
+	return db.EditFileset(c.Args().Get(0))
 }
 
 func changeUserOTPKey(c *cli.Context) error {

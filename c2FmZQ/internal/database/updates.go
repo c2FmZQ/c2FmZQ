@@ -25,8 +25,8 @@ var (
 // DeleteEvent encapsulates a deletion event. The File and AlbumID fields are
 // different meanings depending on the value of Type.
 type DeleteEvent struct {
-	File    string `json:"file"`
-	AlbumID string `json:"albumId"`
+	File    string `json:"file,omitempty"`
+	AlbumID string `json:"albumId,omitempty"`
 	Type    int    `json:"type"` // See stingle/types.go
 	Date    int64  `json:"date"` // The time of the deletion.
 }

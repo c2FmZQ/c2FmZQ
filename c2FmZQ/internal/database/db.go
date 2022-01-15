@@ -237,6 +237,31 @@ func (d *Database) DumpFile(filename string) error {
 	}
 }
 
+// EditUserList opens the user list in an editor.
+func (d *Database) EditUserList() error {
+	return d.storage.EditDataFile(d.filePath(userListFile), new([]userList))
+}
+
+// EditUser opens the user's config file in an editor.
+func (d *Database) EditUser(uid int64) error {
+	return d.storage.EditDataFile(d.filePath(homeByUserID(uid, userFile)), new(User))
+}
+
+// EditAlbums opens the user's album manifest in an editor.
+func (d *Database) EditAlbums(uid int64) error {
+	return d.storage.EditDataFile(d.filePath(homeByUserID(uid, albumManifest)), new(AlbumManifest))
+}
+
+// EditContacts opens the user's contacts in an editor.
+func (d *Database) EditContacts(uid int64) error {
+	return d.storage.EditDataFile(d.filePath(homeByUserID(uid, contactListFile)), new(ContactList))
+}
+
+// EditFileset opens a fileset in an editor.
+func (d *Database) EditFileset(f string) error {
+	return d.storage.EditDataFile(f, new(FileSet))
+}
+
 func (d *Database) UserIDs() ([]int64, error) {
 	var ul []userList
 	if err := d.storage.ReadDataFile(d.filePath(userListFile), &ul); err != nil {

@@ -89,5 +89,5 @@ The `inspect` command can be used inside the docker container to perform adminis
 ```
 sudo docker exec -it c2fmzq-server inspect
 sudo docker exec -it c2fmzq-server inspect users
-sudo docker exec -it c2fmzq-server inspect quotas
+sudo docker exec -it c2fmzq-server inspect edit quotas
 ```
