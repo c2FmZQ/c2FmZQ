@@ -166,17 +166,36 @@ func finalFilename(temp string) (string, error) {
 	return filepath.Join(fmt.Sprintf("%02X", b[0]), n), nil
 }
 
+func (d *Database) fileSetOwner(user User, set, albumID string) (User, error) {
+	if set != stingle.AlbumSet {
+		return user, nil
+	}
+	fs, err := d.FileSet(user, set, albumID)
+	if err != nil {
+		return User{}, err
+	}
+	if fs.Album == nil {
+		return user, nil
+	}
+	return d.UserByID(fs.Album.OwnerID)
+}
+
 // AddFile adds a new file to the database. The file content and thumbnail are
 // already on disk in temporary files (file.StoreFile and file.StoreThumb). They
 // will be moved to random file names.
 func (d *Database) AddFile(user User, file FileSpec, name, set, albumID string) error {
 	defer recordLatency("AddFile")()
 
-	spaceUsed, err := d.SpaceUsed(user)
+	// Space is charged to the quota of the owner of the album.
+	owner, err := d.fileSetOwner(user, set, albumID)
 	if err != nil {
 		return err
 	}
-	quota, err := d.Quota(user.UserID)
+	spaceUsed, err := d.SpaceUsed(owner)
+	if err != nil {
+		return err
+	}
+	quota, err := d.Quota(owner.UserID)
 	if err != nil {
 		return err
 	}
