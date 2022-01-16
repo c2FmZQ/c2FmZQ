@@ -162,6 +162,9 @@ func (s *Server) handleMoveFile(user database.User, req *http.Request) *stingle.
 
 	if err := s.db.MoveFile(user, p); err != nil {
 		log.Errorf("MoveFile(%+v): %v", p, err)
+		if err == database.ErrQuotaExceeded {
+			return stingle.ResponseNOK().AddError("Quota exceeded")
+		}
 		return stingle.ResponseNOK()
 	}
 	return stingle.ResponseOK()

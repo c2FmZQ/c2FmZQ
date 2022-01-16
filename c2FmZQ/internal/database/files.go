@@ -386,6 +386,37 @@ func (d *Database) MoveFile(user User, p MoveFileParams) (retErr error) {
 	defer commit(true, &retErr)
 	fsTo, fsFrom := fileSets[0], fileSets[1]
 
+	ownerTo, ownerFrom := user.UserID, user.UserID
+	if fsTo.Album != nil {
+		ownerTo = fsTo.Album.OwnerID
+	}
+	if fsFrom.Album != nil {
+		ownerFrom = fsFrom.Album.OwnerID
+	}
+	if ownerTo != ownerFrom {
+		owner, err := d.UserByID(ownerTo)
+		if err != nil {
+			return err
+		}
+		spaceUsed, err := d.SpaceUsed(owner)
+		if err != nil {
+			return err
+		}
+		quota, err := d.Quota(owner.UserID)
+		if err != nil {
+			return err
+		}
+		for _, fn := range p.Filenames {
+			if f := fsFrom.Files[fn]; f != nil {
+				spaceUsed += f.StoreFileSize + f.StoreThumbSize
+			}
+		}
+		if spaceUsed > quota {
+			log.Errorf("User quota exceeded: %d > %d", spaceUsed, quota)
+			return ErrQuotaExceeded
+		}
+	}
+
 	for i := range p.Filenames {
 		fn := p.Filenames[i]
 		fromFile := fsFrom.Files[fn]
