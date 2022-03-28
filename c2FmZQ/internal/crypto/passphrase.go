@@ -13,7 +13,10 @@ import (
 // Passphrase retrieves a passphrase. If cmd is set, the passphrase is the
 // output of the command. Or, if file is set, the passphrase is the content
 // of the file. Otherwise, the passphrase is read from the terminal.
-func Passphrase(cmd, file string) ([]byte, error) {
+func Passphrase(cmd, file, env string) ([]byte, error) {
+	if env != "" {
+		return []byte(env), nil
+	}
 	if cmd != "" {
 		c := exec.Command("/bin/sh", "-c", cmd)
 		c.Stderr = os.Stderr
@@ -30,7 +33,10 @@ func Passphrase(cmd, file string) ([]byte, error) {
 
 // NewPassphrase is like Passphrase but will prompt for a 'new' passphrase twice
 // if it is coming from a terminal.
-func NewPassphrase(cmd, file string) ([]byte, error) {
+func NewPassphrase(cmd, file, env string) ([]byte, error) {
+	if env != "" {
+		return []byte(env), nil
+	}
 	if cmd != "" {
 		c := exec.Command("/bin/sh", "-c", cmd)
 		c.Stderr = os.Stderr
