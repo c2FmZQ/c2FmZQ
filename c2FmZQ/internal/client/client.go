@@ -15,10 +15,12 @@ import (
 	"strings"
 	"time"
 
+	"c2FmZQ/internal/autocertcache"
 	"c2FmZQ/internal/crypto"
 	"c2FmZQ/internal/log"
 	"c2FmZQ/internal/secure"
 	"c2FmZQ/internal/stingle"
+	"c2FmZQ/internal/stingle/token"
 )
 
 const (
@@ -28,6 +30,7 @@ const (
 	albumList    = "albums"
 	albumPrefix  = "album/"
 	contactsFile = "contacts"
+	cacheFile    = "autocert-cache.dat"
 
 	userAgent = "Dalvik/2.1.0 (Linux; U; Android 9; moto x4 Build/PPWS29.69-39-6-4)"
 )
@@ -45,6 +48,7 @@ func Create(m crypto.MasterKey, s *secure.Storage) (*Client, error) {
 	c.writer = os.Stdout
 	c.prompt = prompt
 	c.LocalSecretKey = c.encryptSK(stingle.MakeSecretKey())
+	c.WebServerConfig = NewWebServerConfig()
 
 	if err := s.CreateEmptyFile(c.cfgFile(), &c); err != nil {
 		return nil, err
@@ -63,6 +67,9 @@ func Load(m crypto.MasterKey, s *secure.Storage) (*Client, error) {
 	if err := s.ReadDataFile(c.cfgFile(), &c); err != nil {
 		return nil, err
 	}
+	if c.WebServerConfig == nil {
+		c.WebServerConfig = NewWebServerConfig()
+	}
 	c.hc = &http.Client{}
 	c.writer = os.Stdout
 	c.prompt = prompt
@@ -72,8 +79,9 @@ func Load(m crypto.MasterKey, s *secure.Storage) (*Client, error) {
 
 // Client contains the metadata for a user account.
 type Client struct {
-	Account        *AccountInfo `json:"accountInfo"`
-	LocalSecretKey []byte       `json:"localSecretKey"`
+	Account         *AccountInfo     `json:"accountInfo"`
+	WebServerConfig *WebServerConfig `json:"webServerConfig"`
+	LocalSecretKey  []byte           `json:"localSecretKey"`
 
 	hc *http.Client
 
@@ -94,6 +102,31 @@ type AccountInfo struct {
 	UserID          int64             `json:"userID"`
 	ServerPublicKey stingle.PublicKey `json:"serverPublicKey"`
 	Token           string            `json:"token"`
+}
+
+// NewWebServerConfig returns a new WebServerConfig with default values.
+func NewWebServerConfig() *WebServerConfig {
+	return &WebServerConfig{
+		Address:               "localhost:8080",
+		MaxConcurrentRequests: 5,
+		AllowCaching:          true,
+		URLPrefix:             "/",
+		AutocertAddress:       ":http",
+		TokenKey:              token.MakeKey(),
+	}
+}
+
+// WebServerConfig is the configuration for webserver export features.
+type WebServerConfig struct {
+	Address               string     `json:"address"`
+	MaxConcurrentRequests int        `json:"maxConcurrentRequests"`
+	AllowCaching          bool       `json:"allowCaching"`
+	Password              string     `json:"password"`
+	ExportPath            string     `json:"exportPath"`
+	URLPrefix             string     `json:"urlPrefix"`
+	AutocertDomain        string     `json:"autocertDomain"`
+	AutocertAddress       string     `json:"autocertAddress"`
+	TokenKey              *token.Key `json:"tokenKey"`
 }
 
 // Save saves the current client configuration.
@@ -299,7 +332,7 @@ func (c *Client) download(file, set, thumb string) (io.ReadCloser, error) {
 }
 
 // DownloadGet returns a seekable download stream for the remote file.
-func (c *Client) DownloadGet(file, set string) (*SeekDownloader, error) {
+func (c *Client) DownloadGet(file, set string, thumb bool) (*SeekDownloader, error) {
 	if c.Account == nil {
 		return nil, ErrNotLoggedIn
 	}
@@ -310,6 +343,9 @@ func (c *Client) DownloadGet(file, set string) (*SeekDownloader, error) {
 	form.Set("token", c.Account.Token)
 	form.Set("file", file)
 	form.Set("set", set)
+	if thumb {
+		form.Set("thumb", "1")
+	}
 	sr, err := c.sendRequest("/v2/sync/getUrl", form, "")
 	if err != nil {
 		return nil, err
@@ -321,7 +357,6 @@ func (c *Client) DownloadGet(file, set string) (*SeekDownloader, error) {
 	if !ok {
 		return nil, fmt.Errorf("server did not return a url: %v", sr.Part("url"))
 	}
-
 	return &SeekDownloader{hc: c.hc, url: url}, nil
 }
 
@@ -365,6 +400,9 @@ func (d *SeekDownloader) Seek(offset int64, whence int) (int64, error) {
 		resp.Body.Close()
 		return 0, fmt.Errorf("request returned status code %d for offset %d", resp.StatusCode, d.offset)
 	}
+	if d.body != nil {
+		d.body.Close()
+	}
 	d.body = resp.Body
 	return d.offset, nil
 }
@@ -381,6 +419,9 @@ func (d *SeekDownloader) Read(b []byte) (n int, err error) {
 }
 
 func (d *SeekDownloader) Close() error {
+	if d.body == nil {
+		return nil
+	}
 	return d.body.Close()
 }
 
@@ -398,6 +439,11 @@ func (c *Client) createEmptyFiles() (err error) {
 		err = e
 	}
 	return
+}
+
+// AutocertCache returns an Autocert Cache that uses the encrypted storage.
+func (c *Client) AutocertCache() *autocertcache.Cache {
+	return autocertcache.New(c.fileHash(cacheFile), c.storage)
 }
 
 func prompt(msg string) (reply string, err error) {

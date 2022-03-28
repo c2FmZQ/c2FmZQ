@@ -5,16 +5,20 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 
 	"github.com/mattn/go-shellwords" // shellwords
 	"github.com/urfave/cli/v2"       // cli
 	"golang.org/x/term"
 
 	"c2FmZQ/internal/client"
+	"c2FmZQ/internal/client/web"
 	"c2FmZQ/internal/crypto"
 	"c2FmZQ/internal/log"
 	"c2FmZQ/internal/secure"
@@ -433,6 +437,55 @@ func New() *App {
 			ArgsUsage: `"<glob>" ...`,
 			Action:    app.listContacts,
 			Category:  "Share",
+		},
+		&cli.Command{
+			Name:      "webserver-config",
+			Usage:     "Update the web server configuration.",
+			ArgsUsage: " ",
+			Action:    app.webServerConfig,
+			Category:  "Mode",
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:  "address",
+					Usage: "The TCP address to bind, e.g. :8080",
+				},
+				&cli.StringFlag{
+					Name:  "password",
+					Usage: "The password to access the files",
+				},
+				&cli.StringFlag{
+					Name:  "export-path",
+					Usage: "The file path to export",
+				},
+				&cli.StringFlag{
+					Name:  "url-prefix",
+					Usage: "The URL prefix to use for each endpoint",
+				},
+				&cli.BoolFlag{
+					Name:  "allow-caching",
+					Usage: "Allow http caching",
+					Value: true,
+				},
+				&cli.BoolFlag{
+					Name:  "clear",
+					Usage: "Reset the web server configuration to default values",
+				},
+				&cli.StringFlag{
+					Name:  "autocert-domain",
+					Usage: "Enable autocert with this domain",
+				},
+				&cli.StringFlag{
+					Name:  "autocert-address",
+					Usage: "Use this network address for autocert. It must be externally reachable on port 80",
+				},
+			},
+		},
+		&cli.Command{
+			Name:      "webserver",
+			Usage:     "Run web server to access the files.",
+			ArgsUsage: " ",
+			Action:    app.webServer,
+			Category:  "Mode",
 		},
 	}
 	if enableFuse {
@@ -1141,5 +1194,93 @@ func (a *App) listContacts(ctx *cli.Context) error {
 
 func (a *App) licenses(ctx *cli.Context) error {
 	licenses.Show()
+	return nil
+}
+
+func (a *App) webServerConfig(ctx *cli.Context) error {
+	if err := a.init(ctx, false); err != nil {
+		return err
+	}
+	args := ctx.Args().Slice()
+	if len(args) > 0 {
+		cli.ShowSubcommandHelp(ctx)
+		return nil
+	}
+	if ctx.Bool("clear") {
+		a.client.WebServerConfig = client.NewWebServerConfig()
+	}
+	if p := ctx.String("password"); p != "" {
+		a.client.WebServerConfig.Password = p
+	}
+	if p := ctx.String("export-path"); p != "" {
+		p = strings.TrimPrefix(p, "/")
+		p = strings.TrimSuffix(p, "/")
+		if p != "" {
+			p = p + "/"
+		}
+		a.client.WebServerConfig.ExportPath = p
+	}
+	if p := ctx.String("url-prefix"); p != "" {
+		if p != "" {
+			p = strings.TrimPrefix(p, "/")
+			p = strings.TrimSuffix(p, "/")
+			if p == "" {
+				p = "/"
+			} else {
+				p = "/" + p + "/"
+			}
+		}
+		a.client.WebServerConfig.URLPrefix = p
+	}
+	if addr := ctx.String("address"); addr != "" {
+		a.client.WebServerConfig.Address = addr
+	}
+	if d := ctx.String("autocert-domain"); d != "" {
+		a.client.WebServerConfig.AutocertDomain = d
+	}
+	if addr := ctx.String("autocert-address"); addr != "" {
+		a.client.WebServerConfig.AutocertAddress = addr
+	}
+	a.client.WebServerConfig.AllowCaching = ctx.Bool("allow-caching")
+	log.Info("Webserver Config:")
+	log.Infof(" Address:         %q", a.client.WebServerConfig.Address)
+	log.Infof(" Password:        %q", a.client.WebServerConfig.Password)
+	log.Infof(" ExportPath:      %q", a.client.WebServerConfig.ExportPath)
+	log.Infof(" URLPrefix:       %q", a.client.WebServerConfig.URLPrefix)
+	log.Infof(" AllowCaching:    %v", a.client.WebServerConfig.AllowCaching)
+	log.Infof(" AutocertDomain:  %q", a.client.WebServerConfig.AutocertDomain)
+	log.Infof(" AutocertAddress: %q", a.client.WebServerConfig.AutocertAddress)
+	return a.client.Save()
+}
+
+func (a *App) webServer(ctx *cli.Context) error {
+	if err := a.init(ctx, true); err != nil {
+		return err
+	}
+	if args := ctx.Args().Slice(); len(args) > 0 {
+		cli.ShowSubcommandHelp(ctx)
+		return nil
+	}
+	s := web.NewServer(a.client)
+
+	done := make(chan struct{})
+	go func() {
+		ch := make(chan os.Signal, 1)
+		signal.Notify(ch, syscall.SIGINT)
+		signal.Notify(ch, syscall.SIGTERM)
+		sig := <-ch
+		log.Infof("Received signal %d (%s)", sig, sig)
+		if err := s.Shutdown(); err != nil {
+			log.Errorf("s.Shutdown: %v", err)
+		}
+		close(done)
+	}()
+
+	log.Infof("Starting server on %s", a.client.WebServerConfig.Address)
+	if err := s.Run(); err != http.ErrServerClosed {
+		log.Fatalf("s.Run: %v", err)
+	}
+	<-done
+	log.Info("Server exited cleanly.")
 	return nil
 }

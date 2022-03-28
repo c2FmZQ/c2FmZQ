@@ -92,7 +92,7 @@ func (c *Client) StreamImport(name string, dst ListItem) (*FuseImportWriter, err
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return nil, err
 	}
-	thumbnail, err := c.genericThumbnail(thumbName)
+	thumbnail, err := c.GenericThumbnail(thumbName)
 	if err != nil {
 		return nil, err
 	}
@@ -234,11 +234,11 @@ func (iw *FuseImportWriter) processNewFile() (retErr error) {
 	case stingle.FileTypePhoto:
 		thumbnail, err = iw.c.photoThumbnail(in)
 	default:
-		thumbnail, err = iw.c.genericThumbnail(filename)
+		thumbnail, err = iw.c.GenericThumbnail(filename)
 	}
 	if err != nil {
 		// Fallback to a generic thumbnail.
-		thumbnail, err = iw.c.genericThumbnail(filename)
+		thumbnail, err = iw.c.GenericThumbnail(filename)
 	}
 	if err != nil {
 		return err

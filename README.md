@@ -13,6 +13,7 @@
     * [Decoy / duress passwords](#decoy)
 * [c2FmZQ Client](#c2FmZQ-client)
   * [Mount as fuse filesystem](#fuse)
+  * [View content with Web browser](#webbrowser)
   * [Connecting to stingle.org account](#connect-to-stingle)
 
 # <a name="overview"></a>Overview
@@ -299,8 +300,10 @@ COMMANDS:
    Misc:
      licenses  Show the software licenses.
    Mode:
-     mount  Mount as a fuse filesystem.
-     shell  Run in shell mode.
+     mount             Mount as a fuse filesystem.
+     shell             Run in shell mode.
+     webserver         Run web server to access the files.
+     webserver-config  Update the web server configuration.
    Share:
      change-permissions, chmod  Change the permissions on a shared directory (album).
      contacts                   List contacts.
@@ -366,6 +369,52 @@ Bulk copy in and out of the fuse filesystem should work as expected with:
 * rsync, with --no-times
 
 When you're done, hit `CTRL-C` where the `mount` command is running to close and unmount the fuse filesystem.
+
+---
+
+## <a name="webbrowser"></a>View content with a Web Browser
+
+The c2FmZQ client can export your files via HTTP so that they can be accessed with a Web Browser
+
+```bash
+./c2FmZQ-client webserver
+
+```
+
+The web server can be configured with `webserver-config`
+
+```bash
+./c2FmZQ-client webserver-config -h
+```
+
+```text
+NAME:
+   c2FmZQ-client webserver-config - Update the web server configuration.
+
+USAGE:
+   c2FmZQ-client webserver-config [command options]  
+
+CATEGORY:
+   Mode
+
+OPTIONS:
+   --address value           The TCP address to bind, e.g. :8080
+   --password value          The password to access the files
+   --export-path value       The file path to export
+   --url-prefix value        The URL prefix to use for each endpoint
+   --allow-caching           Allow http caching (default: true)
+   --clear                   Reset the web server configuration to default values (default: false)
+   --autocert-domain value   Enable autocert with this domain
+   --autocert-address value  Use this network address for autocert. It must be externally reachable on port 80
+   --help, -h                show help (default: false)
+```
+
+For example, to export album `Foo` on port `8080` with password `foobar`, use:
+
+```bash
+./c2FmZQ-client webserver-config --export-path=Foo --address=:8080 --password=foobar
+./c2FmZQ-client webserver
+```
 
 ---
 

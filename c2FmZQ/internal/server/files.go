@@ -455,7 +455,7 @@ func (s *Server) handleGetDownloadUrls(user database.User, req *http.Request) *s
 //   - StringleResponse(ok).
 //        Parts("url", signed url)
 func (s *Server) handleGetURL(user database.User, req *http.Request) *stingle.Response {
-	url, err := s.makeDownloadURL(user, req.Host, req.PostFormValue("file"), req.PostFormValue("set"), false)
+	url, err := s.makeDownloadURL(user, req.Host, req.PostFormValue("file"), req.PostFormValue("set"), req.PostFormValue("thumb") == "1")
 	if err != nil {
 		return stingle.ResponseNOK()
 	}

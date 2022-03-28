@@ -258,11 +258,11 @@ func (c *Client) importFile(file string, dst ListItem, pk stingle.PublicKey) err
 	case stingle.FileTypePhoto:
 		thumbnail, err = c.photoThumbnail(in)
 	default:
-		thumbnail, err = c.genericThumbnail(file)
+		thumbnail, err = c.GenericThumbnail(file)
 	}
 	if err != nil {
 		// Fallback to a genetic thumbnail.
-		thumbnail, err = c.genericThumbnail(file)
+		thumbnail, err = c.GenericThumbnail(file)
 	}
 	if err != nil {
 		return err
@@ -320,9 +320,14 @@ func (c *Client) importExif(file string) (x *exif.Exif, err error) {
 	return exif.Decode(f)
 }
 
-func (c *Client) genericThumbnail(filename string) ([]byte, error) {
+func (c *Client) GenericThumbnail(filename string) ([]byte, error) {
 	_, filename = filepath.Split(filename)
-	ext := filepath.Ext(filename)
+	var ext string
+	if filename[0] == '.' {
+		ext = filepath.Ext(filename[1:])
+	} else {
+		ext = filepath.Ext(filename)
+	}
 	filename = filename[:len(filename)-len(ext)]
 	img := image.NewRGBA(image.Rect(0, 0, 120, 120))
 
@@ -331,8 +336,8 @@ func (c *Client) genericThumbnail(filename string) ([]byte, error) {
 		x, y int
 		col  color.RGBA
 	}{
-		{filename, 10, 10, color.RGBA{200, 200, 200, 255}},
-		{ext, 10, 30, color.RGBA{200, 200, 200, 255}},
+		{filename, 10, 20, color.RGBA{200, 200, 200, 255}},
+		{ext, 10, 40, color.RGBA{200, 200, 200, 255}},
 	} {
 		point := fixed.Point26_6{X: fixed.Int26_6(label.x * 64), Y: fixed.Int26_6(label.y * 64)}
 		d := &font.Drawer{

@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>/{{.Current}}</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width">
+  <style>
+    html {
+      margin: 0px;
+      height: 100%;
+    }
+    body {
+      margin: 5px;
+      height: 100%;
+      font-family: monospace;
+      color: yellow;
+      background-color: black;
+    }
+    a {
+      color: yellow;
+    }
+    .frame {
+      float: left;
+      margin: 1em;
+      padding: 1px;
+    }
+    .duration {
+      transform: translate(0, -100%);
+      padding-left: 5px;
+      padding-bottom: 10px;
+    }
+    .duration span {
+      background-color: rgba(0, 0, 0, 0.5);
+    }
+  </style>
+  <script src="{{$.Prefix}}jquery.js"></script>
+  <script src="{{$.Prefix}}infinite-scroll.min.js"></script>
+  <script>
+    function init() {
+{{ if len .Files | ne 0 }}
+      $('.file-feed').infiniteScroll({
+        path: '.pagination__next',
+        append: '.file',
+        status: '.scroller-status',
+        hideNav: '.pagination',
+        scrollThreshold: 200,
+        history: false,
+        historyTitle: false,
+        onInit: function() {
+         this.on('append', function() {
+           // Remove duplicate date labels after appending new content.
+           var elems = document.getElementsByClassName("date");
+           var last = '';
+           for (var i = 0; i < elems.length; i++) {
+             var cur = elems[i].innerText;
+             if (last == cur) {
+               elems[i].remove();
+             }
+             last = cur;
+           }
+         })
+        },
+      });
+{{ end }}
+    }
+  </script>
+</head>
+<body onload="init();">
+{{ if len .Parent | ne 0 }}
+  [<strong><a href="{{$.Prefix}}view/{{.Parent}}?tok={{$.Token}}" title="Parent folder">Parent</a></strong>]
+{{ end }}
+
+<h1>/{{.Current}}</h1>
+
+<!-- Folders -->
+{{ if len .Albums | ne 0 }}
+<h2>Folders:</h2>
+  {{ range .Albums }}
+<div class="frame">
+  <a href="{{$.Prefix}}view/{{.Name}}/?tok={{$.Token}}" title="{{.Name}}"><img src="{{$.Prefix}}raw/{{.Cover}}?tok={{$.Token}}&thumb=1" height="90" border="1" alt="{{.Name}}" /></a><br />
+  {{.Name | basename}}
+</div>
+  {{ end }}
+{{ end }}
+<!-- End Folders -->
+
+<!-- Files -->
+{{ if len .Files | ne 0 }}
+<div class="file-feed">
+  {{ $lastDate := "" }}
+  {{ range .Files }}
+  <div class="file">
+    {{ if $lastDate | ne .Date }}
+    <span class="date"><br clear="all" />{{ .Date }}{{ $lastDate = .Date }}<br clear="all" /></span>
+    {{end}}
+    <div class="frame">
+      <div><a href="{{$.Prefix}}view/{{.Name}}?tok={{$.Token}}" title="{{.Name}}"><img src="{{$.Prefix}}raw/{{.Name}}?tok={{$.Token}}&thumb=1" height="320" border="1" alt="{{.Name}}" /></a></div>
+      <div class="duration">&nbsp;<span>{{ .Duration }}</span></div>
+    </div>
+  </div>
+  {{ end }}
+</div>
+
+<div class="scroller-status">
+  <br clear="all" />
+  <div class="infinite-scroll-request loader-ellips">...</div>
+  <p class="infinite-scroll-last">End of folder</p>
+  <p class="infinite-scroll-error">No more files</p>
+</div>
+
+<p class="pagination">
+  <a class="pagination__next" href="{{$.Prefix}}view/{{ if .Current | ne "" }}{{ .Current }}/{{ end }}?tok={{.Token}}&page={{.NextPage}}">Next page</a>
+</p>
+{{ end }}
+<!-- End Files -->
+
+<!-- One File -->
+{{ if len .Name | ne 0 }}
+<div style="display: grid; grid-template-columns: 1fr 8fr 1fr; gap: 10px;">
+  <div style="grid-column: 1">
+  {{ if len .PrevFile | ne 0 }}
+    <a href="{{$.Prefix}}view/{{.PrevFile}}?tok={{$.Token}}" title="{{.PrevFile}}"><img src="{{$.Prefix}}raw/{{.PrevFile}}?tok={{$.Token}}&thumb=1" style="max-height: 50vh; max-width: 100%; object-fit: contain" border="1" alt="{{.PrevFile}}" /><br />Previous</a>
+  {{ end }}
+  </div>
+  <div style="grid-column: 2; text-align: center;">
+  {{ .Date }}<br />
+  {{ if .IsVideo }}<!-- Video -->
+    <video width="640" height="480" src="{{$.Prefix}}raw/{{.Name}}?tok={{$.Token}}" poster="{{$.Prefix}}raw/{{.Name}}?tok={{$.Token}}&thumb=1" controls></video>
+    <br /><a href="{{$.Prefix}}raw/{{.Name}}?tok={{$.Token}}" download title="{{.Name}}">Download Video</a>
+  {{ else }}<!-- Image -->
+    <a href="{{$.Prefix}}raw/{{.Name}}?tok={{$.Token}}" title="{{.Name}}"><img src="{{$.Prefix}}raw/{{.Name}}?tok={{$.Token}}" style="max-height: 75vh; max-width: 100%; object-fit: contain"  border="1" alt="{{.Name}}" /></a>
+  {{ end }}
+  </div>
+  <div style="grid-column: 3; text-align: right;">
+  {{ if len .NextFile | ne 0 }}
+    <a href="{{$.Prefix}}view/{{.NextFile}}?tok={{$.Token}}" title="{{.NextFile}}"><img src="{{$.Prefix}}raw/{{.NextFile}}?tok={{$.Token}}&thumb=1" style="max-height: 50vh; max-width: 100%; object-fit: contain" border="1" alt="{{.NextFile}}" /><br />Next</a>
+  {{ end }}
+  </div>
+</div>
+{{ end }}
+<!-- End one file -->
+
+</body>
+</html>

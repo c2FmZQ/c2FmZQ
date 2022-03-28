@@ -748,7 +748,7 @@ func (n *fileNode) openRead() (io.ReadSeekCloser, error) {
 	var f io.ReadSeekCloser
 	var err error
 	if f, err = os.Open(n.item.FilePath); errors.Is(err, os.ErrNotExist) {
-		f, err = n.f.c.DownloadGet(n.item.FSFile.File, n.item.Set)
+		f, err = n.f.c.DownloadGet(n.item.FSFile.File, n.item.Set, false)
 	}
 	if err != nil {
 		log.Errorf("Open(%s) failed: %v", n.item.FilePath, err)

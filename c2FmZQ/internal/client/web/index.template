@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Hello</title>
+<meta name="viewport" content="width=device-width">
+</head>
+<body onload="document.getElementById('pass').focus()">
+<form action="{{.Prefix}}" method="post">
+<input type="hidden" name="redir" value="{{ .Redirect }}">
+<b>Magic word:</b> <input id="pass" name="password" type="password" size="10"> <input type="submit" value="Enter">
+</form>
+</body>
+</html>

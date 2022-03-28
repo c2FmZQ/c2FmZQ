@@ -23,6 +23,7 @@ type ListItem struct {
 	Filename  string         // c2FmZQ representation, e.g. album/ or album/file.jpg
 	IsDir     bool           // Whether this is a directory, i.e. gallery, trash, or album.
 	FilePath  string         // Path where the file content is stored.
+	ThumbPath string         // Path where the file thumbnail is stored.
 	FileSet   string         // Path where the FileSet is stored.
 	FSFile    stingle.File   // The stingle.File object for this item.
 	Size      int64          // The file size.
@@ -205,6 +206,65 @@ func (i ListItem) Header(sk *stingle.SecretKey) (*stingle.Header, error) {
 	return hdrs[0], nil
 }
 
+// ThumbHeader returns the decrypted thumbnail Header.
+func (i ListItem) ThumbHeader(sk *stingle.SecretKey) (*stingle.Header, error) {
+	if a := i.Album; a != nil {
+		ask, err := a.SK(sk)
+		if err != nil {
+			return nil, err
+		}
+		defer ask.Wipe()
+		sk = ask
+	}
+	hdrs, err := stingle.DecryptBase64Headers(i.FSFile.Headers, sk)
+	if err != nil {
+		return nil, err
+	}
+	hdrs[0].Wipe()
+	return hdrs[1], nil
+}
+
+// AlbumCover returns the filename of the album cover.
+func (c *Client) AlbumCover(i ListItem) (string, error) {
+	var cover string
+	if i.Album != nil {
+		cover = i.Album.Cover
+	}
+	if cover == "__b__" {
+		return "", errors.New("no album cover")
+	}
+	var fs FileSet
+	if err := c.storage.ReadDataFile(c.fileHash(i.FileSet), &fs); err != nil {
+		return "", err
+	}
+	f := fs.Files[cover]
+	if f == nil {
+		var max int64
+		for _, k := range fs.Files {
+			if d, _ := k.DateModified.Int64(); d > max {
+				max = d
+				f = k
+			}
+		}
+		if f == nil {
+			return "", errors.New("no album cover")
+		}
+	}
+	sk, err := c.SKForAlbum(i.Album)
+	if err != nil {
+		return "", err
+	}
+	hdrs, err := stingle.DecryptBase64Headers(f.Headers, sk)
+	sk.Wipe()
+	if err != nil {
+		return "", err
+	}
+	fn := sanitize(string(hdrs[1].Filename))
+	hdrs[0].Wipe()
+	hdrs[1].Wipe()
+	return filepath.Join(i.Filename, fn), nil
+}
+
 // GlobFiles returns files that match the glob patterns.
 func (c *Client) GlobFiles(patterns []string, opt GlobOptions) ([]ListItem, error) {
 	var li []ListItem
@@ -326,6 +386,7 @@ func (c *Client) globStep(parent string, g *glob, n *node, li *[]ListItem) error
 				Filename:  filepath.Join(parent, n.name),
 				Size:      n.file.size,
 				FilePath:  c.blobPath(n.file.f.File, false),
+				ThumbPath: c.blobPath(n.file.f.File, true),
 				FileSet:   n.file.fileSet,
 				FSFile:    *n.file.f,
 				Set:       n.file.set,
