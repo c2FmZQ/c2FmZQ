@@ -36,7 +36,7 @@ var (
 	flagEncryptMetadata       bool
 	flagPassphraseFile        string
 	flagPassphraseCmd         string
-	flagPassphrase         string
+	flagPassphrase            string
 	flagHTDigestFile          string
 	flagAutocertDomain        string
 	flagAutocertAddr          string

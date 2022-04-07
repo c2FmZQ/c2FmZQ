@@ -33,7 +33,7 @@ type App struct {
 	flagLogLevel       int
 	flagPassphraseFile string
 	flagPassphraseCmd  string
-	flagPassphrase  string
+	flagPassphrase     string
 	flagAPIServer      string
 	flagAutoUpdate     bool
 }
