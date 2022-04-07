@@ -33,6 +33,7 @@ var (
 	flagEncryptMetadata bool
 	flagPassphraseFile  string
 	flagPassphraseCmd   string
+	flagPassphrase   string
 )
 
 func main() {
@@ -81,6 +82,13 @@ func main() {
 				Usage:       "Read the database passphrase from `FILE`.",
 				EnvVars:     []string{"C2FMZQ_PASSPHRASE_FILE"},
 				Destination: &flagPassphraseFile,
+			},
+			&cli.StringFlag{
+				Name:        "passphrase",
+				Value:       "",
+				Usage:       "Use value as database passphrase.",
+				EnvVars:     []string{"C2FMZQ_PASSPHRASE"},
+				Destination: &flagPassphrase,
 			},
 		},
 		Commands: []*cli.Command{
@@ -200,6 +208,11 @@ func main() {
 						Value: "",
 						Usage: "Read the new database passphrase from `FILE`.",
 					},
+					&cli.StringFlag{
+						Name:  "new-passphrase",
+						Value: "",
+						Usage: "Change database passphrase to value.",
+					},
 				},
 			},
 			&cli.Command{
@@ -294,7 +307,7 @@ func initDB(c *cli.Context) (*database.Database, error) {
 	var pp []byte
 	if flagEncryptMetadata {
 		var err error
-		if pp, err = crypto.Passphrase(flagPassphraseCmd, flagPassphraseFile); err != nil {
+		if pp, err = crypto.Passphrase(flagPassphraseCmd, flagPassphraseFile, flagPassphrase); err != nil {
 			return nil, err
 		}
 	}
@@ -361,7 +374,7 @@ func changeMasterKey(c *cli.Context) error {
 	log.Level = flagLogLevel
 	log.Infof("Working on %s", flagDatabase)
 
-	pp, err := crypto.Passphrase(flagPassphraseCmd, flagPassphraseFile)
+	pp, err := crypto.Passphrase(flagPassphraseCmd, flagPassphraseFile, flagPassphrase)
 	if err != nil {
 		return err
 	}
@@ -947,7 +960,7 @@ func changePassphrase(c *cli.Context) error {
 	}
 	mkFile := filepath.Join(flagDatabase, "master.key")
 
-	oldPass, err := crypto.Passphrase(flagPassphraseCmd, flagPassphraseFile)
+	oldPass, err := crypto.Passphrase(flagPassphraseCmd, flagPassphraseFile, flagPassphrase)
 	if err != nil {
 		return err
 	}
@@ -957,7 +970,7 @@ func changePassphrase(c *cli.Context) error {
 	}
 	defer mk.Wipe()
 
-	newPass, err := crypto.NewPassphrase(c.String("new-passphrase-command"), c.String("new-passphrase-file"))
+	newPass, err := crypto.NewPassphrase(c.String("new-passphrase-command"), c.String("new-passphrase-file"), c.String("new-passphrase"))
 	if err != nil {
 		return err
 	}
