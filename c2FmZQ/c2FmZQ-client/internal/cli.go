@@ -33,7 +33,7 @@ type App struct {
 	flagLogLevel       int
 	flagPassphraseFile string
 	flagPassphraseCmd  string
-	flagPassphraseEnv  string
+	flagPassphrase  string
 	flagAPIServer      string
 	flagAutoUpdate     bool
 }
@@ -88,11 +88,11 @@ func New() *App {
 			Destination: &app.flagPassphraseFile,
 		},
 		&cli.StringFlag{
-			Name:        "passphrase-env",
+			Name:        "passphrase",
 			Value:       "",
-			Usage:       "Use value of `ENV` as database passphrase.",
-			EnvVars:     []string{"C2FMZQ_PASSPHRASE_ENV"},
-			Destination: &app.flagPassphraseEnv,
+			Usage:       "Use value as database passphrase.",
+			EnvVars:     []string{"C2FMZQ_PASSPHRASE"},
+			Destination: &app.flagPassphrase,
 		},
 		&cli.StringFlag{
 			Name:        "server",
@@ -465,7 +465,7 @@ func (a *App) Run(args []string) error {
 func (a *App) init(ctx *cli.Context, update bool) error {
 	if a.client == nil {
 		log.Level = a.flagLogLevel
-		pp, err := crypto.Passphrase(a.flagPassphraseCmd, a.flagPassphraseFile, a.flagPassphraseEnv)
+		pp, err := crypto.Passphrase(a.flagPassphraseCmd, a.flagPassphraseFile, a.flagPassphrase)
 		if err != nil {
 			return err
 		}

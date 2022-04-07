@@ -36,7 +36,7 @@ var (
 	flagEncryptMetadata       bool
 	flagPassphraseFile        string
 	flagPassphraseCmd         string
-	flagPassphraseEnv         string
+	flagPassphrase         string
 	flagHTDigestFile          string
 	flagAutocertDomain        string
 	flagAutocertAddr          string
@@ -149,11 +149,11 @@ func main() {
 				Destination: &flagPassphraseFile,
 			},
 			&cli.StringFlag{
-				Name:        "passphrase-env",
+				Name:        "passphrase",
 				Value:       "",
-				Usage:       "Use value of `ENV` as database passphrase.",
-				EnvVars:     []string{"C2FMZQ_PASSPHRASE_ENV"},
-				Destination: &flagPassphraseEnv,
+				Usage:       "Use value as database passphrase.",
+				EnvVars:     []string{"C2FMZQ_PASSPHRASE"},
+				Destination: &flagPassphrase,
 			},
 			&cli.StringFlag{
 				Name:        "htdigest-file",
@@ -196,7 +196,7 @@ func startServer(c *cli.Context) error {
 	var pp []byte
 	if flagEncryptMetadata {
 		var err error
-		if pp, err = crypto.Passphrase(flagPassphraseCmd, flagPassphraseFile, flagPassphraseEnv); err != nil {
+		if pp, err = crypto.Passphrase(flagPassphraseCmd, flagPassphraseFile, flagPassphrase); err != nil {
 			return err
 		}
 	}

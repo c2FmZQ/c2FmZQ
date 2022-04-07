@@ -33,7 +33,7 @@ var (
 	flagEncryptMetadata bool
 	flagPassphraseFile  string
 	flagPassphraseCmd   string
-	flagPassphraseEnv   string
+	flagPassphrase   string
 )
 
 func main() {
@@ -84,11 +84,11 @@ func main() {
 				Destination: &flagPassphraseFile,
 			},
 			&cli.StringFlag{
-				Name:        "passphrase-env",
+				Name:        "passphrase",
 				Value:       "",
-				Usage:       "Use value of `ENV` as database passphrase.",
-				EnvVars:     []string{"C2FMZQ_PASSPHRASE_ENV"},
-				Destination: &flagPassphraseEnv,
+				Usage:       "Use value as database passphrase.",
+				EnvVars:     []string{"C2FMZQ_PASSPHRASE"},
+				Destination: &flagPassphrase,
 			},
 		},
 		Commands: []*cli.Command{
@@ -209,9 +209,9 @@ func main() {
 						Usage: "Read the new database passphrase from `FILE`.",
 					},
 					&cli.StringFlag{
-						Name:  "new-passphrase-env",
+						Name:  "new-passphrase",
 						Value: "",
-						Usage: "Change database passphrase to value of `ENV`.",
+						Usage: "Change database passphrase to value.",
 					},
 				},
 			},
@@ -307,7 +307,7 @@ func initDB(c *cli.Context) (*database.Database, error) {
 	var pp []byte
 	if flagEncryptMetadata {
 		var err error
-		if pp, err = crypto.Passphrase(flagPassphraseCmd, flagPassphraseFile, flagPassphraseEnv); err != nil {
+		if pp, err = crypto.Passphrase(flagPassphraseCmd, flagPassphraseFile, flagPassphrase); err != nil {
 			return nil, err
 		}
 	}
@@ -374,7 +374,7 @@ func changeMasterKey(c *cli.Context) error {
 	log.Level = flagLogLevel
 	log.Infof("Working on %s", flagDatabase)
 
-	pp, err := crypto.Passphrase(flagPassphraseCmd, flagPassphraseFile, flagPassphraseEnv)
+	pp, err := crypto.Passphrase(flagPassphraseCmd, flagPassphraseFile, flagPassphrase)
 	if err != nil {
 		return err
 	}
@@ -960,7 +960,7 @@ func changePassphrase(c *cli.Context) error {
 	}
 	mkFile := filepath.Join(flagDatabase, "master.key")
 
-	oldPass, err := crypto.Passphrase(flagPassphraseCmd, flagPassphraseFile, flagPassphraseEnv)
+	oldPass, err := crypto.Passphrase(flagPassphraseCmd, flagPassphraseFile, flagPassphrase)
 	if err != nil {
 		return err
 	}
@@ -970,7 +970,7 @@ func changePassphrase(c *cli.Context) error {
 	}
 	defer mk.Wipe()
 
-	newPass, err := crypto.NewPassphrase(c.String("new-passphrase-command"), c.String("new-passphrase-file"), c.String("new-passphrase-env"))
+	newPass, err := crypto.NewPassphrase(c.String("new-passphrase-command"), c.String("new-passphrase-file"), c.String("new-passphrase"))
 	if err != nil {
 		return err
 	}
