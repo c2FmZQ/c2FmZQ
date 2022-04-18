@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Edit /{{.Current}}</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width">
+  <style>
+    html {
+      margin: 0px;
+      height: 100%;
+    }
+    body {
+      margin: 5px;
+      height: 100%;
+      font-family: monospace;
+      /*color: yellow;*/
+      /*background-color: black;*/
+    }
+    a {
+      /*color: yellow;*/
+    }
+    #editor_container {
+      text-align: center;
+      width: 80vw;
+      height: 75vh;
+    }
+  </style>
+  <script src="{{$.Prefix}}filerobot-image-editor.min.js"></script>
+  <script>
+    function init() {
+      const filerobotImageEditor = new FilerobotImageEditor(
+        document.querySelector('#editor_container'), {
+          source: '{{$.Prefix}}raw/{{.Name}}?tok={{$.Token}}',
+          onSave: function (img, state) {
+            console.log('saving', img.fullName)
+            let binary = atob(img.imageBase64.split(',')[1]);
+            let array = [];
+            for (let i = 0; i < binary.length; i++) {
+              array.push(binary.charCodeAt(i));
+            }
+            let blob = new Blob([new Uint8Array(array)], { type: img.mimeType });
+
+            let formData = new FormData();
+            formData.append("file", blob, img.fullName);
+
+            let req = new XMLHttpRequest();
+            req.open('POST', '{{$.Prefix}}upload/{{$.Parent}}?tok={{$.Token}}');
+            req.onreadystatechange = function () {
+              if (req.readyState === XMLHttpRequest.DONE) {
+                console.log('result', req.status, req.responseText)
+                if (req.status == 200) {
+                  console.log(req.responseText);
+                  window.location='{{$.Prefix}}view/{{$.Parent}}?tok={{$.Token}}';
+                } else {
+                  console.log('error', img.fullName)
+                }
+              }
+            };
+            req.send(formData);
+          },
+          annotationsCommon: {
+            fill: '#ff0000'
+          },
+          tabsIds: ['Adjust', 'Annotate', 'Watermark'],
+          defaultTabId: 'Annotate',
+          defaultToolId: 'Pen',
+          useBackendTranslations: false,
+        },
+      );
+
+      filerobotImageEditor.render();
+    }
+  </script>
+</head>
+<body onload="init();">
+[<strong><a href="{{$.Prefix}}view/{{.Current}}?tok={{$.Token}}" title="Parent folder">Back</a></strong>]
+
+<h1>/{{.Current}}</h1>
+
+<div id="editor_container">
+</div>
+
+<div style="position: fixed; bottom: 0; right: 0"><i>Uses <a href="https://scaleflex.github.io/filerobot-image-editor/">scaleflex image editor</a></i></div>
+</body>
+</html>

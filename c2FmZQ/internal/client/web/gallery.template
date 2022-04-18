@@ -33,7 +33,7 @@
       background-color: rgba(0, 0, 0, 0.5);
     }
   </style>
-  <script src="{{$.Prefix}}jquery.js"></script>
+  <script src="{{$.Prefix}}jquery-3.6.0.min.js"></script>
   <script src="{{$.Prefix}}infinite-scroll.min.js"></script>
   <script>
     function init() {
@@ -111,6 +111,7 @@
 <p class="pagination">
   <a class="pagination__next" href="{{$.Prefix}}view/{{ if .Current | ne "" }}{{ .Current }}/{{ end }}?tok={{.Token}}&page={{.NextPage}}">Next page</a>
 </p>
+<div style="position: fixed; bottom: 0; right: 0"><i>Uses <a href="https://infinite-scroll.com/">Infinite Scroll</a></i></div>
 {{ end }}
 <!-- End Files -->
 

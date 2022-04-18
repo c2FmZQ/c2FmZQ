@@ -43,6 +43,8 @@ func NewServer(c *client.Client) *Server {
 	s.mux.HandleFunc(s.c.WebServerConfig.URLPrefix, s.handleIndex)
 	s.mux.HandleFunc(s.c.WebServerConfig.URLPrefix+"view/", s.method("GET", s.auth(s.handleView)))
 	s.mux.HandleFunc(s.c.WebServerConfig.URLPrefix+"raw/", s.method("GET", s.auth(s.handleRaw)))
+	s.mux.HandleFunc(s.c.WebServerConfig.URLPrefix+"edit/", s.method("GET", s.auth(s.handleEdit)))
+	s.mux.HandleFunc(s.c.WebServerConfig.URLPrefix+"upload/", s.method("POST", s.auth(s.handleUpload)))
 
 	return s
 }
@@ -138,7 +140,7 @@ func (s *Server) auth(next http.HandlerFunc) http.HandlerFunc {
 		q := req.URL.Query()
 		tok, err := token.Decrypt(s.c.WebServerConfig.TokenKey, q.Get("tok"))
 		if err != nil || tok.File != tagFromCtx(ctx) {
-			http.Redirect(w, req, "/?redir="+url.QueryEscape(req.URL.Path), http.StatusFound)
+			http.Redirect(w, req, s.c.WebServerConfig.URLPrefix+"?redir="+url.QueryEscape(req.URL.Path), http.StatusFound)
 			return
 		}
 		ctx = context.WithValue(ctx, tokenKey, tok)

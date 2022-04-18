@@ -1,7 +1,8 @@
 package web
 
 import (
-	_ "embed"
+	"bytes"
+	"embed"
 	"errors"
 	"fmt"
 	"html/template"
@@ -24,10 +25,8 @@ import (
 )
 
 var (
-	//go:embed infinite-scroll.min.js
-	infiniteScrollJS []byte
-	//go:embed jquery-3.6.0.min.js
-	jqueryJS []byte
+	//go:embed static/*
+	staticContent embed.FS
 
 	//go:embed index.template
 	indexTemplateSource string
@@ -36,6 +35,10 @@ var (
 	//go:embed gallery.template
 	galleryTemplateSource string
 	galleryTemplate       *template.Template
+
+	//go:embed edit.template
+	editTemplateSource string
+	editTemplate       *template.Template
 )
 
 func init() {
@@ -44,6 +47,7 @@ func init() {
 	}
 	indexTemplate = template.Must(template.New("index").Funcs(funcs).Parse(indexTemplateSource))
 	galleryTemplate = template.Must(template.New("gallery").Funcs(funcs).Parse(galleryTemplateSource))
+	editTemplate = template.Must(template.New("edit").Funcs(funcs).Parse(editTemplateSource))
 }
 
 func (s *Server) reqPath(req *http.Request, endpoint string) string {
@@ -57,16 +61,9 @@ func (s *Server) handleIndex(w http.ResponseWriter, req *http.Request) {
 	ctx := req.Context()
 
 	p := s.reqPath(req, "/")
-	if p == "jquery.js" {
+	if b, err := staticContent.ReadFile(filepath.Join("static", p)); err == nil {
 		w.Header().Set("Cache-Control", "public, immutable")
-		w.Header().Set("Content-Type", "application/javascript")
-		w.Write(jqueryJS)
-		return
-	}
-	if p == "infinite-scroll.min.js" {
-		w.Header().Set("Cache-Control", "public, immutable")
-		w.Header().Set("Content-Type", "application/javascript")
-		w.Write(infiniteScrollJS)
+		http.ServeContent(w, req, p, time.Time{}, bytes.NewReader(b))
 		return
 	}
 	if p != "" {
@@ -268,6 +265,106 @@ func (s *Server) handleView(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Content-Type", "text/html;charset=UTF-8")
 	if err := galleryTemplate.Execute(w, data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+}
+
+func (s *Server) handleEdit(w http.ResponseWriter, req *http.Request) {
+	log.Infof("%s %s", req.Method, req.RequestURI)
+	data := struct {
+		Token   string
+		Prefix  string
+		Current string
+		Parent  string
+		Name    string
+	}{
+		Token:  req.URL.Query().Get("tok"),
+		Prefix: s.c.WebServerConfig.URLPrefix,
+	}
+	var li []client.ListItem
+	file := s.reqPath(req, "edit/")
+	li, err := s.glob(file, true)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if len(li) == 0 {
+		http.NotFound(w, req)
+		return
+	}
+	if li[0].IsDir {
+		http.Error(w, "Edit directory", http.StatusInternalServerError)
+	}
+
+	item := li[0]
+	data.Current = fixSlashes(item.Filename)
+	data.Parent = path.Dir(data.Current) + "/"
+	data.Name = fixSlashes(item.Filename)
+
+	w.Header().Set("Content-Type", "text/html;charset=UTF-8")
+	if err := editTemplate.Execute(w, data); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+}
+
+func (s *Server) handleUpload(w http.ResponseWriter, req *http.Request) {
+	log.Infof("%s %s", req.Method, req.RequestURI)
+	var li []client.ListItem
+	file := s.reqPath(req, "upload/")
+	li, err := s.glob(file, true)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if len(li) == 0 {
+		http.NotFound(w, req)
+		return
+	}
+	if !li[0].IsDir {
+		http.Error(w, "not a folder", http.StatusInternalServerError)
+		return
+	}
+
+	ctx := req.Context()
+	mr, err := req.MultipartReader()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	for {
+		s.setDeadline(ctx, time.Now().Add(time.Minute))
+		p, err := mr.NextPart()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if p.FormName() == "file" {
+			name := path.Base(fixSlashes(p.FileName()))
+			f, err := s.c.StreamImport(name, li[0])
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			if _, err := io.Copy(f, p); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			if err := f.Close(); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			if err := p.Close(); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			continue
+		}
+		http.Error(w, "invalid upload", http.StatusInternalServerError)
 		return
 	}
 }
