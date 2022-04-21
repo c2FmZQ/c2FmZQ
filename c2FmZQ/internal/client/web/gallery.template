@@ -4,6 +4,15 @@
   <title>/{{.Current}}</title>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width">
+{{ if len .Name | ne 0 }}
+  <link rel="prefetch" href="{{$.Prefix}}raw/{{.Name}}?tok={{$.Token}}&thumb=1">
+  {{ if len .NextFile | ne 0 }}
+  <link rel="prefetch" href="{{$.Prefix}}raw/{{.NextFile}}?tok={{$.Token}}">
+  {{ end }}
+  {{ if len .PrevFile | ne 0 }}
+  <link rel="prefetch" href="{{$.Prefix}}raw/{{.PrevFile}}?tok={{$.Token}}">
+  {{ end }}
+{{ end }}
   <style>
     html {
       margin: 0px;
@@ -15,6 +24,9 @@
       font-family: monospace;
       color: yellow;
       background-color: black;
+    }
+    h1 {
+      overflow-wrap: break-word;
     }
     a {
       color: yellow;
@@ -67,7 +79,7 @@
 </head>
 <body onload="init();">
 {{ if len .Parent | ne 0 }}
-  [<strong><a href="{{$.Prefix}}view/{{.Parent}}?tok={{$.Token}}" title="Parent folder">Parent</a></strong>]
+  <a href="{{$.Prefix}}view/{{.Parent}}?tok={{$.Token}}" title="Parent folder">Parent</a>
 {{ end }}
 
 <h1>/{{.Current}}</h1>
@@ -117,10 +129,13 @@
 
 <!-- One File -->
 {{ if len .Name | ne 0 }}
+  {{ if and $.EnableEdit (not .IsVideo)}}
+  <div style="position: fixed; top: 0; right: 0; padding: 5px;"><a href="{{$.Prefix}}edit/{{.Name}}?tok={{$.Token}}" title="Edit">Edit</a></div>
+  {{ end }}
 <div style="display: grid; grid-template-columns: 1fr 8fr 1fr; gap: 10px;">
   <div style="grid-column: 1">
   {{ if len .PrevFile | ne 0 }}
-    <a href="{{$.Prefix}}view/{{.PrevFile}}?tok={{$.Token}}" title="{{.PrevFile}}"><img src="{{$.Prefix}}raw/{{.PrevFile}}?tok={{$.Token}}&thumb=1" style="max-height: 50vh; max-width: 100%; object-fit: contain" border="1" alt="{{.PrevFile}}" /><br />Previous</a>
+    <a href="{{$.Prefix}}view/{{.PrevFile}}?tok={{$.Token}}" title="{{.PrevFile}}"><img src="{{$.Prefix}}raw/{{.PrevFile}}?tok={{$.Token}}&thumb=1" style="max-height: 50vh; max-width: 100%; object-fit: contain" border="1" alt="{{.PrevFile}}" /><br />Prev</a>
   {{ end }}
   </div>
   <div style="grid-column: 2; text-align: center;">

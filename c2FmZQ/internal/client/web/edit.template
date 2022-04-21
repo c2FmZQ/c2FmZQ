@@ -16,6 +16,9 @@
       /*color: yellow;*/
       /*background-color: black;*/
     }
+    h1 {
+      overflow-wrap: break-word;
+    }
     a {
       /*color: yellow;*/
     }
@@ -31,6 +34,9 @@
       const filerobotImageEditor = new FilerobotImageEditor(
         document.querySelector('#editor_container'), {
           source: '{{$.Prefix}}raw/{{.Name}}?tok={{$.Token}}',
+          onClose: function () {
+            window.location='{{$.Prefix}}view/{{$.Name}}?tok={{$.Token}}';
+          },
           onSave: function (img, state) {
             console.log('saving', img.fullName)
             let binary = atob(img.imageBase64.split(',')[1]);
@@ -73,9 +79,8 @@
   </script>
 </head>
 <body onload="init();">
-[<strong><a href="{{$.Prefix}}view/{{.Current}}?tok={{$.Token}}" title="Parent folder">Back</a></strong>]
 
-<h1>/{{.Current}}</h1>
+<h1>Edit /{{.Current}}</h1>
 
 <div id="editor_container">
 </div>

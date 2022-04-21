@@ -467,6 +467,10 @@ func New() *App {
 					Value: true,
 				},
 				&cli.BoolFlag{
+					Name:  "enable-edit",
+					Usage: "Enable photo edit, uploads, etc.",
+				},
+				&cli.BoolFlag{
 					Name:  "clear",
 					Usage: "Reset the web server configuration to default values",
 				},
@@ -1242,12 +1246,14 @@ func (a *App) webServerConfig(ctx *cli.Context) error {
 		a.client.WebServerConfig.AutocertAddress = addr
 	}
 	a.client.WebServerConfig.AllowCaching = ctx.Bool("allow-caching")
+	a.client.WebServerConfig.EnableEdit = ctx.Bool("enable-edit")
 	log.Info("Webserver Config:")
 	log.Infof(" Address:         %q", a.client.WebServerConfig.Address)
 	log.Infof(" Password:        %q", a.client.WebServerConfig.Password)
 	log.Infof(" ExportPath:      %q", a.client.WebServerConfig.ExportPath)
 	log.Infof(" URLPrefix:       %q", a.client.WebServerConfig.URLPrefix)
 	log.Infof(" AllowCaching:    %v", a.client.WebServerConfig.AllowCaching)
+	log.Infof(" EnableEdit:      %v", a.client.WebServerConfig.EnableEdit)
 	log.Infof(" AutocertDomain:  %q", a.client.WebServerConfig.AutocertDomain)
 	log.Infof(" AutocertAddress: %q", a.client.WebServerConfig.AutocertAddress)
 	return a.client.Save()

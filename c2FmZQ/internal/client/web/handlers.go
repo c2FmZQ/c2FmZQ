@@ -2,6 +2,7 @@ package web
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"embed"
 	"errors"
 	"fmt"
@@ -39,9 +40,12 @@ var (
 	//go:embed edit.template
 	editTemplateSource string
 	editTemplate       *template.Template
+
+	startTime time.Time
 )
 
 func init() {
+	startTime = time.Now()
 	funcs := template.FuncMap{
 		"basename": path.Base,
 	}
@@ -62,8 +66,8 @@ func (s *Server) handleIndex(w http.ResponseWriter, req *http.Request) {
 
 	p := s.reqPath(req, "/")
 	if b, err := staticContent.ReadFile(filepath.Join("static", p)); err == nil {
-		w.Header().Set("Cache-Control", "public, immutable")
-		http.ServeContent(w, req, p, time.Time{}, bytes.NewReader(b))
+		w.Header().Set("Cache-Control", "public, max-age=86400, immutable")
+		http.ServeContent(w, req, p, startTime, bytes.NewReader(b))
 		return
 	}
 	if p != "" {
@@ -133,14 +137,15 @@ func (s *Server) handleView(w http.ResponseWriter, req *http.Request) {
 		Duration string
 	}
 	data := struct {
-		Token    string
-		Prefix   string
-		Page     int
-		NextPage int
-		Parent   string
-		Current  string
-		Albums   []albumData
-		Files    []fileData
+		Token      string
+		Prefix     string
+		Page       int
+		NextPage   int
+		Parent     string
+		Current    string
+		Albums     []albumData
+		Files      []fileData
+		EnableEdit bool
 		// If it's a single file.
 		Name     string
 		Date     string
@@ -148,10 +153,11 @@ func (s *Server) handleView(w http.ResponseWriter, req *http.Request) {
 		PrevFile string
 		NextFile string
 	}{
-		Token:    req.URL.Query().Get("tok"),
-		Prefix:   s.c.WebServerConfig.URLPrefix,
-		Page:     page,
-		NextPage: page + 1,
+		Token:      req.URL.Query().Get("tok"),
+		Prefix:     s.c.WebServerConfig.URLPrefix,
+		Page:       page,
+		NextPage:   page + 1,
+		EnableEdit: s.c.WebServerConfig.EnableEdit,
 	}
 	var li []client.ListItem
 	var isDir bool
@@ -325,6 +331,8 @@ func (s *Server) handleUpload(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, "not a folder", http.StatusInternalServerError)
 		return
 	}
+	item := li[0]
+	item.Filename = s.c.WebServerConfig.ExportPath + item.Filename
 
 	ctx := req.Context()
 	mr, err := req.MultipartReader()
@@ -345,7 +353,12 @@ func (s *Server) handleUpload(w http.ResponseWriter, req *http.Request) {
 		}
 		if p.FormName() == "file" {
 			name := path.Base(fixSlashes(p.FileName()))
-			f, err := s.c.StreamImport(name, li[0])
+			if name == "" {
+				http.Error(w, "illegal filename", http.StatusInternalServerError)
+				return
+			}
+			s.c.Delete([]string{filepath.Join(item.Filename, name)}, true)
+			f, err := s.c.StreamImport(name, item)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
@@ -401,6 +414,13 @@ func (s *Server) handleRaw(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	etag := etag(item)
+	w.Header().Set("etag", etag)
+	if req.Header.Get("If-None-Match") == etag {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+
 	var f io.ReadSeekCloser
 	if thumb {
 		if f, err = os.Open(item.ThumbPath); errors.Is(err, os.ErrNotExist) {
@@ -443,7 +463,7 @@ func (s *Server) handleRaw(w http.ResponseWriter, req *http.Request) {
 	}
 
 	if s.c.WebServerConfig.AllowCaching {
-		w.Header().Set("Cache-Control", "private, max-age=86400, immutable")
+		w.Header().Set("Cache-Control", "private")
 	}
 
 	in := stingle.DecryptFile(f, hdr)
@@ -454,7 +474,7 @@ func (s *Server) handleRaw(w http.ResponseWriter, req *http.Request) {
 
 	// Handle Range header. We could use http.ServeContent, but it uses io.Seek a
 	// lot, which can be expensive here.
-	start, end, ok := parseRangeHeader(req, hdr.DataSize)
+	start, end, ok := parseRangeHeader(req, hdr.DataSize, etag)
 	if !ok {
 		w.Write(buf[:n])
 		io.Copy(w, in)
@@ -482,7 +502,10 @@ func (s *Server) sendThumbnail(w http.ResponseWriter, filename string) {
 	w.Write(b)
 }
 
-func parseRangeHeader(req *http.Request, size int64) (int64, int64, bool) {
+func parseRangeHeader(req *http.Request, size int64, etag string) (int64, int64, bool) {
+	if ifr := req.Header.Get("If-Range"); ifr != "" && ifr != etag {
+		return 0, 0, false
+	}
 	r := req.Header.Get("Range")
 	if r == "" {
 		return 0, 0, false
@@ -524,4 +547,8 @@ func fixSlashes(s string) string {
 		}, s)
 	}
 	return s
+}
+
+func etag(item client.ListItem) string {
+	return fmt.Sprintf(`"%X"`, sha256.Sum256([]byte(fmt.Sprintf("%s/%s/%d", item.FSFile.File, item.FSFile.DateCreated, item.FSFile.DateModified))))
 }

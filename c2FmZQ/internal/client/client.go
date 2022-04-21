@@ -121,6 +121,7 @@ type WebServerConfig struct {
 	Address               string     `json:"address"`
 	MaxConcurrentRequests int        `json:"maxConcurrentRequests"`
 	AllowCaching          bool       `json:"allowCaching"`
+	EnableEdit            bool       `json:"enableEdit"`
 	Password              string     `json:"password"`
 	ExportPath            string     `json:"exportPath"`
 	URLPrefix             string     `json:"urlPrefix"`

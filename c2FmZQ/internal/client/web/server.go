@@ -43,8 +43,10 @@ func NewServer(c *client.Client) *Server {
 	s.mux.HandleFunc(s.c.WebServerConfig.URLPrefix, s.handleIndex)
 	s.mux.HandleFunc(s.c.WebServerConfig.URLPrefix+"view/", s.method("GET", s.auth(s.handleView)))
 	s.mux.HandleFunc(s.c.WebServerConfig.URLPrefix+"raw/", s.method("GET", s.auth(s.handleRaw)))
-	s.mux.HandleFunc(s.c.WebServerConfig.URLPrefix+"edit/", s.method("GET", s.auth(s.handleEdit)))
-	s.mux.HandleFunc(s.c.WebServerConfig.URLPrefix+"upload/", s.method("POST", s.auth(s.handleUpload)))
+	if s.c.WebServerConfig.EnableEdit {
+		s.mux.HandleFunc(s.c.WebServerConfig.URLPrefix+"edit/", s.method("GET", s.auth(s.handleEdit)))
+		s.mux.HandleFunc(s.c.WebServerConfig.URLPrefix+"upload/", s.method("POST", s.auth(s.handleUpload)))
+	}
 
 	return s
 }
