@@ -1,0 +1,222 @@
+html {
+  margin: 0;
+  height: 100%;
+}
+body {
+  margin: 5px;
+  height: 100%;
+  font-family: monospace;
+}
+h1 {
+  overflow-wrap: break-word;
+}
+a {
+  color: black;
+}
+.hidden {
+  display: none;
+}
+@keyframes fadeIn {
+  0% {opacity: 0;}
+  100% {opacity: 1;}
+}
+@keyframes fadeOut {
+  0% {opacity: 1;}
+  100% {opacity: 0;}
+}
+@keyframes slideIn {
+  0% {transform: translate(0%, 100%);}
+  100% {transform: translate(0%, 0%);}
+}
+@keyframes slideOut {
+  0% {transform: translate(0%, 0%);}
+  100% {transform: translate(0%, 100%);}
+}
+.error {
+  animation: slideIn 1s;
+  position: fixed;
+  bottom: 0;
+  right: 0;
+  padding: 10px;
+  border: 5px double red;
+  background-color: yellow;
+  font-size: 200%;
+  cursor: pointer;
+}
+.info {
+  animation: slideIn 1s;
+  position: fixed;
+  bottom: 0;
+  right: 0;
+  padding: 10px;
+  border: 5px double black;
+  background-color: white;
+  font-size: 200%;
+  cursor: pointer;
+}
+.collectionThumbdiv {
+  margin: 5px;
+  border: 1px solid black;
+  padding: 0;
+  text-align: center;
+  display: inline-flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  overflow: hidden;
+  min-width: fit-content;
+  box-shadow: 2px 2px 5px black;
+}
+.collectionThumbdiv:hover {
+  border-color: blue;
+}
+.collectionThumbdiv .collectionThumbLabel {
+  background-color: #aaa;
+  border-top: 1px solid black;
+  width: 100%;
+}
+.collectionThumbdiv img {
+  object-fit: cover;
+}
+.thumbdiv {
+  animation: fadeIn 1s;
+  float: left;
+  margin: 1em;
+  border: 1px solid black;
+  padding: 0;
+  text-align: center;
+  cursor: pointer;
+  display: inline-grid;
+  align-items: start;
+  justify-content: end;
+}
+.thumbdiv:hover {
+  border-color: blue;
+}
+.thumbdiv img {
+  grid-row: 1 / 2;
+  grid-column: 1 / 2;
+  object-fit: cover;
+  border: 0;
+  padding: 0;
+  box-shadow: 3px 3px 5px black;
+}
+.thumbdiv div.duration {
+  grid-row: 1 / 2;
+  grid-column: 1 / 2;
+  text-align: right;
+  margin: 5px;
+}
+.thumbdiv span.duration {
+  background-color: rgba(255, 255, 255, 0.5);
+  padding: 3px;
+}
+.resetdb-button {
+  position: absolute;
+  right: 0;
+  top: 0;
+}
+#trash {
+  cursor: pointer;
+}
+#refresh {
+  cursor: pointer;
+}
+#logout {
+  cursor: pointer;
+}
+#buttons {
+  position: fixed;
+  top: 0;
+  right: 10px;
+  z-index: 1;
+  background-color: white;
+}
+#gallery {
+  position: relative;
+  top: 1.5em;
+}
+#messages {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  z-index: 1;
+}
+#passphrase-div {
+  position: fixed;
+  left: 50%;
+  top: 40%;
+  transform: translate(-50%, -50%);
+  padding: 10px;
+  border: 1px solid red;
+  white-space: nowrap;
+  box-shadow: 5px 5px 5px black;
+}
+#loggedout-div {
+  position: fixed;
+  left: 50%;
+  top: 40%;
+  transform: translate(-50%, -50%);
+  padding: 10px;
+  border: 1px solid black;
+  box-shadow: 5px 5px 5px black;
+}
+#collections {
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: flex-start;
+  max-width: 100vw;
+}
+.popup {
+  animation: fadeIn 0.25s;
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  border: 1px solid black;
+  padding: 0;
+  background-color: white;
+  z-index: 100;
+  box-shadow: 5px 5px 5px black;
+}
+.popup-header {
+  border-bottom: 1px solid black;
+  background-color: #aaa;
+  display: grid;
+  grid-template-columns: 10fr 1fr;
+  gap: 10px;
+}
+.popup-name {
+  grid-column: 1;
+}
+.popup-close {
+  cursor: pointer;
+  grid-column: 2;
+  text-align: right;
+}
+.popup-media {
+  max-height: 90vh;
+  max-width: 90vw;
+  object-fit: contain;
+  display: block;
+}
+.blur {
+  animation: fadeIn 0.25s;
+  background-color: rgba(255, 255, 255, 0.5);
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  right: 0;
+  z-index: 99;
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+}
+#footer {
+  position: fixed;
+  bottom: 0;
+  right: 0;
+}

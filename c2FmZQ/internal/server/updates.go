@@ -13,14 +13,13 @@ import (
 // mechanism by which the user learns about changes in files, albums, etc.
 // Form arguments:
 //  - token  - The signed session token.
-//  - params - Encrypted parameters:
-//     - filesST - The timestamp of the last seen changes to the Gallery.
-//     - trashST - The timestamp of the last seen changes to the Trash.
-//     - albumsST - The timestamp of the last seen to albums.
-//     - albumFilesST - The timestamp of the last seen changes to any album
-//                      files.
-//     - cntST - The timestamp of the last seen changes to contacts.
-//     - delST - The timestamp of the last seen delete events.
+//  - filesST - The timestamp of the last seen changes to the Gallery.
+//  - trashST - The timestamp of the last seen changes to the Trash.
+//  - albumsST - The timestamp of the last seen to albums.
+//  - albumFilesST - The timestamp of the last seen changes to any album
+//                   files.
+//  - cntST - The timestamp of the last seen changes to contacts.
+//  - delST - The timestamp of the last seen delete events.
 // Returns:
 //  - files: unseen changes in Gallery
 //  - trash: unseen changes in Trash

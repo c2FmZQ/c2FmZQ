@@ -2,12 +2,14 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"encoding/json"
 	"net"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/NYTimes/gziphandler"
@@ -18,6 +20,7 @@ import (
 	"golang.org/x/time/rate"
 
 	"c2FmZQ/internal/database"
+	"c2FmZQ/internal/jsclient"
 	"c2FmZQ/internal/log"
 	"c2FmZQ/internal/server/basicauth"
 	"c2FmZQ/internal/server/limit"
@@ -61,9 +64,13 @@ var (
 		},
 		[]string{"code"},
 	)
+
+	startTime time.Time
 )
 
 func init() {
+	startTime = time.Now()
+
 	prometheus.MustRegister(reqLatency)
 	prometheus.MustRegister(reqStatus)
 	prometheus.MustRegister(reqSize)
@@ -76,6 +83,7 @@ type Server struct {
 	BaseURL               string
 	Redirect404           string
 	MaxConcurrentRequests int
+	EnableWebApp          bool
 	mux                   *http.ServeMux
 	srv                   *http.Server
 	db                    *database.Database
@@ -114,7 +122,28 @@ func New(db *database.Database, addr, htdigest, pathPrefix string) *Server {
 		s.mux.HandleFunc(pathPrefix+"/metrics", s.basicAuth.Handler("Metrics", promhttp.Handler()))
 	}
 
-	s.mux.HandleFunc("/", s.handleNotFound)
+	if pathPrefix != "" {
+		s.mux.HandleFunc("/", s.handleNotFound)
+	}
+	s.mux.HandleFunc(pathPrefix+"/", func(w http.ResponseWriter, req *http.Request) {
+		if !s.EnableWebApp {
+			http.NotFound(w, req)
+			return
+		}
+		log.Infof("%s %s", req.Method, req.RequestURI)
+
+		p := strings.TrimPrefix(req.URL.Path, pathPrefix+"/")
+		if p == "" {
+			p = "index.html"
+		}
+		b, err := jsclient.FS.ReadFile(p)
+		if err != nil {
+			http.NotFound(w, req)
+			return
+		}
+		http.ServeContent(w, req, p, startTime, bytes.NewReader(b))
+	})
+
 	s.mux.HandleFunc(pathPrefix+"/v2/", s.noauth(s.handleNotImplemented))
 	s.mux.HandleFunc(pathPrefix+"/v2/register/createAccount", s.noauth(s.handleCreateAccount))
 	s.mux.HandleFunc(pathPrefix+"/v2/login/preLogin", s.noauth(s.handlePreLogin))

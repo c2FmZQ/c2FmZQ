@@ -9,6 +9,7 @@
   * [Scale and performance](#scale)
   * [How to run the server](#run-server)
   * [Experimental features](#experimental)
+    * [Web App](#webapp)
     * [One-time passwords (OTP)](#totp)
     * [Decoy / duress passwords](#decoy)
 * [c2FmZQ Client](#c2FmZQ-client)
@@ -148,27 +149,28 @@ NAME:
    c2FmZQ-server - Run the c2FmZQ server
 
 USAGE:
-   c2FmZQ-server command [command options]  
+   c2FmZQ-server [global options]  
 
-COMMANDS:
-
-OPTIONS:
-   --database DIR, --db DIR       Use the database in DIR (default: "$HOME/c2FmZQ-server/data") [$C2FMZQ_DATABASE]
-   --address value, --addr value  The local address to use. (default: "127.0.0.1:8080")
-   --path-prefix value            The API endpoints are <path-prefix>/v2/...
-   --base-url value               The base URL of the generated download links. If empty, the links will generated using the Host headers of the incoming requests, i.e. https://HOST/.
-   --redirect-404 value           Requests to unknown endpoints are redirected to this URL.
-   --tlscert FILE                 The name of the FILE containing the TLS cert to use.
-   --tlskey FILE                  The name of the FILE containing the TLS private key to use.
-   --autocert-domain domain       Use autocert (letsencrypt.org) to get TLS credentials for this domain. The special value 'any' means accept any domain. The credentials are saved in the database. [$C2FMZQ_DOMAIN]
-   --autocert-address value       The autocert http server will listen on this address. It must be reachable externally on port 80. (default: ":http")
-   --allow-new-accounts           Allow new account registrations. (default: true)
-   --verbose value, -v value      The level of logging verbosity: 1:Error 2:Info 3:Debug (default: 2 (info))
-   --encrypt-metadata             Encrypt the server metadata (strongly recommended). (default: true)
-   --passphrase-command COMMAND   Read the database passphrase from the standard output of COMMAND. [$C2FMZQ_PASSPHRASE_CMD]
-   --passphrase-file FILE         Read the database passphrase from FILE. [$C2FMZQ_PASSPHRASE_FILE]
-   --htdigest-file FILE           The name of the htdigest FILE to use for basic auth for some endpoints, e.g. /metrics [$C2FMZQ_HTDIGEST_FILE]
-   --licenses                     Show the software licenses. (default: false)
+GLOBAL OPTIONS:
+   --database DIR, --db DIR         Use the database in DIR (default: "$HOME/c2FmZQ-server/data") [$C2FMZQ_DATABASE]
+   --address value, --addr value    The local address to use. (default: "127.0.0.1:8080")
+   --path-prefix value              The API endpoints are <path-prefix>/v2/...
+   --base-url value                 The base URL of the generated download links. If empty, the links will generated using the Host headers of the incoming requests, i.e. https://HOST/.
+   --redirect-404 value             Requests to unknown endpoints are redirected to this URL.
+   --tlscert FILE                   The name of the FILE containing the TLS cert to use.
+   --tlskey FILE                    The name of the FILE containing the TLS private key to use.
+   --autocert-domain domain         Use autocert (letsencrypt.org) to get TLS credentials for this domain. The special value 'any' means accept any domain. The credentials are saved in the database. [$C2FMZQ_DOMAIN]
+   --autocert-address value         The autocert http server will listen on this address. It must be reachable externally on port 80. (default: ":http")
+   --allow-new-accounts             Allow new account registrations. (default: true)
+   --verbose value, -v value        The level of logging verbosity: 1:Error 2:Info 3:Debug (default: 2 (info))
+   --encrypt-metadata               Encrypt the server metadata (strongly recommended). (default: true)
+   --passphrase-command COMMAND     Read the database passphrase from the standard output of COMMAND. [$C2FMZQ_PASSPHRASE_CMD]
+   --passphrase-file FILE           Read the database passphrase from FILE. [$C2FMZQ_PASSPHRASE_FILE]
+   --passphrase value               Use value as database passphrase. [$C2FMZQ_PASSPHRASE]
+   --htdigest-file FILE             The name of the htdigest FILE to use for basic auth for some endpoints, e.g. /metrics [$C2FMZQ_HTDIGEST_FILE]
+   --max-concurrent-requests value  The maximum number of concurrent requests. (default: 10)
+   --enable-webapp                  Enable WebApp. (default: false)
+   --licenses                       Show the software licenses. (default: false)
 ```
 
 ---
@@ -207,6 +209,20 @@ GOOS=darwin GOARCH=arm64 go build -o c2FmZQ-server-darwin
 ## <a name="experimental"></a>Experimental features
 
 The following features are experimental and could change or disappear in the future.
+
+### <a name="webapp"></a>Web App
+
+When the `--enable-webapp` flag is set on the server, it enables a Web Application
+written entirely in HTML and javascript. All the cryptographic operations are performed
+in the browser using [Sodium-Plus](https://github.com/paragonie/sodium-plus)
+and [Secure webstore](https://github.com/AKASHAorg/secure-webstore), and the app
+implements the same protocol as the c2FmZQ client and the Stingle Photos app.
+
+Simply open https://${DOMAIN}/${path-prefix}/ to access to Web App.
+
+Browsing albums with photos and videos is possible from the Web. Other features will be
+added over time.
+
 
 ### <a name="totp"></a>One-time passwords (OTP)
 
@@ -318,11 +334,13 @@ COMMANDS:
      updates, update  Pull metadata updates from remote server.
 
 GLOBAL OPTIONS:
-   --data-dir DIR, -d DIR     Save the data in DIR (default: "$HOME/.config/.c2FmZQ") [$C2FMZQ_DATADIR]
-   --verbose value, -v value  The level of logging verbosity: 1:Error 2:Info 3:Debug (default: 2 (info))
-   --passphrase-file FILE     Read the database passphrase from FILE. [$C2FMZQ_PASSPHRASE_FILE]
-   --server value             The API server base URL. [$C2FMZQ_API_SERVER]
-   --auto-update              Automatically fetch metadata updates from the remote server before each command. (default: true)
+   --data-dir DIR, -d DIR        Save the data in DIR (default: "$HOME/.config/.c2FmZQ") [$C2FMZQ_DATADIR]
+   --verbose value, -v value     The level of logging verbosity: 1:Error 2:Info 3:Debug (default: 2 (info))
+   --passphrase-command COMMAND  Read the database passphrase from the standard output of COMMAND. [$C2FMZQ_PASSPHRASE_CMD]
+   --passphrase-file FILE        Read the database passphrase from FILE. [$C2FMZQ_PASSPHRASE_FILE]
+   --passphrase value            Use value as database passphrase. [$C2FMZQ_PASSPHRASE]
+   --server value                The API server base URL. [$C2FMZQ_API_SERVER]
+   --auto-update                 Automatically fetch metadata updates from the remote server before each command. (default: true)
 ```
 
 ---

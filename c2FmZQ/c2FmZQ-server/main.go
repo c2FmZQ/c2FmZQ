@@ -41,6 +41,7 @@ var (
 	flagAutocertDomain        string
 	flagAutocertAddr          string
 	flagMaxConcurrentRequests int
+	flagEnableWebApp          bool
 )
 
 func main() {
@@ -169,6 +170,12 @@ func main() {
 				Destination: &flagMaxConcurrentRequests,
 			},
 			&cli.BoolFlag{
+				Name:        "enable-webapp",
+				Value:       false,
+				Usage:       "Enable WebApp.",
+				Destination: &flagEnableWebApp,
+			},
+			&cli.BoolFlag{
 				Name:  "licenses",
 				Usage: "Show the software licenses.",
 			},
@@ -210,6 +217,7 @@ func startServer(c *cli.Context) error {
 	s.BaseURL = flagBaseURL
 	s.Redirect404 = flagRedirect404
 	s.MaxConcurrentRequests = flagMaxConcurrentRequests
+	s.EnableWebApp = flagEnableWebApp
 
 	done := make(chan struct{})
 	go func() {
