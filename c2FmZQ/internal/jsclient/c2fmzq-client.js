@@ -702,7 +702,7 @@ class c2FmZQClient {
     }
 
     if (event.request.url.indexOf('/jsdecrypt/') === -1) {
-      return fetch(event.request);
+      return new Response('No such endpoint', {'status': 404, 'statusText': 'Not found'});
     }
 
     const p = new Promise(async (resolve, reject) => {

@@ -20,7 +20,23 @@
 /* jshint -W097 */
 'use strict';
 
-console.log('SW loading');
+self.importScripts('version.js');
+console.log(`SW Version ${VERSION}`, DEVEL ? 'DEVEL' : '');
+
+const MANIFEST = [
+  'c2fmzq-client.js',
+  'c2.png',
+  'clear.png',
+  'index.html',
+  'main.js',
+  'secure-webstore.js',
+  'secure-webstore.js.map',
+  'sodium-plus.min.js',
+  'store.js',
+  'style.css',
+  'ui.js',
+  'version.js',
+];
 
 const window = self;
 self.importScripts('sodium-plus.min.js');
@@ -148,10 +164,11 @@ async function sodiumKey(k, type) {
 
 function sendHello(err) {
   const key = self.store.passphrase;
-  console.log('SW Sending hello');
+  console.log(`SW Sending hello ${VERSION}`);
   let msg = {
     type: 'hello',
     storeKey: key,
+    version: VERSION,
   };
   if (err) {
     msg.err = err;
@@ -166,6 +183,10 @@ function sendLoggedOut() {
 
 async function sendMessage(id, m) {
   const clients = await self.clients.matchAll({type: 'window'});
+  if (clients.length === 0) {
+    console.log(`SW no clients ${VERSION}`);
+    return;
+  }
   for (let c of clients) {
     if (id === '' || c.id === id) {
       c.postMessage(m);
@@ -174,11 +195,37 @@ async function sendMessage(id, m) {
 }
 
 self.addEventListener('install', event => {
-  event.waitUntil(self.skipWaiting());
+  if (DEVEL) {
+    console.log(`SW install ${VERSION} DEVEL`);
+    event.waitUntil(self.skipWaiting());
+    return;
+  }
+  console.log(`SW install ${VERSION}`);
+  event.waitUntil(
+    self.caches.open(VERSION).then(c => c.addAll(MANIFEST))
+  );
 });
 
 self.addEventListener('activate', event => {
-  self.clients.claim();
+  if (DEVEL) {
+    console.log(`SW activate ${VERSION} DEVEL`);
+    event.waitUntil(
+      self.caches.keys()
+      .then(keys => keys.map(k => self.caches.delete(k)))
+      .then(p => Promise.all(p))
+      .then(r => console.log('SW cache deletes', r))
+      .then(() => self.clients.claim())
+    );
+    return;
+  }
+  console.log(`SW activate ${VERSION}`);
+  event.waitUntil(
+    self.caches.keys()
+    .then(keys => keys.filter(k => k !== VERSION).map(k => self.caches.delete(k)))
+    .then(p => Promise.all(p))
+    .then(r => console.log('SW cache deletes', r))
+    .then(() => self.clients.claim())
+  );
 });
 
 self.addEventListener('statechange', event => {
@@ -193,7 +240,10 @@ self.addEventListener('message', async event => {
   const clientId = event.source.id;
   switch(event.data?.type) {
     case 'hello':
-      console.log('SW Received hello');
+      console.log(`SW Received hello ${event.data.version}`);
+      if (event.data.version !== VERSION) {
+        console.log(`SW Version mismatch: ${event.data.version} != ${VERSION}`);
+      }
       initApp(event.data.storeKey);
       break;
     case 'rpc':
@@ -223,11 +273,26 @@ self.addEventListener('message', async event => {
 });
 
 self.addEventListener('fetch', event => {
-  const url = new URL(event.request.url);
+  const reqUrl = event.request.url.replace(/#.*$/, '');
+  if (!reqUrl.startsWith(self.registration.scope)) {
+    console.error('SW fetch req out of scope', reqUrl, self.registration.scope);
+    event.respondWith('request out of scope', {'status': 403, 'statusText': 'Permission denied'});
+    return;
+  }
+  const url = new URL(reqUrl);
   const scope = new URL(self.registration.scope);
-  const rel = url.pathname.slice(scope.pathname.length);
-  if (!rel.startsWith('jsapi') && !rel.startsWith('jsdecrypt')) {
-    event.respondWith(fetch(event.request));
+  let rel = url.pathname.slice(scope.pathname.length);
+  if (rel === '') {
+    rel = 'index.html';
+  }
+  if (MANIFEST.includes(rel)) {
+    event.respondWith(
+      self.caches.match(rel).then(resp => {
+        if (resp) return resp;
+        console.log(`SW fetch ${rel}, no cache`);
+        return fetch(event.request);
+      })
+    );
     return;
   }
 
@@ -252,4 +317,4 @@ self.addEventListener('fetch', event => {
 });
 
 initApp(null);
-console.log('SW loaded');
+console.log(`SW loaded ${VERSION}`);

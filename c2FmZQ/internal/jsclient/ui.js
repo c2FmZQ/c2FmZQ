@@ -129,8 +129,8 @@ class UI {
         document.getElementById('loggedin-account').textContent = account;
         this.showLoggedIn_();
         main.sendRPC('getUpdates')
-          .then(this.refreshGallery_.bind(this))
-          .catch(this.showError_.bind(this));
+          .catch(this.showError_.bind(this))
+          .finally(this.refreshGallery_.bind(this));
       } else {
         this.showLoggedOut_();
       }

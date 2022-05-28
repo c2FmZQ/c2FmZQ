@@ -27,8 +27,10 @@ if (!('serviceWorker' in navigator)) {
 /* jshint +W060 */
 
 window.addEventListener('load', () => {
+  console.log(`Version ${VERSION}`, DEVEL ? 'DEVEL' : '');
   window.main = new Main();
   window.ui = new UI();
+  document.getElementById('version').textContent = VERSION + (DEVEL?' DEVEL':'');
 });
 
 class Main {
@@ -51,12 +53,15 @@ class Main {
       this.sendHello_();
     };
     navigator.serviceWorker.register('service-worker.js')
+    .then(r => r.update())
     .then(() => {
-      console.log('Service worker registered');
-      this.sendHello_();
+      console.log('Service worker updated');
     })
     .catch(err => {
-      console.error('Service worker registration failed', err);
+      console.error('Service worker update failed', err);
+    })
+    .finally(() => {
+      this.sendHello_();
     });
 
     navigator.serviceWorker.onmessage = event => {
@@ -74,7 +79,10 @@ class Main {
           window.location.reload();
           break;
         case 'hello':
-          console.log('Received hello');
+          console.log(`Received hello ${event.data.version}`);
+          if (event.data.version !== VERSION) {
+            console.log(`Version mismatch: ${event.data.version} != ${VERSION}`);
+          }
           if (event.data.err) {
             this.storeKey_ = null;
             ui.wrongPassphrase(event.data.err);
@@ -83,6 +91,11 @@ class Main {
             this.sendHello_();
           } else if (event.data.storeKey) {
             this.storeKey_ = event.data.storeKey;
+            let v = VERSION;
+            if (v !== event.data.version) {
+              v = `${VERSION}/${event.data.version}`;
+            }
+            document.getElementById('version').textContent = v + (DEVEL?' DEVEL':'');
             setTimeout(ui.startUI.bind(ui));
           } else {
             setTimeout(ui.promptForPassphrase.bind(ui));
@@ -160,13 +173,16 @@ class Main {
   }
 
   sendHello_() {
-    console.log('Sending hello');
-    if (navigator.serviceWorker.controller) {
-      navigator.serviceWorker.controller.postMessage({
-        type: 'hello',
-        storeKey: this.storeKey_,
-      });
+    console.log(`Sending hello ${VERSION}`);
+    if (!navigator.serviceWorker.controller) {
+      console.log('No controller');
+      return;
     }
+    navigator.serviceWorker.controller.postMessage({
+      type: 'hello',
+      storeKey: this.storeKey_,
+      version: VERSION,
+    });
   }
 
   async sendRPC(f, ...args) {

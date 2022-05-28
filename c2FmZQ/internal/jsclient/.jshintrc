@@ -20,6 +20,7 @@
     "ByteLengthQueuingStrategy": true,
     "c2FmZQClient": true,
     "CryptographyKey": true,
+    "DEVEL": true,
     "main": true,
     "ReadableStream": true,
     "SecureStore": true,
@@ -36,6 +37,7 @@
     "Store": true,
     "UI": true,
     "ui": true,
+    "VERSION": true,
     "X25519PublicKey": true,
     "X25519SecretKey": true
   }
