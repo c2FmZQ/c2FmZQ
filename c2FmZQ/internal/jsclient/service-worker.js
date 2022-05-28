@@ -22,23 +22,6 @@
 
 console.log('SW loading');
 
-const MANIFEST = [
-  'c2fmzq-client.js',
-  'c2.png',
-  'clear.png',
-  'index.html',
-  'jsclient.go',
-  'main.js',
-  'secure-webstore.js',
-  'secure-webstore.js.LICENSE.txt',
-  'secure-webstore.js.map',
-  'service-worker.js',
-  'sodium-plus.min.js',
-  'store.js',
-  'style.css',
-  'ui.js',
-];
-
 const window = self;
 self.importScripts('sodium-plus.min.js');
 self.importScripts('secure-webstore.js');
@@ -240,14 +223,10 @@ self.addEventListener('message', async event => {
 });
 
 self.addEventListener('fetch', event => {
-  if (!event.request.url.startsWith(self.registration.scope)) {
-    event.respondWith(new Response('', {'status': 503, 'statusText': 'Invalid request'}));
-    return;
-  }
   const url = new URL(event.request.url);
   const scope = new URL(self.registration.scope);
   const rel = url.pathname.slice(scope.pathname.length);
-  if (MANIFEST.includes(rel)) {
+  if (!rel.startsWith('jsapi') && !rel.startsWith('jsdecrypt')) {
     event.respondWith(fetch(event.request));
     return;
   }
