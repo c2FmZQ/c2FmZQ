@@ -186,7 +186,7 @@ class Main {
   }
 
   async sendRPC(f, ...args) {
-    if (['login'].includes(f)) return this.sendMessageRPC_(f, ...args);
+    if (['login','upload'].includes(f)) return this.sendMessageRPC_(f, ...args);
     return this.sendWebRPC_(f, ...args);
   }
 

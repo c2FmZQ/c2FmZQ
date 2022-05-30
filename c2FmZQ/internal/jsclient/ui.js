@@ -105,6 +105,12 @@ class UI {
 
     window.addEventListener('scroll', this.onScroll_.bind(this));
     window.addEventListener('resize', this.onScroll_.bind(this));
+    window.addEventListener('hashchange', () => {
+      const c = main.getHash('collection');
+      if (c) {
+        this.switchView_({collection: c});
+      }
+    });
     this.trashButton_.addEventListener('click', () => {
       this.switchView_({collection: 'trash'});
     });
@@ -295,6 +301,7 @@ class UI {
     while (g.firstChild) {
       g.removeChild(g.firstChild);
     }
+
     const collectionDiv = document.createElement('div');
     collectionDiv.id = 'collections';
     g.appendChild(collectionDiv);
@@ -302,6 +309,8 @@ class UI {
     let collectionName = '';
     let members = [];
     let scrollTo = null;
+    let isOwner = false;
+    let canAdd = false;
 
     for (let i in collections) {
       if (!collections.hasOwnProperty(i)) {
@@ -313,10 +322,15 @@ class UI {
       if (c.collection === 'trash' && this.galleryState_.collection !== c.collection) {
         continue;
       }
+      if (!c.isOwner) {
+        div.classList.add('not-owner');
+      }
       if (this.galleryState_.collection === c.collection) {
         collectionName = c.name;
         members = c.members;
         scrollTo = div;
+        isOwner = c.isOwner;
+        canAdd = c.canAdd;
       }
       const img = new Image();
       img.alt = c.name;
@@ -344,6 +358,14 @@ class UI {
       collectionDiv.appendChild(div);
     }
 
+    if (isOwner || canAdd) {
+      const addDiv = document.createElement('div');
+      addDiv.id = 'add-button';
+      addDiv.textContent = '＋';
+      addDiv.addEventListener('click', this.showUploadView_.bind(this));
+      g.appendChild(addDiv);
+    }
+
     const br = document.createElement('br');
     br.clear = 'all';
     g.appendChild(br);
@@ -357,7 +379,7 @@ class UI {
     }
 
     this.galleryState_.lastDate = '';
-    const n = this.galleryState_.shown;
+    const n = Math.max(this.galleryState_.shown, UI.SHOW_ITEMS_INCREMENT);
     this.galleryState_.shown = 0;
     this.showMoreFiles_(n);
     if (scrollTo) {
@@ -424,41 +446,26 @@ class UI {
     }
   }
 
-  setUpPopup_(f) {
+  commonPopup_(params) {
     const popup = document.createElement('div');
     const popupBlur = document.createElement('div');
     const popupHeader = document.createElement('div');
     const popupName = document.createElement('div');
     const popupClose = document.createElement('div');
     const popupContent = document.createElement('div');
-    popup.className = 'popup';
+    popup.className = params.className || 'popup';
     popupBlur.className = 'blur';
     popupHeader.className = 'popup-header';
     popupName.className = 'popup-name';
-    popupName.textContent = f.fileName;
+    popupName.textContent = params.title || 'Title';
     popupClose.className = 'popup-close';
     popupClose.textContent = '✖';
+    popupContent.className = 'popup-content';
 
     popupHeader.appendChild(popupName);
     popupHeader.appendChild(popupClose);
     popup.appendChild(popupHeader);
     popup.appendChild(popupContent);
-
-    if (f.isImage) {
-      const img = new Image();
-      img.className = 'popup-media';
-      img.alt = f.fileName;
-      img.src = f.url;
-      popupContent.appendChild(img);
-    }
-    if (f.isVideo) {
-      const video = document.createElement('video');
-      video.className = 'popup-media';
-      video.src = f.url;
-      video.poster = f.thumbUrl;
-      video.controls = 'controls';
-      popupContent.appendChild(video);
-    }
 
     let closePopup;
     const handleClickClose = () => {
@@ -496,14 +503,285 @@ class UI {
       popupBlur.addEventListener('animationend', () => {
         g.removeChild(popupBlur);
       });
+      if (params.onclose) {
+        params.onclose();
+      }
     };
     g.appendChild(popupBlur);
     g.appendChild(popup);
+    return {popup: popup, content: popupContent, close: closePopup};
+  }
+
+  setUpPopup_(f) {
+    const {content} = this.commonPopup_({title: f.fileName});
+    if (f.isImage) {
+      const img = new Image();
+      img.className = 'popup-media';
+      img.alt = f.fileName;
+      img.src = f.url;
+      content.appendChild(img);
+    }
+    if (f.isVideo) {
+      const video = document.createElement('video');
+      video.className = 'popup-media';
+      video.src = f.url;
+      video.poster = f.thumbUrl;
+      video.controls = 'controls';
+      content.appendChild(video);
+    }
   }
 
   formatDuration_(d) {
     const min = Math.floor(d / 60);
     const sec = d % 60;
     return '' + min + ':' + ('00'+sec).slice(-2);
+  }
+
+  formatSize_(s) {
+    if (s > 1024*1024*1024) return Math.floor(s * 100 / 1024 / 1024 / 1024) / 100 + ' GiB';
+    if (s > 1024*1024) return Math.floor(s * 100 / 1024 / 1024) / 100 + ' MiB';
+    if (s > 1024) return Math.floor(s * 100 / 1024) / 100 + ' KiB';
+    return s + ' B';
+  }
+
+  async showUploadView_() {
+    const collections = await main.sendRPC('getCollections');
+
+    let collectionName = '';
+    let members = [];
+
+    for (let i in collections) {
+      if (!collections.hasOwnProperty(i)) {
+        continue;
+      }
+      const c = collections[i];
+      if (this.galleryState_.collection === c.collection) {
+        collectionName = c.name;
+        members = c.members;
+        break;
+      }
+    }
+    const {popup, content, close} = this.commonPopup_({
+      title: `Upload: ${collectionName}`,
+      className: 'popup upload',
+      onclose: () => {
+        console.log('Close upload');
+      },
+    });
+
+    const h1 = document.createElement('h1');
+    h1.textContent = 'Collection: ' + collectionName;
+    content.appendChild(h1);
+    if (members?.length > 0) {
+      const div = document.createElement('div');
+      div.textContent = 'Shared with ' + members.join(', ');
+      content.appendChild(div);
+    }
+
+    const list = document.createElement('div');
+    list.id = 'upload-file-list';
+    content.appendChild(list);
+
+    let files = [];
+    const processFiles = newFiles => {
+      for (let i = 0; i < newFiles.length; i++) {
+        const f = newFiles[i];
+        const elem = document.createElement('div');
+        elem.className = 'upload-item-div';
+        const img = new Image();
+        img.className = 'upload-thumbnail';
+        this.makeThumbnail_(f).then(([data,duration]) => {
+          img.src = data;
+          for (let i = 0; i < files.length; i++) {
+            if (files[i].elem === elem) {
+              files[i].thumbnail = data;
+              files[i].duration = duration;
+              break;
+            }
+          }
+        });
+        elem.appendChild(img);
+        const div = document.createElement('div');
+        div.className = 'upload-item-attrs';
+        elem.appendChild(div);
+        const nameSpan = document.createElement('span');
+        nameSpan.textContent = `Name: ${f.name}`;
+        div.appendChild(nameSpan);
+        const sizeSpan = document.createElement('span');
+        sizeSpan.textContent = 'Size: ' + this.formatSize_(f.size);
+        div.appendChild(sizeSpan);
+        const removeButton = document.createElement('button');
+        removeButton.className = 'upload-item-remove-button';
+        removeButton.textContent = 'Remove';
+        removeButton.addEventListener('click', () => {
+          files = files.filter(f => f.elem !== elem);
+          processFiles([]);
+        });
+        div.appendChild(removeButton);
+        files.push({
+          file: f,
+          elem: elem,
+        });
+      }
+      const list = document.getElementById('upload-file-list');
+      while (list.firstChild) {
+        list.removeChild(list.firstChild);
+      }
+      if (files.length > 0) {
+        const uploadButton = document.createElement('button');
+        uploadButton.className = 'upload-file-list-upload-button';
+        uploadButton.textContent = 'Upload';
+        uploadButton.addEventListener('click', () => {
+          let toUpload = [];
+          for (let i = 0; i < files.length; i++) {
+            toUpload.push({
+              file: files[i].file,
+              thumbnail: files[i].thumbnail,
+              duration: files[i].duration,
+            });
+          }
+          uploadButton.disabled = true;
+          uploadButton.textContent = 'Uploading';
+          main.sendRPC('upload', this.galleryState_.collection, toUpload)
+          .then(() => {
+            close();
+            this.refresh_();
+          })
+          .catch(e => {
+            this.showError_(e);
+          })
+          .finally(() => {
+            uploadButton.disabled = false;
+            uploadButton.textContent = 'Upload';
+          });
+        });
+        list.appendChild(uploadButton);
+      }
+      for (let i = 0; i < files.length; i++) {
+        const f = files[i];
+        list.appendChild(f.elem);
+      }
+    };
+    const fileInputs = document.createElement('div');
+    fileInputs.id = 'upload-files-div';
+    content.appendChild(fileInputs);
+
+    const label = document.createElement('label');
+    label.for = 'files';
+    label.textContent = 'Select files to upload (or drag & drop files anywhere):';
+    fileInputs.appendChild(label);
+    const input = document.createElement('input');
+    input.id = 'upload-file-input';
+    input.type = 'file';
+    input.name = 'files';
+    input.multiple = true;
+    input.addEventListener('change', e => {
+      processFiles(e.target.files);
+    });
+    fileInputs.appendChild(input);
+
+    popup.addEventListener('drop', e => {
+      e.preventDefault();
+      let files = [];
+      if (e.dataTransfer.items) {
+        for (let i = 0; i < e.dataTransfer.items.length; i++) {
+          if (e.dataTransfer.items[i].kind === 'file') {
+            files.push(e.dataTransfer.items[i].getAsFile());
+          }
+        }
+      } else {
+        for (let i = 0; i < e.dataTransfer.files.length; i++) {
+          files.push(e.dataTransfer.files[i]);
+        }
+      }
+      processFiles(files);
+    });
+    popup.addEventListener('dragover', e => {
+      e.preventDefault();
+    });
+  }
+
+  async makeThumbnail_(file) {
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext('2d');
+    if (file.type.startsWith('image/')) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const img = new Image();
+          img.onload = () => {
+            if (img.width > img.height) {
+              canvas.width = 320;
+              canvas.height = 240;
+            } else {
+              canvas.width = 240;
+              canvas.height = 320;
+            }
+            let sx = 0;
+            let sy = 0;
+            let sw = img.width;
+            let sh = img.height;
+            if (sw / sh > canvas.width / canvas.height) {
+              sw = Math.floor(canvas.width / canvas.height * sh);
+              sx = Math.floor((img.width - sw) / 2);
+            } else {
+              sh = Math.floor(canvas.height / canvas.width * sw);
+              sy = Math.floor((img.height - sh) / 2);
+            }
+            ctx.drawImage(img, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+            return resolve([canvas.toDataURL(file.type),0]);
+          };
+          img.src = reader.result;
+        };
+        reader.readAsDataURL(file);
+      });
+    } else if (file.type.startsWith('video/')) {
+      return new Promise((resolve, reject) => {
+        const video = document.createElement('video');
+        video.muted = true;
+        video.src = URL.createObjectURL(file);
+        video.addEventListener('loadeddata', () => {
+          setTimeout(() => {
+            video.currentTime = Math.min(video.duration, 5);
+          }, 100);
+          video.addEventListener('seeked', () => {
+            if (video.videoWidth > video.videoHeight) {
+              canvas.width = 320;
+              canvas.height = 240;
+            } else {
+              canvas.width = 240;
+              canvas.height = 320;
+            }
+            let sx = 0;
+            let sy = 0;
+            let sw = video.videoWidth;
+            let sh = video.videoHeight;
+            if (sw / sh > canvas.width / canvas.height) {
+              sw = Math.floor(canvas.width / canvas.height * sh);
+              sx = Math.floor((video.videoWidth - sw) / 2);
+            } else {
+              sh = Math.floor(canvas.height / canvas.width * sw);
+              sy = Math.floor((video.videoHeight - sh) / 2);
+            }
+            ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+            video.pause();
+            return resolve([canvas.toDataURL('image/png'),video.duration]);
+          });
+        });
+      });
+    } else {
+      canvas.width = 100;
+      canvas.height = 100;
+      ctx.font = '10px monospace';
+      let name = file.name;
+      let row = 1;
+      while (name !== '') {
+        const n = name.length > 12 ? name.substring(0, 12) : name;
+        name = name.slice(n.length);
+        ctx.fillText(n, 10, 10 * row);
+        row++;
+      }
+      return [canvas.toDataURL(file.type), 0];
+    }
   }
 }

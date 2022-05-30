@@ -96,7 +96,7 @@ class c2FmZQClient {
     return this.sendRequest_(clientId, 'v2/login/preLogin', {'email': email})
       .then(async resp => {
         console.log('SW hashing password');
-        const salt = await SodiumUtil.toBuffer(await sodium.sodium_hex2bin(resp.parts.salt));
+        const salt = await sodium.sodium_hex2bin(resp.parts.salt);
         let hashed = await sodium.crypto_pwhash(64, password, salt,
           sodium.CRYPTO_PWHASH_OPSLIMIT_MODERATE,
           sodium.CRYPTO_PWHASH_MEMLIMIT_MODERATE,
@@ -170,10 +170,10 @@ class c2FmZQClient {
         for (let a of resp.parts.albums) {
           try {
             const apk = base64DecodeIntoArray(a.publicKey);
-            const ask = await sodium.crypto_box_seal_open(await SodiumUtil.toBuffer(base64DecodeIntoArray(a.encPrivateKey)), pk, sk);
+            const ask = await sodium.crypto_box_seal_open(base64DecodeIntoArray(a.encPrivateKey), pk, sk);
 
             const md = await Promise.all([
-              SodiumUtil.toBuffer(base64DecodeIntoArray(a.metadata)),
+              base64DecodeIntoArray(a.metadata),
               sodiumPublicKey(apk),
               sodiumSecretKey(ask),
             ]).then(v => sodium.crypto_box_seal_open(...v));
@@ -197,9 +197,12 @@ class c2FmZQClient {
               'albumId': a.albumId,
               'pk': apk,
               'encSK': a.encPrivateKey,
-              'encName': await this.encrypt_(name),
+              'encName': await this.encrypt_(Uint8ArrayFromBin(name)),
               'cover': a.cover,
               'members': members,
+              'isOwner': a.isOwner === 1,
+              'isShared': a.isShared === 1,
+              'permissions': a.permissions,
               'dateModified': a.dateModified,
               'dateCreated': a.dateCreated,
             };
@@ -319,7 +322,7 @@ class c2FmZQClient {
 
   async encrypt_(data) {
     const pk = await sodiumPublicKey(this.vars_.pk);
-    return sodium.crypto_box_seal(await SodiumUtil.toBuffer(data), pk);
+    return sodium.crypto_box_seal(new Uint8Array(data), pk);
   }
 
   async decrypt_(data) {
@@ -329,7 +332,7 @@ class c2FmZQClient {
       data = data.data;
     }
     try {
-      return sodium.crypto_box_seal_open(await SodiumUtil.toBuffer(new Uint8Array(data)), pk, sk);
+      return sodium.crypto_box_seal_open(new Uint8Array(data), pk, sk);
     } catch (error) {
       console.error('SW decrypt_', error);
       throw error;
@@ -347,7 +350,7 @@ class c2FmZQClient {
       throw new Error('invalid albumId');
     }
     const a = this.db_.albums[albumId];
-    return sodiumSecretKey(sodium.crypto_box_seal_open(await SodiumUtil.toBuffer(base64DecodeIntoArray(a.encSK)), pk, sk));
+    return sodiumSecretKey(sodium.crypto_box_seal_open(base64DecodeIntoArray(a.encSK), pk, sk));
   }
 
   async insertFile_(collection, file, obj) {
@@ -434,10 +437,24 @@ class c2FmZQClient {
    */
   async getCollections(clientId) {
     return new Promise(async (resolve, reject) => {
-      let out = [];
-      let cover = await this.getCover_('gallery');
-      out.push({'collection': 'gallery', 'name': 'gallery', 'cover': cover});
-      out.push({'collection': 'trash', 'name': 'trash', 'cover': null});
+      let out = [
+        {
+          'collection': 'gallery',
+          'name': 'gallery',
+          'cover': await this.getCover_('gallery'),
+          'isOwner': true,
+          'isShared': false,
+          'canAdd': true,
+          'canCopy': true,
+        },
+        {
+          'collection': 'trash',
+          'name': 'trash',
+          'cover': null,
+          'isOwner': true,
+          'isShared': false,
+        },
+      ];
 
       let albums = [];
       for (let n in this.db_.albums) {
@@ -454,6 +471,11 @@ class c2FmZQClient {
             if (m in this.db_.contacts) return this.db_.contacts[m].email;
             return m;
           }).sort(),
+          'isOwner': a.isOwner,
+          'isShared': a.isShared,
+          'canAdd': a.permissions?.match(/^11../),
+          'canShare': a.permissions?.match(/^1.1./),
+          'canCopy': a.permissions?.match(/^1..1/),
         });
       }
       albums.sort((a, b) => {
@@ -549,10 +571,10 @@ class c2FmZQClient {
     if (bytes[4] !== 0) {
       throw new Error('secret key not in bundle');
     }
-    const pk = await SodiumUtil.toBuffer(new Uint8Array(bytes.slice(5, 37)));
-    const esk = await SodiumUtil.toBuffer(new Uint8Array(bytes.slice(37, -40)));
-    const salt = await SodiumUtil.toBuffer(new Uint8Array(bytes.slice(-40, -24)));
-    const nonce = await SodiumUtil.toBuffer(new Uint8Array(bytes.slice(-24)));
+    const pk = new Uint8Array(bytes.slice(5, 37));
+    const esk = new Uint8Array(bytes.slice(37, -40));
+    const salt = new Uint8Array(bytes.slice(-40, -24));
+    const nonce = new Uint8Array(bytes.slice(-24));
 
     const key = await sodium.crypto_pwhash(32, password, salt,
               sodium.CRYPTO_PWHASH_OPSLIMIT_MODERATE,
@@ -594,7 +616,7 @@ class c2FmZQClient {
     if (dataSize < 0) {
       throw new Error('invalid data size');
     }
-    const symKey = await SodiumUtil.toBuffer(new Uint8Array(hdr.slice(13, 45)));
+    const symKey = new Uint8Array(hdr.slice(13, 45));
     const fileType = hdr[45];
     const fnSize = hdr[46]<<24 | hdr[47]<<16 | hdr[48]<<8 | hdr[49];
     if (fnSize < 0 || fnSize+50 > hdr.length) {
@@ -611,7 +633,7 @@ class c2FmZQClient {
         dataSize: dataSize,
         encKey: await this.encrypt_(symKey),
         fileType: fileType,
-        encFileName: await this.encrypt_(String.fromCharCode(...fn).replace(/^ */, '')),
+        encFileName: await this.encrypt_(Uint8ArrayFromBin(String.fromCharCode(...fn).replace(/^ */, ''))),
         duration: dur,
         headerSize: bytes.length,
     };
@@ -762,31 +784,7 @@ class c2FmZQClient {
         });
       })
       .then(resp => resp.body)
-      .then(rs => {
-        const reader = rs.getReader();
-        const decrypter = new Decrypter(symKey, chunkSize, chunkNum, chunkOffset);
-        let canceled = false;
-        return new ReadableStream({
-          start(controller) {
-            function work() {
-              reader.read().then(({done, value}) => {
-                if (canceled) {
-                  return;
-                }
-                if (done) {
-                  decrypter.flush(controller).then(() => controller.close());
-                  return;
-                }
-                decrypter.transform(value, controller).then(work);
-              });
-            }
-            decrypter.start(controller).then(work);
-          },
-          cancel() {
-            canceled = true;
-          }
-        }, strategy);
-      })
+      .then(rs => new ReadableStream(new Decrypter(rs.getReader(), symKey, chunkSize, chunkNum, chunkOffset), strategy))
       .then(rs => {
         let h = {
           'accept-ranges': 'bytes',
@@ -813,47 +811,168 @@ class c2FmZQClient {
     });
     return p;
   }
+
+  async upload(clientId, collection, files) {
+    if (files.length === 0) {
+      return;
+    }
+    let p = this.uploadFile_(clientId, collection, files[0]);
+    for (let i = 1; i < files.length; i++) {
+       p = p.then(() => this.uploadFile_(collection, files[i]));
+    }
+    return p;
+  }
+
+  async uploadFile_(clientId, collection, file) {
+    let pk;
+    if (collection === 'gallery') {
+      pk = await sodiumPublicKey(this.vars_.pk);
+    } else {
+      if (!(collection in this.db_.albums)) {
+        throw new Error(`invalid album ${collection}`);
+      }
+      pk = await sodiumPublicKey(this.db_.albums[collection].pk);
+    }
+    const tn = base64DecodeIntoArray(file.thumbnail.split(',')[1]);
+    const [hdr, hdrBin, hdrBase64] = await this.makeHeaders_(pk, tn, file);
+
+    const boundary = Array.from(self.crypto.getRandomValues(new Uint8Array(32))).map(v => ('0'+v.toString(16)).slice(-2)).join('');
+    const rs = new ReadableStream(new UploadStream(boundary, hdr, hdrBin, hdrBase64, collection, tn, file, this.vars_.token));
+
+    // Streaming upload not supported in chrome yet.
+    // https://bugs.chromium.org/p/chromium/issues/detail?id=688906
+    const body = await self.stream2blob(rs);
+
+    return fetch(this.options_.pathPrefix + 'v2/sync/upload', {
+      method: 'POST',
+      mode: 'same-origin',
+      headers: {
+        'Content-Type': 'multipart/form-data; boundary='+boundary,
+      },
+      redirect: 'error',
+      referrerPolicy: 'no-referrer',
+      credentials: 'omit',
+      //body: rs,
+      body: body,
+    })
+    .then(async resp => {
+      if (!resp.ok) {
+        if (!resp.body) {
+          throw new Error(`${resp.status} ${resp.statusText}`);
+        }
+        const blob = await self.stream2blob(resp.body);
+        const body = await blob.text();
+        throw body;
+      }
+      return 'ok';
+    });
+  }
+
+  async makeHeaders_(pk, tn, file) {
+    const fileId = self.crypto.getRandomValues(new Uint8Array(32));
+    let fileType = 1;
+    if (file.file.type.startsWith('image/')) fileType = 2;
+    if (file.file.type.startsWith('video/')) fileType = 3;
+
+    const headers = [{
+      version: 1,
+      chunkSize: 1 << 20,
+      dataSize: file.file.size,
+      symmetricKey: self.crypto.getRandomValues(new Uint8Array(32)),
+      fileType: fileType,
+      fileName: file.file.name,
+      duration: Math.floor(file.duration),
+    }, {
+      version: 1,
+      chunkSize: 1 << 20,
+      dataSize: tn.length,
+      symmetricKey: self.crypto.getRandomValues(new Uint8Array(32)),
+      fileType: fileType,
+      fileName: file.file.name,
+      duration: Math.floor(file.duration),
+    }];
+
+    const binHeaders = [];
+    const b64Headers = [];
+    for (let i = 0; i < 2; i++) {
+      let h = [];
+      h.push(headers[i].version);
+      h.push(...self.bigEndian(headers[i].chunkSize, 4));
+      h.push(...self.bigEndian(headers[i].dataSize, 8));
+      h.push(...headers[i].symmetricKey);
+      h.push(headers[i].fileType);
+      h.push(...self.bigEndian(headers[i].fileName.length, 4));
+      h.push(...self.Uint8ArrayFromBin(headers[i].fileName));
+      h.push(...self.bigEndian(headers[i].duration, 4));
+      const encHeader = await sodium.crypto_box_seal(new Uint8Array(h), pk);
+      let out = [];
+      out.push(0x53, 0x50, 0x1); // 'S', 'P', 1
+      out.push(...fileId);
+      out.push(...self.bigEndian(encHeader.byteLength, 4));
+      out.push(...encHeader);
+      binHeaders.push(new Uint8Array(out));
+      b64Headers.push(self.base64RawUrlEncode(out));
+    }
+    return [headers, binHeaders, b64Headers.join('*')];
+  }
 }
 
 /*
  * A Transformer to decrypt a stream.
  */
 class Decrypter {
-  constructor(symKey, chunkSize, n, offset) {
+  constructor(reader, symKey, chunkSize, n, offset) {
+    this.reader_ = reader;
     this.symmetricKey_ = symKey;
     this.chunkSize_ = chunkSize;
     this.encChunkSize_ = chunkSize + 40;
-    this.buf_ = [];
+    this.buf_ = new Uint8Array(0);
     this.n_ = n;
     this.offset_ = offset;
+    this.canceled_ = false;
   }
 
   async start(controller) {
     this.symmetricKey_ = await sodiumKey(this.symmetricKey_);
   }
 
-  async transform(chunk, controller) {
-    for (let b of chunk) {
-      this.buf_.push(b);
+  async pull(controller) {
+    while (this.buf_.byteLength < this.encChunkSize_) {
+      let {done, value} = await this.reader_.read();
+      if (this.canceled_) {
+        controller.close();
+        return;
+      }
+      if (done) {
+        return this.decryptChunk(controller).then(() => {
+          controller.close();
+        });
+      }
+      const tmp = new Uint8Array(this.buf_.byteLength + value.byteLength);
+      tmp.set(this.buf_);
+      tmp.set(value, this.buf_.byteLength);
+      this.buf_ = tmp;
     }
-    while (this.buf_.length >= this.encChunkSize_) {
+    while (this.buf_.byteLength >= this.encChunkSize_) {
+      if (this.canceled_) return;
       await this.decryptChunk(controller);
     }
   }
 
-  async flush(controller) {
-    return this.decryptChunk(controller);
+  cancel(reason) {
+    this.canceled_ = true;
+    this.reader_.cancel();
   }
 
   async decryptChunk(controller) {
-    if (this.buf_.length === 0) {
+    if (this.buf_.byteLength === 0) {
       return;
     }
     try {
       this.n_++;
-      const nonce = await SodiumUtil.toBuffer(Uint8Array.from(this.buf_.slice(0, 24)));
-      const end = this.buf_.length >= this.encChunkSize_ ? this.encChunkSize_ : this.buf_.length;
-      const enc = Uint8Array.from(this.buf_.slice(24, end));
+      const nonce = Uint8Array.from(this.buf_.slice(0, 24));
+      const end = this.buf_.byteLength >= this.encChunkSize_ ? this.encChunkSize_ : this.buf_.byteLength;
+      const enc = this.buf_.slice(24, end);
       const ck = await sodium.crypto_kdf_derive_from_key(32, this.n_, '__data__', this.symmetricKey_);
       let dec = new Uint8Array(await sodium.crypto_aead_xchacha20poly1305_ietf_decrypt(enc, nonce, ck, ''));
       this.buf_ = this.buf_.slice(end);
@@ -865,5 +984,126 @@ class Decrypter {
     } catch (e) {
       console.error('SW decryptChunk', e);
     }
+  }
+}
+
+class UploadStream {
+  constructor(boundary, hdr, hdrBin, hdrBase64, collection, tn, file, token) {
+    this.boundary_ = boundary;
+    this.hdr_ = hdr;
+    this.hdrBin_ = hdrBin;
+    this.hdrBase64_ = hdrBase64;
+    this.set_ = collection === 'gallery' ? 0 : 2;
+    this.albumId_ = collection === 'gallery' ? '' : collection;
+    this.tn_ = tn;
+    this.file_ = file;
+    this.token_ = token;
+    this.filename_ = self.base64RawUrlEncode(self.crypto.getRandomValues(new Uint8Array(32))) + '.sp';
+
+  }
+
+  async start(controller) {
+    const fields = {
+      headers: this.hdrBase64_,
+      set: this.set_,
+      albumId: this.albumId_,
+      dateCreated: ''+this.file_.file.lastModified,
+      dateModified: ''+this.file_.file.lastModified,
+      version: '1',
+      token: this.token_,
+    };
+    let s = '';
+    for (let k in fields) {
+      if (!fields.hasOwnProperty(k)) {
+        continue;
+      }
+      s += `--${this.boundary_}\r\n` +
+        `Content-Disposition: form-data; name="${k}"\r\n` +
+        `\r\n` +
+        `${fields[k]}\r\n`;
+    }
+    controller.enqueue(self.Uint8ArrayFromBin(s));
+
+    this.queue_ = [
+      {
+        name: 'file',
+        key: await sodiumKey(this.hdr_[0].symmetricKey),
+        hdrBin: this.hdrBin_[0],
+        chunkSize: this.hdr_[0].chunkSize,
+        reader: this.file_.file.stream().getReader(),
+        n: 0,
+      },
+      {
+        name: 'thumb',
+        key: await sodiumKey(this.hdr_[1].symmetricKey),
+        hdrBin: this.hdrBin_[1],
+        chunkSize: this.hdr_[1].chunkSize,
+        reader: (new Blob([this.tn_])).stream().getReader(),
+        n: 0,
+      },
+    ];
+  }
+
+  async pull(controller) {
+    if (this.queue_.length === 0) {
+      controller.enqueue(self.Uint8ArrayFromBin(`--${this.boundary_}--\r\n`));
+      controller.close();
+      return;
+    }
+    return new Promise(async (resolve, reject) => {
+      const q = this.queue_[0];
+      if (q.n === 0) {
+        controller.enqueue(self.Uint8ArrayFromBin(`--${this.boundary_}\r\n` +
+        `Content-Disposition: form-data; name="${q.name}"; filename="${this.filename_}"\r\n` +
+        `Content-Type: application/octet-stream\r\n` +
+        `\r\n`));
+        q.n = 1;
+        q.buf = new Uint8Array(0);
+        controller.enqueue(q.hdrBin);
+      }
+      let eof = false;
+      while (q.buf.byteLength < q.chunkSize) {
+        let {done, value} = await q.reader.read();
+        if (done) {
+          eof = true;
+          break;
+        }
+        const tmp = new Uint8Array(q.buf.byteLength + value.byteLength);
+        tmp.set(q.buf);
+        tmp.set(value, q.buf.byteLength);
+        q.buf = tmp;
+      }
+      while (q.buf.byteLength >= q.chunkSize) {
+        let chunk = q.buf.slice(0, q.chunkSize);
+        q.buf = q.buf.slice(q.chunkSize);
+        controller.enqueue(await this.encryptChunk_(q.n, chunk, q.key));
+        q.n++;
+      }
+      if (eof) {
+        if (q.buf.byteLength > 0) {
+          controller.enqueue(await this.encryptChunk_(q.n, q.buf, q.key));
+        }
+        controller.enqueue(self.Uint8ArrayFromBin(`\r\n`));
+        this.queue_.shift();
+      }
+      return resolve();
+    });
+  }
+
+  cancel(reason) {
+    for (let i = 0; i < this.queue_.length; i++) {
+      this.queue_[i].reader.close();
+    }
+    this.queue_ = [];
+  }
+
+  async encryptChunk_(n, data, key) {
+    const nonce = await sodium.randombytes_buf(24);
+    const ck = await sodium.crypto_kdf_derive_from_key(32, n, '__data__', key);
+    const enc = await sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(data, nonce, ck, '');
+    const out = new Uint8Array(nonce.byteLength + enc.byteLength);
+    out.set(nonce, 0);
+    out.set(enc, nonce.byteLength);
+    return out;
   }
 }

@@ -76,6 +76,9 @@ a {
   border-top: 1px solid black;
   width: 100%;
 }
+.collectionThumbdiv.not-owner .collectionThumbLabel {
+  background-color: #aa0;
+}
 .collectionThumbdiv img {
   object-fit: cover;
 }
@@ -203,6 +206,20 @@ a {
   object-fit: contain;
   display: block;
 }
+.upload {
+  width: 90vw;
+  height: 90vh;
+  display: flex;
+  flex-direction: column;
+  align-content: stretch;
+}
+.popup-content {
+}
+.upload .popup-content {
+  margin: 2em; 
+  overflow-y: scroll;
+  overscroll-behavior: none;
+}
 .blur {
   animation: fadeIn 0.25s;
   background-color: rgba(255, 255, 255, 0.5);
@@ -219,4 +236,46 @@ a {
   position: fixed;
   bottom: 0;
   right: 0;
+}
+#add-button {
+  position: fixed;
+  bottom: 2em;
+  right: 2em;
+  background-color: #ddd;
+  color: black;
+  font-size: 200%;
+  font-weight: bolder;
+  border: 1px solid black;
+  border-radius: 50%;
+  height: 1.5em;
+  width: 1.5em;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+}
+#add-button:hover {
+  border-color: blue;
+}
+#upload-files-div {
+  margin: 1em;
+  display: flex;
+  flex-direction: column;
+}
+.upload-thumbnail {
+  border: 1px solid black;
+  max-height: 160px;
+}
+.upload-item-div {
+  margin: 1em;
+  display: flex;
+  flex-direction: row;
+}
+.upload-item-attrs {
+  margin: 1em;
+  display: flex;
+  flex-direction: column;
+}
+.upload-item-remove-button {
+  width: fit-content;
 }

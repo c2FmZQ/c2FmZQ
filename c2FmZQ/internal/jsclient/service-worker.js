@@ -91,7 +91,7 @@ function fixme() {
   }, 5000);
 }
 
-function bin2array(bin) {
+function Uint8ArrayFromBin(bin) {
   let array = [];
   for (let i = 0; i < bin.length; i++) {
     array.push(bin.charCodeAt(i));
@@ -99,10 +99,25 @@ function bin2array(bin) {
   return new Uint8Array(array);
 }
 
+function bigEndian(n, size) {
+  let a = [];
+  while (size-- > 0) {
+    a.unshift(n & 0xff);
+    n >>= 8;
+  }
+  return new Uint8Array(a);
+}
+
+function base64RawUrlEncode(s) {
+  if (s instanceof Uint8Array || Array.isArray(s)) {
+    s = String.fromCharCode(...s);
+  }
+  return btoa(s).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
+}
+
 function base64Decode(v) {
-  let s = v.replace(/-/g, '+').replace(/_/g, '/');
-  const pad = (4 - s.length%4)%4;
-  for (let i = 0; i < pad; i++) {
+  let s = v.replaceAll('-', '+').replaceAll('_', '/');
+  while (s.length % 4 !== 0) {
     s += '=';
   }
   try {
@@ -114,7 +129,18 @@ function base64Decode(v) {
 }
 
 function base64DecodeIntoArray(v) {
-  return bin2array(base64Decode(v));
+  return Uint8ArrayFromBin(base64Decode(v));
+}
+
+async function stream2blob(rs) {
+  const reader = rs.getReader();
+  const buf = [];
+  while (true) {
+    let {done, value} = await reader.read();
+    if (done) break;
+    buf.push(value);
+  }
+  return new Blob(buf);
 }
 
 async function sodiumPublicKey(k) {
@@ -141,20 +167,17 @@ async function sodiumKey(k, type) {
       k = kk;
     }
   }
-  if (typeof k === 'string') {
+  if (typeof k === 'string' && k.length !== 32) {
     k = base64DecodeIntoArray(k);
   }
   if (Array.isArray(k)) {
     k = new Uint8Array(k);
   }
-  if (k instanceof Uint8Array) {
-    k = await SodiumUtil.toBuffer(k);
-  }
   try {
     switch (type) {
-      case 'public': return new X25519PublicKey(k);
-      case 'secret': return new X25519SecretKey(k);
-      default: return new CryptographyKey(k);
+      case 'public': return X25519PublicKey.from(k);
+      case 'secret': return X25519SecretKey.from(k);
+      default: return CryptographyKey.from(k);
     }
   } catch (e) {
     console.error('SW sodiumKey', k, e);
@@ -189,7 +212,11 @@ async function sendMessage(id, m) {
   }
   for (let c of clients) {
     if (id === '' || c.id === id) {
-      c.postMessage(m);
+      try {
+        c.postMessage(m);
+      } catch (err) {
+        console.log('SW sendMessage failed', m, err);
+      }
     }
   }
 }
@@ -251,7 +278,7 @@ self.addEventListener('message', async event => {
         self.sendMessage(clientId, {type: 'rpc-result', id: event.data.id, func: event.data.func, reject: 'not ready'});
         return;
       }
-      if (!['login'].includes(event.data.func)) {
+      if (!['login','upload'].includes(event.data.func)) {
         console.log('SW RPC method not allowed', event.data.func);
         self.sendMessage(clientId, {type: 'rpc-result', id: event.data.id, func: event.data.func, reject: 'method not allowed'});
         return;
