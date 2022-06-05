@@ -218,7 +218,7 @@ in the browser using [Sodium-Plus](https://github.com/paragonie/sodium-plus)
 and [Secure webstore](https://github.com/AKASHAorg/secure-webstore), and the app
 implements the same protocol as the c2FmZQ client and the Stingle Photos app.
 
-Simply open https://${DOMAIN}/${path-prefix}/ to access to Web App.
+Simply open `https://${DOMAIN}/${path-prefix}/` to access to Web App.
 
 Browsing albums with photos and videos, and uploading files are possible from the Web.
 Other features will be added over time.
