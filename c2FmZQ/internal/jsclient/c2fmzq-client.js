@@ -156,6 +156,7 @@ class c2FmZQClient {
     };
     return this.sendRequest_(clientId, 'v2/sync/getUpdates', data)
       .then(async resp => {
+        console.log('SW getUpdates', resp);
         /* contacts */
         for (let c of resp.parts.contacts) {
           this.db_.contacts[''+c.userId] = c;
@@ -288,7 +289,7 @@ class c2FmZQClient {
                 break;
               case 5: // A file is removed from an album.
                 f = await this.getFile_(d.albumId, d.file);
-                if (f?.[d.file]?.dateModified < d.date) {
+                if (f?.dateModified < d.date) {
                   this.deleteFile_(d.albumId, d.file);
                   changed[d.albumId] = true;
                 }
@@ -318,6 +319,64 @@ class c2FmZQClient {
         ];
         await Promise.all(p);
       });
+  }
+
+  async emptyTrash(clientId) {
+    let params = {
+      time: ''+Date.now(),
+    };
+    return this.sendRequest_(clientId, 'v2/sync/emptyTrash', {
+      'token': this.vars_.token,
+      'params': await this.makeParams_(params),
+    }).then(resp => {
+      if (resp.status !== 'ok') {
+        throw resp.status;
+      }
+      return resp.status;
+    });
+  }
+
+  async moveFiles(clientId, from, to, files, isMove) {
+    const fromAlbumId = from === 'gallery' || from === 'trash' ? '' : from;
+    const toAlbumId = to === 'gallery' || to === 'trash' ? '' : to;
+    const headers = [];
+    if (fromAlbumId !== '' || toAlbumId !== '') {
+      // Need new headers
+      const pk = await sodiumPublicKey(fromAlbumId === '' ? this.vars_.pk : this.db_.albums[fromAlbumId].pk);
+      const sk = await sodiumSecretKey(fromAlbumId === '' ? this.vars_.sk : this.decryptAlbumSK_(fromAlbumId));
+      const pk2 = await sodiumPublicKey(toAlbumId === '' ? this.vars_.pk : this.db_.albums[toAlbumId].pk);
+
+      for (let i = 0; i < files.length; i++) {
+        let f = await this.getFile_(from, files[i]);
+        let hdrs = f.origHeaders.split('*');
+        hdrs[0] = await this.reEncryptHeader_(hdrs[0], pk, sk, pk2);
+        hdrs[1] = await this.reEncryptHeader_(hdrs[1], pk, sk, pk2);
+        headers[i] = hdrs.join('*');
+      }
+    }
+    let params = {
+      setFrom: from === 'gallery' ? '0' : from === 'trash' ? '1' : '2',
+      setTo: to === 'gallery' ? '0' : to === 'trash' ? '1' : '2',
+      albumIdFrom: fromAlbumId,
+      albumIdTo: toAlbumId,
+      isMoving: isMove ? '1' : '0',
+      count: ''+files.length,
+    };
+    for (let i = 0; i < files.length; i++) {
+      params[`filename${i}`] = files[i];
+      if (headers.length > 0) {
+        params[`headers${i}`] = headers[i];
+      }
+    }
+    return this.sendRequest_(clientId, 'v2/sync/moveFile', {
+      'token': this.vars_.token,
+      'params': await this.makeParams_(params),
+    }).then(resp => {
+      if (resp.status !== 'ok') {
+        throw resp.status;
+      }
+      return resp.status;
+    });
   }
 
   async encrypt_(data) {
@@ -382,6 +441,7 @@ class c2FmZQClient {
         await this.decryptHeader_(encHeaders[0], up.albumId),
         await this.decryptHeader_(encHeaders[1], up.albumId),
       ],
+      'origHeaders': up.headers,
       'dateCreated': up.dateCreated,
       'dateModified': up.dateModified,
     };
@@ -435,8 +495,8 @@ class c2FmZQClient {
 
   /*
    */
-  async getCollections(clientId) {
-    return new Promise(async (resolve, reject) => {
+  async getCollections(/*clientId*/) {
+    return new Promise(async resolve => {
       let out = [
         {
           'collection': 'gallery',
@@ -545,7 +605,15 @@ class c2FmZQClient {
       sodium.randombytes_buf(24),
       sodiumSecretKey(this.vars_.sk),
       sodiumPublicKey(this.vars_.serverPK),
-    ]).then(v => sodium.crypto_box(JSON.stringify(obj), ...v));
+    ])
+    .then(async v => {
+      const m = await sodium.crypto_box(JSON.stringify(obj), ...v);
+      const out = new Uint8Array(v[0].byteLength + m.byteLength);
+      out.set(v[0]);
+      out.set(m, v[0].byteLength);
+      return out;
+    })
+    .then(v => btoa(String.fromCharCode(...v)));
   }
 
   /*
@@ -594,7 +662,7 @@ class c2FmZQClient {
     if (bytes[2] !== 1) {
       throw new Error('unexpected header version');
     }
-    const fileId = bytes.slice(3, 35);
+    //const fileId = bytes.slice(3, 35);
     let size = 0;
     for (let i = 35; i < 39; i++) {
       size = (size << 8) + bytes[i];
@@ -607,7 +675,7 @@ class c2FmZQClient {
     }
     const hdr = await Promise.all([sodiumPublicKey(pk),sodiumSecretKey(sk)])
       .then(v => sodium.crypto_box_seal_open(new Uint8Array(bytes.slice(39, 39+size)), ...v));
-    const version = hdr[0];
+    //const version = hdr[0];
     const chunkSize = hdr[1]<<2 | hdr[2]<<16 | hdr[3]<<8 | hdr[4];
     if (chunkSize < 0 || chunkSize > 10485760) {
       throw new Error('invalid chunk size');
@@ -638,6 +706,28 @@ class c2FmZQClient {
         headerSize: bytes.length,
     };
     return header;
+  }
+
+  async reEncryptHeader_(encHeader, pk, sk, toPK) {
+    const bytes = base64DecodeIntoArray(encHeader);
+    if (String.fromCharCode(bytes[0], bytes[1]) !== 'SP') {
+      throw new Error('invalid header');
+    }
+    if (bytes[2] !== 1) {
+      throw new Error('unexpected header version');
+    }
+    let size = 0;
+    for (let i = 35; i < 39; i++) {
+      size = (size << 8) + bytes[i];
+    }
+    const hdr = await sodium.crypto_box_seal_open(new Uint8Array(bytes.slice(39, 39+size)), pk, sk);
+    const newEncHeader = await sodium.crypto_box_seal(hdr, toPK);
+    if (newEncHeader.byteLength !== size) {
+      console.error(`SW reEncryptHeader_ ${newEncHeader.byteLength} !== ${size}`);
+      throw new Error('Re-encrypted header has unexpected size');
+    }
+    bytes.set(newEncHeader, 39);
+    return self.base64RawUrlEncode(bytes);
   }
 
   /*
@@ -697,7 +787,7 @@ class c2FmZQClient {
   async handleFetchEvent(event) {
     const url = new URL(event.request.url);
     if (url.pathname.endsWith('/jsapi')) {
-      const p = new Promise((resolve, reject) => {
+      const p = new Promise(resolve => {
         const params = url.searchParams;
         const func = params.get('func');
         let args = [];
@@ -706,7 +796,17 @@ class c2FmZQClient {
         } catch (e) {
           console.log('SW invalid args', params.get('args'));
         }
-        if (['isLoggedIn', 'logout', 'getCollections', 'getFiles', 'getUpdates', 'ping'].includes(func)) {
+        const allowedMethods = [
+          'isLoggedIn',
+          'logout',
+          'getCollections',
+          'getFiles',
+          'getUpdates',
+          'moveFiles',
+          'emptyTrash',
+          'ping',
+        ];
+        if (allowedMethods.includes(func)) {
           this[func](null, ...args)
           .then(result => {
             resolve(new Response(JSON.stringify({'resolve': result}), {'status': 200, 'statusText': 'OK'}));
@@ -932,7 +1032,7 @@ class Decrypter {
     this.canceled_ = false;
   }
 
-  async start(controller) {
+  async start(/*controller*/) {
     this.symmetricKey_ = await sodiumKey(this.symmetricKey_);
   }
 
@@ -959,7 +1059,7 @@ class Decrypter {
     }
   }
 
-  cancel(reason) {
+  cancel(/*reason*/) {
     this.canceled_ = true;
     this.reader_.cancel();
   }
@@ -1050,7 +1150,7 @@ class UploadStream {
       controller.close();
       return;
     }
-    return new Promise(async (resolve, reject) => {
+    return new Promise(async resolve => {
       const q = this.queue_[0];
       if (q.n === 0) {
         controller.enqueue(self.Uint8ArrayFromBin(`--${this.boundary_}\r\n` +
@@ -1090,7 +1190,7 @@ class UploadStream {
     });
   }
 
-  cancel(reason) {
+  cancel(/*reason*/) {
     for (let i = 0; i < this.queue_.length; i++) {
       this.queue_[i].reader.close();
     }

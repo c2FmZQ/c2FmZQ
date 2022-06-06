@@ -93,6 +93,7 @@ a {
   display: inline-grid;
   align-items: start;
   justify-content: end;
+  box-shadow: 3px 3px 5px black;
 }
 .thumbdiv:hover {
   border-color: blue;
@@ -103,7 +104,6 @@ a {
   object-fit: cover;
   border: 0;
   padding: 0;
-  box-shadow: 3px 3px 5px black;
 }
 .thumbdiv div.duration {
   grid-row: 1 / 2;
@@ -133,12 +133,12 @@ a {
   position: fixed;
   top: 0;
   right: 10px;
-  z-index: 1;
-  background-color: white;
+  z-index: 2;
+  background-color: #eee;
 }
 #gallery {
   position: relative;
-  top: 1.5em;
+  top: 160px;
 }
 #messages {
   position: fixed;
@@ -171,7 +171,24 @@ a {
   white-space: nowrap;
   display: inline-flex;
   align-items: flex-start;
+  width: 100vw;
   max-width: 100vw;
+  padding-top: 2em;
+  background-color: #eee;
+  z-index: 1;
+  border-bottom: thick dashed #ddd;
+  position: absolute;
+  top: 0;
+  transition: position;
+}
+#collections.fixed {
+  animation: slideDown 0.75s;
+  position: fixed;
+  top: 0;
+}
+@keyframes slideDown {
+  0% {opacity: 0; top: -75%;}
+  100% {opacity: 1; top: 0;}
 }
 .popup {
   animation: fadeIn 0.25s;
@@ -279,3 +296,12 @@ a {
 .upload-item-remove-button {
   width: fit-content;
 }
+.dragging {
+  opacity: 0.3;
+}
+.selected {
+  box-shadow: 0 0 5px 5px green;
+}
+.empty-trash {
+  float: right;
+};

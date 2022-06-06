@@ -37,6 +37,7 @@
     "Store": true,
     "UI": true,
     "ui": true,
+    "Uint8ArrayFromBin": true,
     "VERSION": true,
     "X25519PublicKey": true,
     "X25519SecretKey": true

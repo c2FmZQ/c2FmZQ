@@ -52,7 +52,7 @@ class UI {
       }
     });
     this.setPassphraseButton_.addEventListener('click', this.setPassphrase_.bind(this));
-    this.showPassphraseButton_.addEventListener('click', e => {
+    this.showPassphraseButton_.addEventListener('click', () => {
       if (this.passphraseInput_.type === 'text') {
         this.passphraseInput_.type = 'password';
         this.showPassphraseButton_.textContent = 'Show';
@@ -107,14 +107,21 @@ class UI {
     window.addEventListener('resize', this.onScroll_.bind(this));
     window.addEventListener('hashchange', () => {
       const c = main.getHash('collection');
-      if (c) {
+      if (c && this.galleryState_.collection !== c) {
         this.switchView_({collection: c});
       }
     });
     this.trashButton_.addEventListener('click', () => {
       this.switchView_({collection: 'trash'});
     });
-
+    this.trashButton_.addEventListener('dragover', event => {
+      event.dataTransfer.dropEffect = 'move';
+      event.preventDefault();
+    });
+    this.trashButton_.addEventListener('drop', event => {
+      event.preventDefault();
+      this.handleCollectionDropEvent_('trash', event);
+    });
     this.loginButton_.addEventListener('click', this.login_.bind(this));
     this.refreshButton_.addEventListener('click', this.refresh_.bind(this));
     this.logoutButton_.addEventListener('click', this.logout_.bind(this));
@@ -283,28 +290,34 @@ class UI {
   }
 
   switchView_(c) {
-    this.galleryState_.collection = c.collection;
-    this.galleryState_.shown = UI.SHOW_ITEMS_INCREMENT;
-    main.setHash('collection', c.collection);
-    this.refreshGallery_();
+    if (this.galleryState_.collection !== c.collection) {
+      this.galleryState_.collection = c.collection;
+      this.galleryState_.shown = UI.SHOW_ITEMS_INCREMENT;
+      main.setHash('collection', c.collection);
+      this.refreshGallery_(true);
+    } else {
+      this.refreshGallery_(false);
+    }
   }
 
-  async refreshGallery_() {
+  async refreshGallery_(scrollToTop) {
     const collections = await main.sendRPC('getCollections');
     this.galleryState_.content = await main.sendRPC('getFiles', this.galleryState_.collection);
     if (!this.galleryState_.content) {
       this.galleryState_.content = {'total': 0, 'files': []};
     }
     const oldScrollLeft = document.getElementById('collections')?.scrollLeft;
+    const oldScrollTop = scrollToTop ? 0 : document.documentElement.scrollTop;
+
+    const cd = document.getElementById('collections');
+    while (cd.firstChild) {
+      cd.removeChild(cd.firstChild);
+    }
 
     let g = document.getElementById('gallery');
     while (g.firstChild) {
       g.removeChild(g.firstChild);
     }
-
-    const collectionDiv = document.createElement('div');
-    collectionDiv.id = 'collections';
-    g.appendChild(collectionDiv);
 
     let collectionName = '';
     let members = [];
@@ -316,14 +329,23 @@ class UI {
       if (!collections.hasOwnProperty(i)) {
         continue;
       }
-      const div = document.createElement('div');
-      div.className = 'collectionThumbdiv';
       const c = collections[i];
       if (c.collection === 'trash' && this.galleryState_.collection !== c.collection) {
         continue;
       }
+      const div = document.createElement('div');
+      div.className = 'collectionThumbdiv';
       if (!c.isOwner) {
         div.classList.add('not-owner');
+      }
+      if (c.isOwner || c.canAdd) {
+        div.addEventListener('dragover', event => {
+          event.preventDefault();
+        });
+        div.addEventListener('drop', event => {
+          event.preventDefault();
+          this.handleCollectionDropEvent_(c.collection, event);
+        });
       }
       if (this.galleryState_.collection === c.collection) {
         collectionName = c.name;
@@ -331,6 +353,7 @@ class UI {
         scrollTo = div;
         isOwner = c.isOwner;
         canAdd = c.canAdd;
+        this.galleryState_.canDrag = c.isOwner || c.canCopy;
       }
       const img = new Image();
       img.alt = c.name;
@@ -345,7 +368,7 @@ class UI {
       img.style.width = sz;
       imgdiv.style.height = sz;
       imgdiv.style.width = sz;
-      img.addEventListener('click', e => {
+      img.addEventListener('click', () => {
         this.switchView_(c);
       });
       imgdiv.appendChild(img);
@@ -355,7 +378,7 @@ class UI {
       n.style.width = sz;
       n.textContent = c.name;
       div.appendChild(n);
-      collectionDiv.appendChild(div);
+      cd.appendChild(div);
     }
 
     if (isOwner || canAdd) {
@@ -371,6 +394,15 @@ class UI {
     g.appendChild(br);
     const h1 = document.createElement('h1');
     h1.textContent = 'Collection: ' + collectionName;
+    if (this.galleryState_.collection === 'trash') {
+      const button = document.createElement('button');
+      button.className = 'empty-trash';
+      button.textContent = 'Empty';
+      button.addEventListener('click', e => {
+        this.emptyTrash_(e.target);
+      });
+      h1.appendChild(button);
+    }
     g.appendChild(h1);
     if (members?.length > 0) {
       const div = document.createElement('div');
@@ -384,12 +416,14 @@ class UI {
     this.showMoreFiles_(n);
     if (scrollTo) {
       if (oldScrollLeft) {
-        collectionDiv.scrollLeft = oldScrollLeft;
+        cd.scrollLeft = oldScrollLeft;
       }
       setTimeout(() => {
-        if (oldScrollLeft) collectionDiv.scrollLeft = oldScrollLeft;
-        scrollTo.scrollIntoView({behavior: 'smooth', block: 'end', inline: 'center'});
-      });
+        if (oldScrollLeft) cd.scrollLeft = oldScrollLeft;
+        const left = Math.max(scrollTo.offsetLeft - (cd.offsetWidth - scrollTo.offsetWidth)/2, 0);
+        cd.scrollTo({behavior: 'smooth', left: left});
+        document.documentElement.scrollTo({top: oldScrollTop, behavior: 'smooth'});
+      }, 10);
     }
   }
 
@@ -414,7 +448,7 @@ class UI {
     for (let i = this.galleryState_.shown; i < this.galleryState_.content.files.length && i < max; i++) {
       this.galleryState_.shown++;
       const f = this.galleryState_.content.files[i];
-      const date = (new Date(f.dateCreated)).toLocaleDateString();
+      const date = (new Date(f.dateCreated)).toLocaleDateString(undefined, {weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'});
       if (date !== this.galleryState_.lastDate) {
         this.galleryState_.lastDate = date;
         const span = document.createElement('span');
@@ -429,8 +463,29 @@ class UI {
 
       const d = document.createElement('div');
       d.className = 'thumbdiv';
-      d.addEventListener('click', () => {
+      d.addEventListener('click', event => {
+        if (event.shiftKey) {
+          this.galleryState_.content.files[i].selected = !this.galleryState_.content.files[i].selected;
+          d.classList.toggle('selected');
+          return;
+        }
         this.setUpPopup_(f);
+      });
+      d.draggable = true;
+      d.addEventListener('dragstart', event => {
+        const move = event.shiftKey === false;
+        event.dataTransfer.setData('application/json', JSON.stringify({collection: f.collection, file: f.file, move: move}));
+        event.dataTransfer.effectAllowed = move ? 'move' : 'copy';
+        if (move) {
+          event.target.classList.add('dragging');
+        }
+        if (document.documentElement.scrollTop > 50) {
+          document.getElementById('collections').classList.add('fixed');
+        }
+      });
+      d.addEventListener('dragend', event => {
+        event.target.classList.remove('dragging');
+        document.getElementById('collections').classList.remove('fixed');
       });
       d.appendChild(img);
       if (f.isVideo) {
@@ -444,6 +499,90 @@ class UI {
       }
       g.appendChild(d);
     }
+  }
+
+  async handleCollectionDropEvent_(collection, event) {
+    const moveData = event.dataTransfer.getData('application/json');
+    let files = [];
+    if (!moveData && collection !== 'trash') {
+      if (event.dataTransfer.items) {
+        for (let i = 0; i < event.dataTransfer.items.length; i++) {
+          if (event.dataTransfer.items[i].kind === 'file') {
+            files.push(event.dataTransfer.items[i].getAsFile());
+          }
+        }
+      } else {
+        for (let i = 0; i < event.dataTransfer.files.length; i++) {
+          files.push(event.dataTransfer.files[i]);
+        }
+      }
+    }
+    if (moveData) {
+      const file = JSON.parse(moveData);
+      let files = [file.file];
+      let useSelected = false;
+      const selected = [];
+      for (let i = 0; i < this.galleryState_.content.files.length; i++) {
+        if (this.galleryState_.content.files[i].selected === true) {
+          selected.push(this.galleryState_.content.files[i].file);
+          if (this.galleryState_.content.files[i].file === file.file) {
+            useSelected = true;
+          }
+        }
+      }
+      if (useSelected) {
+        files = selected;
+      }
+      if (file.collection === collection) {
+        return false;
+      }
+      if (file.collection === 'trash' && collection !== 'gallery') {
+        this.popupMessage('', 'Must move from trash to gallery', 'info');
+        return false;
+      }
+      return main.sendRPC('moveFiles', file.collection, collection, files, file.move)
+        .then(() => {
+          this.popupMessage('', (file.move ? 'Moved' : 'Copied')+ ` ${files.length} file`+(files.length > 1 ? 's' : ''), 'info');
+          this.refresh_();
+        })
+        .catch(e => {
+          this.showError_(e);
+        });
+    }
+    const toUpload = [];
+    for (let i = 0; i < files.length; i++) {
+      const [data, duration] = await this.makeThumbnail_(files[i]);
+      toUpload.push({
+        file: files[i],
+        thumbnail: data,
+        duration: duration,
+      });
+    }
+    if (toUpload.length === 0) {
+      return;
+    }
+    return main.sendRPC('upload', collection, toUpload)
+      .then(() => {
+        this.refresh_();
+      })
+      .catch(e => {
+        this.showError_(e);
+      });
+  }
+
+  async emptyTrash_(b) {
+    b.disabled = true;
+    main.sendRPC('emptyTrash')
+    .then(() => {
+      close();
+      this.refresh_();
+    })
+    .catch(e => {
+      this.showError_(e);
+    })
+    .finally(() => {
+      b.disabled = false;
+    });
   }
 
   commonPopup_(params) {
@@ -705,7 +844,7 @@ class UI {
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext('2d');
     if (file.type.startsWith('image/')) {
-      return new Promise((resolve, reject) => {
+      return new Promise(resolve => {
         const reader = new FileReader();
         reader.onload = () => {
           const img = new Image();
@@ -736,7 +875,7 @@ class UI {
         reader.readAsDataURL(file);
       });
     } else if (file.type.startsWith('video/')) {
-      return new Promise((resolve, reject) => {
+      return new Promise(resolve => {
         const video = document.createElement('video');
         video.muted = true;
         video.src = URL.createObjectURL(file);
