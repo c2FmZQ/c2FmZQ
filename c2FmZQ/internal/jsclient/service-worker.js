@@ -91,6 +91,14 @@ function fixme() {
   }, 5000);
 }
 
+function Uint8ArrayFromString(s) {
+  return new TextEncoder('utf-8').encode(s);
+}
+
+function Uint8ArrayToString(a) {
+  return new TextDecoder('utf-8').decode(a);
+}
+
 function Uint8ArrayFromBin(bin) {
   let array = [];
   for (let i = 0; i < bin.length; i++) {
@@ -113,6 +121,13 @@ function base64RawUrlEncode(s) {
     s = String.fromCharCode(...s);
   }
   return btoa(s).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
+}
+
+function base64StdEncode(s) {
+  if (s instanceof Uint8Array || Array.isArray(s)) {
+    s = String.fromCharCode(...s);
+  }
+  return btoa(s);
 }
 
 function base64Decode(v) {
@@ -253,6 +268,10 @@ self.addEventListener('activate', event => {
     .then(r => console.log('SW cache deletes', r))
     .then(() => self.clients.claim())
   );
+});
+
+self.addEventListener('unhandledrejection', event => {
+  self.sendMessage('', {type: 'error', msg: event.reason});
 });
 
 self.addEventListener('statechange', event => {

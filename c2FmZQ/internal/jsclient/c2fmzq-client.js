@@ -189,7 +189,7 @@ class c2FmZQClient {
             if (5+size > bytes.length) {
               throw new Error('invalid album metadata');
             }
-            const name = md.slice(5, 5+size).toString();
+            const name = self.Uint8ArrayToString(md.slice(5, 5+size));
             let members = [];
             if (typeof a.members === 'string') {
               members = a.members.split(',').filter(m => m !== '');
@@ -198,7 +198,7 @@ class c2FmZQClient {
               'albumId': a.albumId,
               'pk': apk,
               'encSK': a.encPrivateKey,
-              'encName': await this.encrypt_(Uint8ArrayFromBin(name)),
+              'encName': await this.encrypt_(self.Uint8ArrayFromString(name)),
               'cover': a.cover,
               'members': members,
               'isOwner': a.isOwner === 1,
@@ -336,6 +336,40 @@ class c2FmZQClient {
     });
   }
 
+  async deleteFiles(clientId, files) {
+    let params = {
+      count: ''+files.length,
+    };
+    for (let i = 0; i < files.length; i++) {
+      params[`filename${i}`] = files[i];
+    }
+    return this.sendRequest_(clientId, 'v2/sync/delete', {
+      'token': this.vars_.token,
+      'params': await this.makeParams_(params),
+    }).then(resp => {
+      if (resp.status !== 'ok') {
+        throw resp.status;
+      }
+      return resp.status;
+    });
+  }
+
+  async changeCover(clientId, albumId, cover) {
+    let params = {
+      albumId: albumId,
+      cover: cover,
+    };
+    return this.sendRequest_(clientId, 'v2/sync/changeAlbumCover', {
+      'token': this.vars_.token,
+      'params': await this.makeParams_(params),
+    }).then(resp => {
+      if (resp.status !== 'ok') {
+        throw resp.status;
+      }
+      return resp.status;
+    });
+  }
+
   async moveFiles(clientId, from, to, files, isMove) {
     const fromAlbumId = from === 'gallery' || from === 'trash' ? '' : from;
     const toAlbumId = to === 'gallery' || to === 'trash' ? '' : to;
@@ -399,7 +433,7 @@ class c2FmZQClient {
   }
 
   async decryptString_(data) {
-    return this.decrypt_(data).then(r => String.fromCharCode(...r));
+    return this.decrypt_(data).then(r => self.Uint8ArrayToString(r));
   }
 
   async decryptAlbumSK_(albumId) {
@@ -486,6 +520,38 @@ class c2FmZQClient {
     return Promise.all(p);
   }
 
+  async getContact(clientId, email) {
+    const params = {
+      email: email,
+    };
+    return this.sendRequest_(clientId, 'v2/sync/getContact', {
+      'token': this.vars_.token,
+      'params': await this.makeParams_(params),
+    }).then(async resp => {
+      if (resp.status !== 'ok') {
+        throw resp.status;
+      }
+      const c = resp.parts.contact;
+      this.db_.contacts[''+c.userId] = c;
+      await store.set('contacts', this.db_.contacts);
+      c.userId = ''+c.userId;
+      return c;
+    });
+  }
+
+  async getContacts(clientId) {
+    const contacts = Object.values(this.db_.contacts).map(c => {
+      c.userId = ''+c.userId;
+      return c;
+    });
+    contacts.sort((a, b) => {
+      if (a.email < b.email) return -1;
+      if (a.email > b.email) return 1;
+      return 0;
+    });
+    return contacts;
+  }
+
   /*
    */
   async getFiles(clientId, collection, offset = 0) {
@@ -527,15 +593,15 @@ class c2FmZQClient {
           'name': await this.decryptString_(a.encName),
           'cover': await this.getCover_(a.albumId),
           'members': a.members.map(m => {
-            if (m === this.vars_.userId) return this.vars_.email;
-            if (m in this.db_.contacts) return this.db_.contacts[m].email;
-            return m;
+            if (m === this.vars_.userId) return {userId: m, email: this.vars_.email, myself: true};
+            if (m in this.db_.contacts) return {userId: m, email: this.db_.contacts[m].email};
+            return {userId: m, email: '#'+m};
           }).sort(),
           'isOwner': a.isOwner,
           'isShared': a.isShared,
-          'canAdd': a.permissions?.match(/^11../),
-          'canShare': a.permissions?.match(/^1.1./),
-          'canCopy': a.permissions?.match(/^1..1/),
+          'canAdd': a.permissions?.match(/^11../) !== null,
+          'canShare': a.permissions?.match(/^1.1./) !== null,
+          'canCopy': a.permissions?.match(/^1..1/) !== null,
         });
       }
       albums.sort((a, b) => {
@@ -613,7 +679,7 @@ class c2FmZQClient {
       out.set(m, v[0].byteLength);
       return out;
     })
-    .then(v => btoa(String.fromCharCode(...v)));
+    .then(v => self.base64StdEncode(v));
   }
 
   /*
@@ -690,7 +756,7 @@ class c2FmZQClient {
     if (fnSize < 0 || fnSize+50 > hdr.length) {
       throw new Error('invalid filename size');
     }
-    const fn = hdr.slice(50, 50+fnSize);
+    const fn = self.Uint8ArrayToString(hdr.slice(50, 50+fnSize));
     const dur = hdr[50+fnSize]<<24 | hdr[51+fnSize]<<16 | hdr[52+fnSize]<<8 | hdr[53+fnSize];
     if (dur < 0) {
       throw new Error('invalid duration');
@@ -701,7 +767,7 @@ class c2FmZQClient {
         dataSize: dataSize,
         encKey: await this.encrypt_(symKey),
         fileType: fileType,
-        encFileName: await this.encrypt_(Uint8ArrayFromBin(String.fromCharCode(...fn).replace(/^ */, ''))),
+        encFileName: await this.encrypt_(self.Uint8ArrayFromString(fn.replace(/^ */, ''))),
         duration: dur,
         headerSize: bytes.length,
     };
@@ -728,6 +794,202 @@ class c2FmZQClient {
     }
     bytes.set(newEncHeader, 39);
     return self.base64RawUrlEncode(bytes);
+  }
+
+  async makeMetadata_(pk, name) {
+    const encoded = self.Uint8ArrayFromString(name);
+    const md = [ 1 ];
+    md.push(...self.bigEndian(encoded.byteLength, 4));
+    md.push(...encoded);
+    const enc = await sodium.crypto_box_seal(new Uint8Array(md), pk);
+    return self.base64StdEncode(enc);
+  }
+
+  async renameCollection(clientId, collection, name) {
+    const pk = await sodiumPublicKey(this.db_.albums[collection].pk);
+    const params = {
+      albumId: collection,
+      metadata: await this.makeMetadata_(pk, name),
+    };
+    return this.sendRequest_(clientId, 'v2/sync/renameAlbum', {
+      'token': this.vars_.token,
+      'params': await this.makeParams_(params),
+    }).then(resp => {
+      if (resp.status !== 'ok') {
+        throw resp.status;
+      }
+      return resp.status;
+    });
+  }
+
+  makePermissions(perms) {
+    return '1' + (perms.canAdd ? '1' : '0') + (perms.canShare ? '1' : '0') + (perms.canCopy ? '1' : '0');
+  }
+
+  async shareCollection(clientId, collection, perms, members) {
+    members.push(this.vars_.userId);
+    const album = {
+      albumId: collection,
+      isShared: '1',
+      permissions: this.makePermissions(perms),
+      members: members.join(','),
+    };
+    const sk = (await this.decryptAlbumSK_(collection)).getBuffer();
+    const sharingKeys = {};
+    for (let i = 0; i < members.length; i++) {
+      if (members[i] === this.vars_.userId) {
+        continue;
+      }
+      const pk = await sodiumPublicKey(base64DecodeIntoArray(this.db_.contacts[''+members[i]].publicKey));
+      const enc = await sodium.crypto_box_seal(sk, pk);
+      sharingKeys[''+members[i]] = self.base64StdEncode(enc);
+    }
+    const params = {
+      album: JSON.stringify(album),
+      sharingKeys: JSON.stringify(sharingKeys),
+    };
+    return this.sendRequest_(clientId, 'v2/sync/share', {
+      'token': this.vars_.token,
+      'params': await this.makeParams_(params),
+    }).then(resp => {
+      if (resp.status !== 'ok') {
+        throw resp.status;
+      }
+      return resp.status;
+    });
+  }
+
+  async unshareCollection(clientId, collection) {
+    const params = {
+      albumId: collection,
+    };
+    return this.sendRequest_(clientId, 'v2/sync/unshareAlbum', {
+      'token': this.vars_.token,
+      'params': await this.makeParams_(params),
+    }).then(resp => {
+      if (resp.status !== 'ok') {
+        throw resp.status;
+      }
+      return resp.status;
+    });
+  }
+
+  async removeMembers(clientId, collection, members) {
+    const album = {
+      albumId: collection,
+    };
+    let p = [];
+    for (let i = 0; i < members.length; i++) {
+      const params = {
+        album: JSON.stringify(album),
+        memberUserId: members[i],
+      };
+      p.push(this.sendRequest_(clientId, 'v2/sync/removeAlbumMember', {
+        'token': this.vars_.token,
+        'params': await this.makeParams_(params),
+      }).then(resp => {
+        if (resp.status !== 'ok') {
+          throw resp.status;
+        }
+        return resp.status;
+      }));
+    }
+    return Promise.all(p);
+  }
+
+  async updatePermissions(clientId, collection, perms) {
+    const album = {
+      albumId: collection,
+      permissions: this.makePermissions(perms),
+    };
+    const params = {
+      album: JSON.stringify(album),
+    };
+    return this.sendRequest_(clientId, 'v2/sync/editPerms', {
+      'token': this.vars_.token,
+      'params': await this.makeParams_(params),
+    }).then(resp => {
+      if (resp.status !== 'ok') {
+        throw resp.status;
+      }
+      return resp.status;
+    });
+  }
+
+  async leaveCollection(clientId, collection) {
+    const params = {
+      albumId: collection,
+    };
+    return this.sendRequest_(clientId, 'v2/sync/leaveAlbum', {
+      'token': this.vars_.token,
+      'params': await this.makeParams_(params),
+    }).then(resp => {
+      if (resp.status !== 'ok') {
+        throw resp.status;
+      }
+      return resp.status;
+    });
+  }
+
+  async createCollection(clientId, name) {
+    const kp = await sodium.crypto_box_keypair();
+    const sk = await sodium.crypto_box_secretkey(kp);
+    const pk = await sodium.crypto_box_publickey(kp);
+    const encSK = await sodium.crypto_box_seal(sk.getBuffer(), await sodiumPublicKey(this.vars_.pk));
+
+    const params = {
+      albumId: self.base64RawUrlEncode(await sodium.randombytes_buf(32)),
+      dateCreated: ''+Date.now(),
+      dateModified: ''+Date.now(),
+      metadata: await this.makeMetadata_(pk, name),
+      encPrivateKey: self.base64StdEncode(encSK),
+      publicKey: self.base64StdEncode(pk.getBuffer()),
+    };
+    return this.sendRequest_(clientId, 'v2/sync/addAlbum', {
+      'token': this.vars_.token,
+      'params': await this.makeParams_(params),
+    }).then(async resp => {
+      if (resp.status !== 'ok') {
+        throw resp.status;
+      }
+      const obj = {
+        'albumId': params.albumId,
+        'pk': pk.getBuffer(),
+        'encSK': params.encPrivateKey,
+        'encName': await this.encrypt_(self.Uint8ArrayFromString(name)),
+        'cover': '',
+        'members': '',
+        'isOwner': true,
+        'isShared': false,
+        'permissions': '',
+        'dateModified': params.dateModified,
+        'dateCreated': params.dateCreated,
+      };
+      this.db_.albums[obj.albumId] = obj;
+      await store.set('albums', this.db_.albums);
+      return params.albumId;
+    });
+  }
+
+  async deleteCollection(clientId, collection) {
+    const prefix = `files/${collection}/`;
+    const files = (await store.keys()).filter(k => k.startsWith(prefix)).map(k => k.substring(prefix.length));
+    if (files.length > 0) {
+      await this.moveFiles(clientId, collection, 'trash', files, true);
+    }
+
+    const params = {
+      albumId: collection,
+    };
+    return this.sendRequest_(clientId, 'v2/sync/deleteAlbum', {
+      'token': this.vars_.token,
+      'params': await this.makeParams_(params),
+    }).then(resp => {
+      if (resp.status !== 'ok') {
+        throw resp.status;
+      }
+      return resp.status;
+    });
   }
 
   /*
@@ -799,11 +1061,23 @@ class c2FmZQClient {
         const allowedMethods = [
           'isLoggedIn',
           'logout',
-          'getCollections',
+          'getContact',
+          'getContacts',
           'getFiles',
+          'getCollections',
           'getUpdates',
           'moveFiles',
           'emptyTrash',
+          'deleteFiles',
+          'changeCover',
+          'renameCollection',
+          'shareCollection',
+          'unshareCollection',
+          'removeMembers',
+          'updatePermissions',
+          'leaveCollection',
+          'createCollection',
+          'deleteCollection',
           'ping',
         ];
         if (allowedMethods.includes(func)) {
@@ -995,14 +1269,15 @@ class c2FmZQClient {
     const binHeaders = [];
     const b64Headers = [];
     for (let i = 0; i < 2; i++) {
+      const encFileName = self.Uint8ArrayFromString(headers[i].fileName);
       let h = [];
       h.push(headers[i].version);
       h.push(...self.bigEndian(headers[i].chunkSize, 4));
       h.push(...self.bigEndian(headers[i].dataSize, 8));
       h.push(...headers[i].symmetricKey);
       h.push(headers[i].fileType);
-      h.push(...self.bigEndian(headers[i].fileName.length, 4));
-      h.push(...self.Uint8ArrayFromBin(headers[i].fileName));
+      h.push(...self.bigEndian(encFileName.byteLength, 4));
+      h.push(...encFileName);
       h.push(...self.bigEndian(headers[i].duration, 4));
       const encHeader = await sodium.crypto_box_seal(new Uint8Array(h), pk);
       let out = [];

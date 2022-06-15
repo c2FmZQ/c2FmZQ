@@ -34,17 +34,17 @@ class UI {
       shown: UI.SHOW_ITEMS_INCREMENT,
     };
 
-    this.passphraseInput_ = document.getElementById('passphrase-input');
-    this.setPassphraseButton_ = document.getElementById('set-passphrase-button');
-    this.showPassphraseButton_ = document.getElementById('show-passphrase-button');
-    this.resetDbButton_ = document.getElementById('resetdb-button');
+    this.passphraseInput_ = document.querySelector('#passphrase-input');
+    this.setPassphraseButton_ = document.querySelector('#set-passphrase-button');
+    this.showPassphraseButton_ = document.querySelector('#show-passphrase-button');
+    this.resetDbButton_ = document.querySelector('#resetdb-button');
 
-    this.emailInput_ = document.getElementById('email-input');
-    this.passwordInput_ = document.getElementById('password-input');
-    this.loginButton_ = document.getElementById('login-button');
-    this.refreshButton_ = document.getElementById('refresh-button');
-    this.trashButton_ = document.getElementById('trash-button');
-    this.logoutButton_ = document.getElementById('logout-button');
+    this.emailInput_ = document.querySelector('#email-input');
+    this.passwordInput_ = document.querySelector('#password-input');
+    this.loginButton_ = document.querySelector('#login-button');
+    this.refreshButton_ = document.querySelector('#refresh-button');
+    this.trashButton_ = document.querySelector('#trash-button');
+    this.logoutButton_ = document.querySelector('#logout-button');
 
     this.passphraseInput_.addEventListener('keyup', e => {
       if (e.key === 'Enter') {
@@ -139,7 +139,7 @@ class UI {
     main.sendRPC('isLoggedIn')
     .then(account => {
       if (account !== '') {
-        document.getElementById('loggedin-account').textContent = account;
+        document.querySelector('#loggedin-account').textContent = account;
         this.showLoggedIn_();
         main.sendRPC('getUpdates')
           .catch(this.showError_.bind(this))
@@ -172,7 +172,7 @@ class UI {
         body.removeChild(div);
       });
     };
-    const body = document.getElementsByTagName('body')[0];
+    const body = document.querySelector('body');
     div.addEventListener('click', remove);
     body.appendChild(div);
 
@@ -200,24 +200,24 @@ class UI {
 
   showPassphraseBox_() {
     this.clearView_();
-    document.getElementById('loggedout-div').className = 'hidden';
-    document.getElementById('loggedin-div').className = 'hidden';
-    document.getElementById('passphrase-div').className = '';
+    document.querySelector('#loggedout-div').className = 'hidden';
+    document.querySelector('#loggedin-div').className = 'hidden';
+    document.querySelector('#passphrase-div').className = '';
     this.passphraseInput_.focus();
   }
 
   showLoggedIn_() {
-    document.getElementById('loggedout-div').className = 'hidden';
-    document.getElementById('passphrase-div').className = 'hidden';
-    document.getElementById('loggedin-div').className = '';
+    document.querySelector('#loggedout-div').className = 'hidden';
+    document.querySelector('#passphrase-div').className = 'hidden';
+    document.querySelector('#loggedin-div').className = '';
     this.clearView_();
   }
 
   showLoggedOut_() {
     this.clearView_();
-    document.getElementById('loggedin-div').className = 'hidden';
-    document.getElementById('passphrase-div').className = 'hidden';
-    document.getElementById('loggedout-div').className = '';
+    document.querySelector('#loggedin-div').className = 'hidden';
+    document.querySelector('#passphrase-div').className = 'hidden';
+    document.querySelector('#loggedout-div').className = '';
     this.emailInput_.focus();
   }
 
@@ -229,7 +229,7 @@ class UI {
     this.passwordInput_.disabled = true;
     return main.sendRPC('login', this.emailInput_.value, this.passwordInput_.value)
     .then(() => {
-      document.getElementById('loggedin-account').textContent = this.emailInput_.value;
+      document.querySelector('#loggedin-account').textContent = this.emailInput_.value;
       this.passwordInput_.value = '';
       this.showLoggedIn_();
       return main.sendRPC('getUpdates');
@@ -300,21 +300,40 @@ class UI {
     }
   }
 
+  showAddMenu_(event) {
+    event.preventDefault();
+    const params = {
+      x: event.x,
+      y: event.y,
+      items: [
+        {
+          text: 'Upload files',
+          onclick: this.showUploadView_.bind(this),
+        },
+        {
+          text: 'Create collection',
+          onclick: () => this.collectionProperties_(),
+        },
+      ],
+    };
+    this.contextMenu_(params);
+  }
+
   async refreshGallery_(scrollToTop) {
     const collections = await main.sendRPC('getCollections');
     this.galleryState_.content = await main.sendRPC('getFiles', this.galleryState_.collection);
     if (!this.galleryState_.content) {
       this.galleryState_.content = {'total': 0, 'files': []};
     }
-    const oldScrollLeft = document.getElementById('collections')?.scrollLeft;
+    const oldScrollLeft = document.querySelector('#collections')?.scrollLeft;
     const oldScrollTop = scrollToTop ? 0 : document.documentElement.scrollTop;
 
-    const cd = document.getElementById('collections');
+    const cd = document.querySelector('#collections');
     while (cd.firstChild) {
       cd.removeChild(cd.firstChild);
     }
 
-    let g = document.getElementById('gallery');
+    let g = document.querySelector('#gallery');
     while (g.firstChild) {
       g.removeChild(g.firstChild);
     }
@@ -324,6 +343,57 @@ class UI {
     let scrollTo = null;
     let isOwner = false;
     let canAdd = false;
+
+    const showContextMenu = (event, c) => {
+      let params = { x: event.x, y: event.y, items: [] };
+      if (this.galleryState_.collection !== c.collection) {
+        params.items.push({
+          text: 'Open',
+          onclick: () => this.switchView_({collection: c.collection}),
+        });
+        if ((this.galleryState_.collection !== 'trash' || c.collection === 'gallery') && this.galleryState_.content.files.some(f => f.selected)) {
+          const f = this.galleryState_.content.files.find(f => f.selected);
+          if (this.galleryState_.collection !== 'trash') {
+            params.items.push({
+              text: 'Copy selected files',
+              onclick: () => this.moveFiles_({file: f.file, collection: f.collection, move: false}, c.collection),
+            });
+          }
+          params.items.push({
+            text: 'Move selected files',
+            onclick: () => this.moveFiles_({file: f.file, collection: f.collection, move: true}, c.collection),
+          });
+        }
+      }
+      if (c.collection !== 'trash' && c.collection !== 'gallery') {
+        if (c.isOwner) {
+          params.items.push({
+            text: 'Default cover',
+            onclick: () => this.changeCover_(c.collection, ''),
+          });
+          params.items.push({
+            text: 'No cover',
+            onclick: () => this.changeCover_(c.collection, '__b__'),
+          });
+          params.items.push({
+            text: 'Delete',
+            onclick: () => this.deleteCollection_(c.collection),
+          });
+        } else {
+          params.items.push({
+            text: 'Leave',
+            onclick: () => this.leaveCollection_(c.collection),
+          });
+        }
+        params.items.push({
+          text: 'Properties',
+          onclick: () => this.collectionProperties_(c),
+        });
+      }
+      if (params.items.length > 0) {
+        this.contextMenu_(params);
+      }
+    };
 
     for (let i in collections) {
       if (!collections.hasOwnProperty(i)) {
@@ -347,6 +417,10 @@ class UI {
           this.handleCollectionDropEvent_(c.collection, event);
         });
       }
+      div.addEventListener('contextmenu', event => {
+        event.preventDefault();
+        showContextMenu(event, c);
+      });
       if (this.galleryState_.collection === c.collection) {
         collectionName = c.name;
         members = c.members;
@@ -354,6 +428,7 @@ class UI {
         isOwner = c.isOwner;
         canAdd = c.canAdd;
         this.galleryState_.canDrag = c.isOwner || c.canCopy;
+        this.galleryState_.isOwner = c.isOwner;
       }
       const img = new Image();
       img.alt = c.name;
@@ -385,7 +460,8 @@ class UI {
       const addDiv = document.createElement('div');
       addDiv.id = 'add-button';
       addDiv.textContent = '＋';
-      addDiv.addEventListener('click', this.showUploadView_.bind(this));
+      addDiv.addEventListener('click', this.showAddMenu_.bind(this));
+      addDiv.addEventListener('contextmenu', this.showAddMenu_.bind(this));
       g.appendChild(addDiv);
     }
 
@@ -405,8 +481,9 @@ class UI {
     }
     g.appendChild(h1);
     if (members?.length > 0) {
+      UI.sortBy(members, 'email');
       const div = document.createElement('div');
-      div.textContent = 'Shared with ' + members.join(', ');
+      div.textContent = 'Shared with ' + members.map(m => m.email).join(', ');
       g.appendChild(div);
     }
 
@@ -427,6 +504,14 @@ class UI {
     }
   }
 
+  static sortBy(arr, field) {
+    return arr.sort((a, b) => {
+      if (a[field] < b[field]) return -1;
+      if (a[field] > b[field]) return 1;
+      return 0;
+    });
+  }
+
   static px_(n) {
     return ''+Math.floor(n / window.devicePixelRatio)+'px';
   }
@@ -435,7 +520,7 @@ class UI {
     if (!this.galleryState_.content) {
       return;
     }
-    const g = document.getElementById('gallery');
+    const g = document.querySelector('#gallery');
     const max = Math.min(this.galleryState_.shown + n, this.galleryState_.content.total);
 
     if (max > this.galleryState_.content.files.length) {
@@ -444,6 +529,58 @@ class UI {
         this.galleryState_.content.files.push(...ff.files);
       }
     }
+
+    const showContextMenu = (event, f) => {
+      let params = { x: event.x, y: event.y, items: [] };
+      params.items.push({
+        text: 'Open',
+        onclick: () => this.setUpPopup_(f),
+      });
+      params.items.push({
+        text: f.selected ? 'Unselect' : 'Select',
+        onclick: f.select,
+      });
+      if (this.galleryState_.isOwner) {
+        if (this.galleryState_.collection !== 'trash') {
+          params.items.push({
+            text: 'Move to trash',
+            onclick: () => confirm('Move to trash?') && this.moveFiles_({file: f.file, collection: f.collection, move: true}, 'trash'),
+          });
+        } else {
+          params.items.push({
+            text: 'Move to gallery',
+            onclick: () => confirm('Move to gallery?') && this.moveFiles_({file: f.file, collection: f.collection, move: true}, 'gallery'),
+          });
+          params.items.push({
+            text: 'Delete permanently',
+            onclick: () => confirm('Delete permanently?') && this.deleteFiles_({file: f.file, collection: f.collection}),
+          });
+        }
+        if (f.collection !== 'trash' && f.collection !== 'gallery') {
+          params.items.push({
+            text: 'Use as cover',
+            onclick: () => this.changeCover_(f.collection, f.file),
+          });
+        }
+      }
+      if (this.galleryState_.content.files.filter(f => f.selected).length > 1) {
+        params.items.push({
+          text: 'Unselect all',
+          onclick: () => {
+            this.galleryState_.content.files.forEach(f => {
+              if (f.selected) f.select();
+            });
+          },
+        });
+      }
+      this.contextMenu_(params);
+    };
+
+    const selectItem = i => {
+      const item = this.galleryState_.content.files[i];
+      item.selected = !item.selected;
+      item.elem.classList.toggle('selected');
+    };
 
     for (let i = this.galleryState_.shown; i < this.galleryState_.content.files.length && i < max; i++) {
       this.galleryState_.shown++;
@@ -463,13 +600,18 @@ class UI {
 
       const d = document.createElement('div');
       d.className = 'thumbdiv';
+      f.elem = d;
+
+      f.select = () => selectItem(i);
       d.addEventListener('click', event => {
-        if (event.shiftKey) {
-          this.galleryState_.content.files[i].selected = !this.galleryState_.content.files[i].selected;
-          d.classList.toggle('selected');
-          return;
+        if (event.shiftKey || this.galleryState_.content.files.some(f => f.selected)) {
+          return f.select();
         }
         this.setUpPopup_(f);
+      });
+      d.addEventListener('contextmenu', event => {
+        event.preventDefault();
+        showContextMenu(event, f);
       });
       d.draggable = true;
       d.addEventListener('dragstart', event => {
@@ -480,12 +622,12 @@ class UI {
           event.target.classList.add('dragging');
         }
         if (document.documentElement.scrollTop > 50) {
-          document.getElementById('collections').classList.add('fixed');
+          document.querySelector('#collections').classList.add('fixed');
         }
       });
       d.addEventListener('dragend', event => {
         event.target.classList.remove('dragging');
-        document.getElementById('collections').classList.remove('fixed');
+        document.querySelector('#collections').classList.remove('fixed');
       });
       d.appendChild(img);
       if (f.isVideo) {
@@ -518,36 +660,7 @@ class UI {
       }
     }
     if (moveData) {
-      const file = JSON.parse(moveData);
-      let files = [file.file];
-      let useSelected = false;
-      const selected = [];
-      for (let i = 0; i < this.galleryState_.content.files.length; i++) {
-        if (this.galleryState_.content.files[i].selected === true) {
-          selected.push(this.galleryState_.content.files[i].file);
-          if (this.galleryState_.content.files[i].file === file.file) {
-            useSelected = true;
-          }
-        }
-      }
-      if (useSelected) {
-        files = selected;
-      }
-      if (file.collection === collection) {
-        return false;
-      }
-      if (file.collection === 'trash' && collection !== 'gallery') {
-        this.popupMessage('', 'Must move from trash to gallery', 'info');
-        return false;
-      }
-      return main.sendRPC('moveFiles', file.collection, collection, files, file.move)
-        .then(() => {
-          this.popupMessage('', (file.move ? 'Moved' : 'Copied')+ ` ${files.length} file`+(files.length > 1 ? 's' : ''), 'info');
-          this.refresh_();
-        })
-        .catch(e => {
-          this.showError_(e);
-        });
+      return this.moveFiles_(JSON.parse(moveData), collection);
     }
     const toUpload = [];
     for (let i = 0; i < files.length; i++) {
@@ -570,6 +683,66 @@ class UI {
       });
   }
 
+  moveFiles_(file, collection) {
+    let files = [file.file];
+    let useSelected = false;
+    const selected = [];
+    for (let i = 0; i < this.galleryState_.content.files.length; i++) {
+      if (this.galleryState_.content.files[i].selected === true) {
+        selected.push(this.galleryState_.content.files[i].file);
+        if (this.galleryState_.content.files[i].file === file.file) {
+          useSelected = true;
+        }
+      }
+    }
+    if (useSelected) {
+      files = selected;
+    }
+    if (file.collection === collection) {
+      return false;
+    }
+    if (file.collection === 'trash' && collection !== 'gallery') {
+      this.popupMessage('', 'Must move from trash to gallery', 'info');
+      return false;
+    }
+    return main.sendRPC('moveFiles', file.collection, collection, files, file.move)
+      .then(() => {
+        this.popupMessage('', (file.move ? 'Moved' : 'Copied')+ ` ${files.length} file`+(files.length > 1 ? 's' : ''), 'info');
+        this.refresh_();
+      })
+      .catch(e => {
+        this.showError_(e);
+      });
+  }
+
+  deleteFiles_(file) {
+    if (this.galleryState_.collection !== 'trash') {
+      return;
+    }
+    let files = [file.file];
+    let useSelected = false;
+    const selected = [];
+    for (let i = 0; i < this.galleryState_.content.files.length; i++) {
+      if (this.galleryState_.content.files[i].selected === true) {
+        selected.push(this.galleryState_.content.files[i].file);
+        if (this.galleryState_.content.files[i].file === file.file) {
+          useSelected = true;
+        }
+      }
+    }
+    if (useSelected) {
+      files = selected;
+    }
+    return main.sendRPC('deleteFiles', files)
+      .then(() => {
+        this.popupMessage('', `Deleted ${files.length} file`+(files.length > 1 ? 's' : ''), 'info');
+        this.refresh_();
+      })
+      .catch(e => {
+        this.showError_(e);
+      });
+  }
+
   async emptyTrash_(b) {
     b.disabled = true;
     main.sendRPC('emptyTrash')
@@ -583,6 +756,115 @@ class UI {
     .finally(() => {
       b.disabled = false;
     });
+  }
+
+  async changeCover_(collection, cover) {
+    main.sendRPC('changeCover', collection, cover)
+    .then(() => {
+      this.refresh_();
+    })
+    .catch(e => {
+      this.showError_(e);
+    });
+  }
+
+  async leaveCollection_(collection) {
+    if (!window.confirm('Are you sure you want to leave this collection?')) {
+      return;
+    }
+    main.sendRPC('leaveCollection', collection)
+    .then(() => {
+      this.refresh_();
+    })
+    .catch(e => {
+      this.showError_(e);
+    });
+  }
+
+  async deleteCollection_(collection) {
+    if (!window.confirm('Are you sure you want to delete this collection?')) {
+      return;
+    }
+    main.sendRPC('deleteCollection', collection)
+    .then(() => {
+      this.refresh_();
+    })
+    .catch(e => {
+      this.showError_(e);
+    });
+  }
+
+  contextMenu_(params) {
+    if (this.closeContextMenu_) {
+      this.closeContextMenu_();
+    }
+    const menu = document.createElement('div');
+    menu.className = params.className || 'context-menu';
+    let x = params.x || 10;
+    let y = params.y || 10;
+    menu.addEventListener('contextmenu', event => {
+      event.preventDefault();
+    });
+
+    let closeMenu;
+    const handleEscape = e => {
+      if (e.key === 'Escape') {
+        closeMenu();
+      }
+    };
+    const handleClickOutside = e => {
+      if (!e.composedPath().includes(menu)) {
+        e.stopPropagation();
+        closeMenu();
+      }
+    };
+    document.addEventListener('keyup', handleEscape);
+    setTimeout(() => {
+      document.addEventListener('click', handleClickOutside, true);
+    });
+
+    const g = document.querySelector('#gallery');
+    closeMenu = () => {
+      this.closeContextMenu_ = null;
+      // Remove handlers.
+      document.removeEventListener('keyup', handleEscape);
+      document.removeEventListener('click', handleClickOutside, true);
+      menu.style.animation = 'fadeOut 0.25s';
+      menu.addEventListener('animationend', () => {
+        try {
+          g.removeChild(menu);
+        } catch (e) {}
+      });
+      closeMenu = () => null;
+    };
+
+    for (let i = 0; i < params.items.length; i++) {
+      const item = document.createElement('button');
+      item.className = 'context-menu-item';
+      item.textContent = params.items[i].text;
+      item.addEventListener('click', e => {
+        closeMenu();
+        params.items[i].onclick();
+      });
+      menu.appendChild(item);
+    }
+
+    g.appendChild(menu);
+    if (x > window.innerWidth / 2) {
+      x -= menu.offsetWidth + 30;
+    } else {
+      x += 30;
+    }
+    if (y > window.innerHeight / 2) {
+      y -= menu.offsetHeight + 10;
+    } else {
+      y += 10;
+    }
+    menu.style.left = x + 'px';
+    menu.style.top = y + 'px';
+    window.setTimeout(closeMenu, 10000);
+    this.closeContextMenu_ = closeMenu;
+    return menu;
   }
 
   commonPopup_(params) {
@@ -628,7 +910,7 @@ class UI {
       document.addEventListener('click', handleClickOutside, true);
     });
 
-    const g = document.getElementById('gallery');
+    const g = document.querySelector('#gallery');
     closePopup = () => {
       // Remove handlers.
       popupClose.removeEventListener('click', handleClickClose);
@@ -670,6 +952,331 @@ class UI {
     }
   }
 
+  async collectionProperties_(c) {
+    if (!c) {
+      c = {
+        create: true,
+        name: '',
+        members: [],
+        isOwner: true,
+        isShared: false,
+      };
+    }
+    const contacts = await main.sendRPC('getContacts');
+    const {content, close} = this.commonPopup_({
+      title: 'Properties: ' + (c.name !== '' ? c.name : 'NEW COLLECTION'),
+    });
+    content.id = 'collection-properties';
+
+    const origMembers = c.members.filter(m => !m.myself);
+    UI.sortBy(origMembers, 'email');
+    let members = c.members.filter(m => !m.myself);
+
+    const getChanges = () => {
+      const changes = {};
+      if (c.isOwner) {
+        const newName = content.querySelector('#collection-properties-name').value;
+        if (c.name !== newName) {
+          changes.name = newName;
+        }
+        const newShared = content.querySelector('#collection-properties-shared').checked;
+        if (c.isShared !== newShared) {
+          changes.shared = newShared;
+        }
+        if (!newShared) {
+          return changes;
+        }
+        const newCanAdd = content.querySelector('#collection-properties-perm-add').checked;
+        if (c.canAdd !== newCanAdd) {
+          changes.canAdd = newCanAdd;
+        }
+        const newCanCopy = content.querySelector('#collection-properties-perm-copy').checked;
+        if (c.canCopy !== newCanCopy) {
+          changes.canCopy = newCanCopy;
+        }
+        const newCanShare = content.querySelector('#collection-properties-perm-share').checked;
+        if (c.canShare !== newCanShare) {
+          changes.canShare = newCanShare;
+        }
+      }
+      if (c.isOwner || c.canShare) {
+        const a = new Set(origMembers.map(m => m.userId));
+        const b = new Set(members.map(m => m.userId));
+        changes.remove = [...a].filter(m => !b.has(m));
+        changes.add = [...b].filter(m => !a.has(m));
+        if (changes.remove.length === 0) delete changes.remove;
+        if (changes.add.length === 0) delete changes.add;
+      }
+      return changes;
+    };
+
+    const onChange = () => {
+      const name = content.querySelector('#collection-properties-name');
+      name.value = name.value.replace(/^ *([^ ]*) */g, '$1');
+
+      const shared = content.querySelector('#collection-properties-shared');
+      content.querySelectorAll('.sharing-setting').forEach(elem => {
+        if (shared.checked) {
+          elem.style.display = '';
+        } else {
+          elem.style.display = 'none';
+        }
+      });
+
+      const any = Object.keys(getChanges()).length > 0;
+      const elem = content.querySelector('#collection-properties-apply-button');
+      elem.disabled = !any;
+      elem.textContent = any ? 'Apply Changes' : 'No Changes';
+    };
+
+    const applyChanges = async () => {
+      const changes = getChanges();
+      if (c.create) {
+        if (changes.name === undefined) {
+          return false;
+        }
+        c.collection = await main.sendRPC('createCollection', changes.name);
+      } else if (changes.name !== undefined) {
+        await main.sendRPC('renameCollection', c.collection, changes.name);
+      }
+
+      const perms = {
+        canAdd: c.isOwner ? content.querySelector('#collection-properties-perm-add').checked : c.canAdd,
+        canCopy: c.isOwner ? content.querySelector('#collection-properties-perm-copy').checked : c.canCopy,
+        canShare: c.isOwner ? content.querySelector('#collection-properties-perm-share').checked : c.canShare,
+      };
+
+      if (changes.shared === true || changes.add !== undefined) {
+        await main.sendRPC('shareCollection', c.collection, perms, changes.add || []);
+      }
+
+      if (changes.shared === false) {
+        await main.sendRPC('unshareCollection', c.collection);
+      }
+
+      if (changes.remove !== undefined) {
+        await main.sendRPC('removeMembers', c.collection, changes.remove);
+      }
+
+      if (changes.canAdd !== undefined || changes.canCopy !== undefined || changes.canShare !== undefined) {
+        await main.sendRPC('updatePermissions', c.collection, perms);
+      }
+      close();
+      this.refresh_();
+    };
+
+    const nameLabel = document.createElement('div');
+    nameLabel.id = 'collection-properties-name-label';
+    nameLabel.textContent = 'Name';
+    content.appendChild(nameLabel);
+
+    if (c.isOwner) {
+      const name = document.createElement('input');
+      name.id = 'collection-properties-name';
+      name.type = 'text';
+      name.value = c.name;
+      name.addEventListener('change', onChange);
+      name.addEventListener('keyUp', e => {
+        if (e.key === 'Enter') {
+          onChange();
+        }
+      });
+      content.appendChild(name);
+      if (c.create) name.focus();
+    } else {
+      const name = document.createElement('div');
+      name.id = 'collection-properties-name';
+      name.textContent = c.name;
+      content.appendChild(name);
+    }
+
+    const sharedLabel = document.createElement('div');
+    sharedLabel.id = 'collection-properties-shared-label';
+    sharedLabel.textContent = 'Shared';
+    content.appendChild(sharedLabel);
+
+    if (c.isOwner) {
+      const shared = document.createElement('input');
+      shared.id = 'collection-properties-shared';
+      shared.type = 'checkbox';
+      shared.checked = c.isShared;
+      shared.addEventListener('change', onChange);
+      content.appendChild(shared);
+    } else {
+      const sharedDiv = document.createElement('div');
+      sharedDiv.id = 'collection-properties-shared-div';
+      sharedDiv.textContent = c.isShared ? 'Yes' : 'No';
+      content.appendChild(sharedDiv);
+    }
+
+    const permLabel = document.createElement('div');
+    permLabel.id = 'collection-properties-perm-label';
+    permLabel.className = 'sharing-setting';
+    permLabel.style.display = c.isShared ? '' : 'none';
+    permLabel.textContent = 'Permissions';
+    content.appendChild(permLabel);
+
+    const permDiv = document.createElement('div');
+    permDiv.id = 'collection-properties-perm';
+    permDiv.className = 'sharing-setting';
+    permDiv.style.display = c.isShared ? '' : 'none';
+
+    const permAdd = document.createElement('input');
+    permAdd.id = 'collection-properties-perm-add';
+    permAdd.type = 'checkbox';
+    permAdd.checked = c.canAdd;
+    permAdd.disabled = !c.isOwner;
+    permAdd.addEventListener('change', onChange);
+    const permAddLabel = document.createElement('label');
+    permAddLabel.textContent = 'Add';
+    permAddLabel.htmlFor = 'collection-properties-perm-add';
+    permDiv.appendChild(permAdd);
+    permDiv.appendChild(permAddLabel);
+
+    const permCopy = document.createElement('input');
+    permCopy.id = 'collection-properties-perm-copy';
+    permCopy.type = 'checkbox';
+    permCopy.checked = c.canCopy;
+    permCopy.disabled = !c.isOwner;
+    permCopy.addEventListener('change', onChange);
+    const permCopyLabel = document.createElement('label');
+    permCopyLabel.textContent = 'Copy';
+    permCopyLabel.htmlFor = 'collection-properties-perm-copy';
+    permDiv.appendChild(permCopy);
+    permDiv.appendChild(permCopyLabel);
+
+    const permShare = document.createElement('input');
+    permShare.id = 'collection-properties-perm-share';
+    permShare.type = 'checkbox';
+    permShare.checked = c.canShare;
+    permShare.disabled = !c.isOwner;
+    permShare.addEventListener('change', onChange);
+    const permShareLabel = document.createElement('label');
+    permShareLabel.textContent = 'Share';
+    permShareLabel.htmlFor = 'collection-properties-perm-share';
+    permDiv.appendChild(permShare);
+    permDiv.appendChild(permShareLabel);
+
+    content.appendChild(permDiv);
+
+    const membersLabel = document.createElement('div');
+    membersLabel.id = 'collection-properties-members-label';
+    membersLabel.className = 'sharing-setting';
+    membersLabel.style.display = c.isShared ? '' : 'none';
+    membersLabel.textContent = 'Members';
+    content.appendChild(membersLabel);
+
+    const membersDiv = document.createElement('div');
+    membersDiv.id = 'collection-properties-members';
+    membersDiv.className = 'sharing-setting';
+    membersDiv.style.display = c.isShared ? '' : 'none';
+    content.appendChild(membersDiv);
+
+    const applyButton = document.createElement('button');
+    applyButton.id = 'collection-properties-apply-button';
+    applyButton.textContent = 'No Changes';
+    applyButton.disabled = true;
+    applyButton.addEventListener('click', applyChanges);
+    content.appendChild(applyButton);
+
+    const deleteMember = i => {
+      membersDiv.removeChild(members[i].elem);
+      members.splice(i, 1);
+      refreshMembers();
+      onChange();
+    };
+
+    const refreshMembers = () => {
+      while (membersDiv.firstChild) {
+        membersDiv.removeChild(membersDiv.firstChild);
+      }
+      UI.sortBy(members, 'email');
+      if (c.isOwner || c.canAdd) {
+        const list = document.createElement('datalist');
+        list.id = 'collection-properties-members-contacts';
+        for (let i = 0; i < contacts.length; i++) {
+          if (members.some(m => m.userId === contacts[i].userId)) {
+            continue;
+          }
+          const opt = document.createElement('option');
+          opt.value = contacts[i].email;
+          list.appendChild(opt);
+        }
+        membersDiv.appendChild(list);
+
+        const input = document.createElement('input');
+        input.type = 'search';
+        input.id = 'collection-properties-members-input';
+        input.placeholder = 'contact email';
+        input.setAttribute('list', 'collection-properties-members-contacts');
+        membersDiv.appendChild(input);
+
+        const addButton = document.createElement('button');
+        addButton.id = 'collection-properties-members-add-button';
+        addButton.textContent = 'Add';
+        const addFunc = () => {
+          const c = contacts.find(e => e.email === input.value);
+          if (c) {
+            input.value = '';
+            members.push(c);
+            refreshMembers();
+            onChange();
+            return;
+          }
+          addButton.disabled = true;
+          input.readonly = true;
+          main.sendRPC('getContact', input.value)
+          .then(cc => {
+            input.value = '';
+            contacts.push(cc);
+            UI.sortBy(contacts, 'email');
+            members.push({userId: cc.userId, email: cc.email});
+            refreshMembers();
+            onChange();
+          })
+          .catch(err => {
+            if (err !== 'nok') {
+              this.popupMessage('ERROR', err, 'error');
+            }
+          })
+          .finally(() => {
+            addButton.disabled = false;
+            input.readonly = false;
+          });
+        };
+        input.addEventListener('keyUp', e => {
+          if (e.key === 'Enter') {
+            addFunc();
+          }
+        });
+        input.addEventListener('change', addFunc);
+        addButton.addEventListener('click', addFunc);
+        membersDiv.appendChild(addButton);
+      }
+      if (members.length === 0) {
+        const div = document.createElement('div');
+        div.innerHTML = '<i>none</i>';
+        membersDiv.appendChild(div);
+      }
+      for (let i = 0; i < members.length; i++) {
+        const div = document.createElement('div');
+        if (c.isOwner) {
+          const del = document.createElement('button');
+          del.textContent = '✖';
+          del.style.cursor = 'pointer';
+          del.addEventListener('click', () => deleteMember(i));
+          div.appendChild(del);
+        }
+        const name = document.createElement('span');
+        name.textContent = members[i].email;
+        div.appendChild(name);
+        membersDiv.appendChild(div);
+        members[i].elem = div;
+      }
+    };
+    refreshMembers();
+  }
+
   formatDuration_(d) {
     const min = Math.floor(d / 60);
     const sec = d % 60;
@@ -703,17 +1310,15 @@ class UI {
     const {popup, content, close} = this.commonPopup_({
       title: `Upload: ${collectionName}`,
       className: 'popup upload',
-      onclose: () => {
-        console.log('Close upload');
-      },
     });
 
     const h1 = document.createElement('h1');
     h1.textContent = 'Collection: ' + collectionName;
     content.appendChild(h1);
     if (members?.length > 0) {
+      UI.sortBy(members, 'email');
       const div = document.createElement('div');
-      div.textContent = 'Shared with ' + members.join(', ');
+      div.textContent = 'Shared with ' + members.map(m => m.email).join(', ');
       content.appendChild(div);
     }
 
@@ -762,7 +1367,7 @@ class UI {
           elem: elem,
         });
       }
-      const list = document.getElementById('upload-file-list');
+      const list = document.querySelector('#upload-file-list');
       while (list.firstChild) {
         list.removeChild(list.firstChild);
       }

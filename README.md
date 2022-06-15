@@ -220,9 +220,21 @@ implements the same protocol as the c2FmZQ client and the Stingle Photos app.
 
 Simply open `https://${DOMAIN}/${path-prefix}/` to access to Web App.
 
-Browsing albums with photos and videos, and uploading files are possible from the Web.
-Other features will be added over time.
+Currently implemented:
 
+* Login / logout
+* Browsing albums with photos and videos
+* Uploading files (note: files currently need to fit in memory)
+* Creating / deleting albums
+* Moving / copying files
+* Sharing
+
+Still to come:
+
+* Account creation and deletion
+* Account recovery
+* Email and password change
+* Photo editing
 
 ### <a name="totp"></a>One-time passwords (OTP)
 

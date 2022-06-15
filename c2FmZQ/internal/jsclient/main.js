@@ -31,6 +31,9 @@ window.addEventListener('load', () => {
   window.main = new Main();
   window.ui = new UI();
   document.getElementById('version').textContent = VERSION + (DEVEL?' DEVEL':'');
+  window.addEventListener('unhandledrejection', event => {
+    ui.popupMessage('ERROR', event.reason, 'error');
+  });
 });
 
 class Main {

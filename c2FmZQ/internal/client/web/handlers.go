@@ -550,5 +550,5 @@ func fixSlashes(s string) string {
 }
 
 func etag(item client.ListItem) string {
-	return fmt.Sprintf(`"%X"`, sha256.Sum256([]byte(fmt.Sprintf("%s/%s/%d", item.FSFile.File, item.FSFile.DateCreated, item.FSFile.DateModified))))
+	return fmt.Sprintf(`"%X"`, sha256.Sum256([]byte(fmt.Sprintf("%s/%s/%s", item.FSFile.File, item.FSFile.DateCreated, item.FSFile.DateModified))))
 }

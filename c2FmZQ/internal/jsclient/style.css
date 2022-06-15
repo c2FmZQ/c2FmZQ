@@ -201,6 +201,7 @@ a {
   background-color: white;
   z-index: 100;
   box-shadow: 5px 5px 5px black;
+  max-width: 90vw;
 }
 .popup-header {
   border-bottom: 1px solid black;
@@ -211,6 +212,7 @@ a {
 }
 .popup-name {
   grid-column: 1;
+  overflow: hidden;
 }
 .popup-close {
   cursor: pointer;
@@ -236,6 +238,21 @@ a {
   margin: 2em; 
   overflow-y: scroll;
   overscroll-behavior: none;
+}
+.context-menu {
+  animation: fadeIn 0.25s;
+  position: fixed;
+  border: 3px ridge lightgray;
+  padding: 0;
+  background-color: white;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  min-width: 10em;
+  box-shadow: 2px 2px 5px black;
+}
+.context-menu-item:hover {
+  background-color: lightgray;
 }
 .blur {
   animation: fadeIn 0.25s;
@@ -304,4 +321,34 @@ a {
 }
 .empty-trash {
   float: right;
-};
+}
+#collection-properties {
+  padding: 0.5em;
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 1em;
+  align-items: start;
+  overflow-y: scroll;
+}
+#collection-properties-name-label {
+  grid-row: 1 / 2;
+  grid-column: 1 / 2;
+}
+#collection-properties-name {
+  grid-row: 1 / 2;
+  grid-column: 2 / 3;
+}
+#collection-properties-perm {
+  display: inline-flex;
+  align-items: center;
+}
+#collection-properties select {
+  width: 100%;
+}
+#collection-properties button {
+  margin-left: 0.5em;
+  margin-right: 0.5em;
+}
+#collection-properties-apply-button {
+  grid-column: 1 / 3;
+}
