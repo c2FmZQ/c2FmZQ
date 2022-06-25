@@ -222,18 +222,19 @@ Simply open `https://${DOMAIN}/${path-prefix}/` to access to Web App.
 
 Currently implemented:
 
-* Login / logout
+* Account management
+  * Account creation, deletion, recovery
+  * Login / logout
+  * Email / password change
+* Album management
+  * Creating / deleting albums
+  * Moving / copying files
+  * Sharing
 * Browsing albums with photos and videos
 * Uploading files (note: files currently need to fit in memory)
-* Creating / deleting albums
-* Moving / copying files
-* Sharing
 
 Still to come:
 
-* Account creation and deletion
-* Account recovery
-* Email and password change
 * Photo editing
 
 ### <a name="totp"></a>One-time passwords (OTP)

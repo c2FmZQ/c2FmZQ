@@ -41,6 +41,7 @@ const MANIFEST = [
 const window = self;
 self.importScripts('sodium-plus.min.js');
 self.importScripts('secure-webstore.js');
+self.importScripts('bip39.js');
 self.importScripts('store.js');
 self.importScripts('c2fmzq-client.js');
 
@@ -297,7 +298,18 @@ self.addEventListener('message', async event => {
         self.sendMessage(clientId, {type: 'rpc-result', id: event.data.id, func: event.data.func, reject: 'not ready'});
         return;
       }
-      if (!['login','upload'].includes(event.data.func)) {
+      const methods = [
+        'login',
+        'createAccount',
+        'recoverAccount',
+        'upload',
+        'backupPhrase',
+        'changeKeyBackup',
+        'restoreSecretKey',
+        'updateProfile',
+        'deleteAccount',
+      ];
+      if (!methods.includes(event.data.func)) {
         console.log('SW RPC method not allowed', event.data.func);
         self.sendMessage(clientId, {type: 'rpc-result', id: event.data.id, func: event.data.func, reject: 'method not allowed'});
         return;

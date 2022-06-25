@@ -36,23 +36,26 @@ c2FmZQ. If not, see <https://www.gnu.org/licenses/>.
 <div id="passphrase-div" class="hidden">
   <p>Enter a passphrase to protect data stored locally.</p>
   <p>This is <em>not</em> your account password.</p>
-  <input id="passphrase-input" type="password" name="passphrase" size="30">
+  <input id="passphrase-input" type="password" name="passphrase" size="30" autocomplete="new-password">
   <button id="set-passphrase-button">Set</button>
   <button id="show-passphrase-button">Show</button>
 </div>
 <div id="loggedout-div" class="hidden">
-  <div style="display: grid; grid-auto-columns: 1fr; grid-auto-rows: auto; gap: 1em;">
-  <label for="email" style="grid-column: 1; grid-row: 1;">Email:</label> <input id="email-input" style="grid-column: 2; grid-row: 1;" type="text" name="email" size="10">
-  <label for="password" style="grid-column: 1; grid-row: 2;">Password:</label><input id="password-input" style="grid-column: 2; grid-row: 2;" type="password" name="password" size="10">
-  <button id="login-button" style="grid-column: 1 / 3; grid-row: 3;" type="button">Login</button>
+  <div id="tabs" class="tabs"><span id="login-tab" class="tab select">Login</span><span id="register-tab" class="tab">Register</span><span id="recover-tab" class="tab">Recover</span></div>
+  <div id="login-form">
+  <label for="email" style="grid-column: 1">Email:</label> <input id="email-input" style="grid-column: 2" type="email" name="email" size="10">
+  <label id="password-input-label" for="password" style="grid-column: 1">Password:</label><input id="password-input" style="grid-column: 2" type="password" name="password" size="10">
+  <label id="password-input2-label" for="password2" style="grid-column: 1; display: none;">Retype password:</label><input id="password-input2" style="grid-column: 2; display: none;" type="password" name="password2" size="10">
+  <label id="backup-phrase-input-label" for="backup-phrase" style="grid-column: 1; display: none;">Backup phrase:</label><textarea id="backup-phrase-input" style="grid-column: 2; display: none;" name="backup-phrase" rows="7"></textarea>
+  <label id="backup-keys-checkbox-label" for="backup-keys-checkbox" style="grid-column: 1; display: none;">Backup keys?</label><input id="backup-keys-checkbox" style="grid-column: 2; display: none;" name="backup-keys-checkbox" type="checkbox" checked="true">
+  <button id="login-button" style="grid-column: 1 / 3" type="button">Login</button>
   </div>
 </div>
 <div id="loggedin-div" class="hidden">
   <div id="buttons">
     <button id="trash-button">🗑</button>
-    <button id="refresh-button">Refresh</button>
-    <span id="loggedin-account"></span>
-    <button id="logout-button">✖</button>
+    <button id="refresh-button">⟳</button>
+    <button id="loggedin-account"></button>
   </div>
   <div id="collections"></div>
   <div id="gallery"></div>

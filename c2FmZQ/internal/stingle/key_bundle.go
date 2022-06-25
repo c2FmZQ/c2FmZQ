@@ -20,20 +20,20 @@ func MakeKeyBundle(pk PublicKey) string {
 }
 
 // DecodeKeyBundle extracts the PublicKey from a KeyBundle.
-func DecodeKeyBundle(bundle string) (pk PublicKey, err error) {
+func DecodeKeyBundle(bundle string) (pk PublicKey, hasSK bool, err error) {
 	key := make([]byte, 32)
 
 	b, err := base64.StdEncoding.DecodeString(bundle)
 	if err != nil {
-		return pk, err
+		return pk, false, err
 	}
 	if len(b) < len(key)+5 {
-		return pk, fmt.Errorf("bundle is too short: %d", len(b))
+		return pk, false, fmt.Errorf("bundle is too short: %d", len(b))
 	}
 
 	// Header
 	if !bytes.Equal(b[:4], []byte{'S', 'P', 'K', 1}) {
-		return pk, fmt.Errorf("unexpected bundle header %v", b[:4])
+		return pk, false, fmt.Errorf("unexpected bundle header %v", b[:4])
 	}
 	b = b[4:]
 
@@ -43,13 +43,14 @@ func DecodeKeyBundle(bundle string) (pk PublicKey, err error) {
 
 	switch kfType {
 	case 0: // Bundle encrypted
+		hasSK = true
 		copy(key, b[:len(key)])
 	case 2: // Public plain
 		copy(key, b[:len(key)])
 	default:
-		return pk, errors.New("unexpected key file type")
+		return pk, false, errors.New("unexpected key file type")
 	}
-	return PublicKeyFromBytes(key), nil
+	return PublicKeyFromBytes(key), hasSK, nil
 
 }
 

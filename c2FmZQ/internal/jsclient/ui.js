@@ -41,10 +41,17 @@ class UI {
 
     this.emailInput_ = document.querySelector('#email-input');
     this.passwordInput_ = document.querySelector('#password-input');
+    this.passwordInputLabel_ = document.querySelector('#password-input-label');
+    this.passwordInput2_ = document.querySelector('#password-input2');
+    this.passwordInput2Label_ = document.querySelector('#password-input2-label');
+    this.backupPhraseInputLabel_ = document.querySelector('#backup-phrase-input-label');
+    this.backupPhraseInput_ = document.querySelector('#backup-phrase-input');
+    this.backupKeysCheckbox_ = document.querySelector('#backup-keys-checkbox');
+    this.backupKeysCheckboxLabel_ = document.querySelector('#backup-keys-checkbox-label');
     this.loginButton_ = document.querySelector('#login-button');
     this.refreshButton_ = document.querySelector('#refresh-button');
     this.trashButton_ = document.querySelector('#trash-button');
-    this.logoutButton_ = document.querySelector('#logout-button');
+    this.loggedInAccount_ = document.querySelector('#loggedin-account');
 
     this.passphraseInput_.addEventListener('keyup', e => {
       if (e.key === 'Enter') {
@@ -70,6 +77,18 @@ class UI {
     this.setPassphraseButton_.disabled = false;
     this.passphraseInput_.disabled = false;
     this.showPassphraseBox_();
+  }
+
+  promptForBackupPhrase_() {
+    return main.sendRPC('restoreSecretKey', window.prompt('Enter backup phrase:'))
+    .then(() => {
+      this.refresh_();
+    })
+    .catch(err => {
+      console.log('restoreSecretKey failed', err);
+      this.popupMessage('Backup Phrase', err, 'error');
+      window.setTimeout(this.promptForBackupPhrase_.bind(this), 10000);
+    });
   }
 
   setPassphrase_() {
@@ -124,7 +143,6 @@ class UI {
     });
     this.loginButton_.addEventListener('click', this.login_.bind(this));
     this.refreshButton_.addEventListener('click', this.refresh_.bind(this));
-    this.logoutButton_.addEventListener('click', this.logout_.bind(this));
     this.emailInput_.addEventListener('keyup', e => {
       if (e.key === 'Enter') {
         this.passwordInput_.focus();
@@ -132,16 +150,108 @@ class UI {
     });
     this.passwordInput_.addEventListener('keyup', e => {
       if (e.key === 'Enter') {
-        this.login_();
+        switch(this.selectedTab_) {
+          case 'login':
+            this.login_();
+            break;
+          case 'register':
+          case 'recover':
+            this.passwordInput2_.focus();
+            break;
+        }
+      }
+    });
+    this.passwordInput2_.addEventListener('keyup', e => {
+      if (e.key === 'Enter') {
+        switch(this.selectedTab_) {
+          case 'login':
+            break;
+          case 'register':
+            this.login_();
+            break;
+          case 'recover':
+            this.backupPhraseInput_.focus();
+            break;
+        }
       }
     });
 
+    this.loggedInAccount_.addEventListener('click', this.showAccountMenu_.bind(this));
+    this.loggedInAccount_.addEventListener('contextmenu', this.showAccountMenu_.bind(this));
+
+    const tabClick = event => {
+      for (let tab of Object.values(this.tabs_)) {
+        if (event.target === tab.elem) {
+          this.selectedTab_ = tab.name;
+          tab.elem.classList.add('select');
+          tab.click();
+        } else {
+          tab.elem.classList.remove('select');
+        }
+      }
+    };
+    this.tabs_ = {
+      login: {
+        elem: document.querySelector('#login-tab'),
+        message: 'Logging in',
+        rpc: 'login',
+        click: () => {
+          this.passwordInputLabel_.textContent = 'Password:';
+          this.passwordInput2Label_.style.display = 'none';
+          this.passwordInput2_.style.display = 'none';
+          this.backupPhraseInputLabel_.style.display = 'none';
+          this.backupPhraseInput_.style.display = 'none';
+          this.backupKeysCheckbox_.style.display = 'none';
+          this.backupKeysCheckboxLabel_.style.display = 'none';
+          this.loginButton_.textContent = 'Login';
+        },
+      },
+      register: {
+        elem: document.querySelector('#register-tab'),
+        message: 'Creating account',
+        rpc: 'createAccount',
+        click: () => {
+          this.passwordInputLabel_.textContent = 'New password:';
+          this.passwordInput2Label_.style.display = '';
+          this.passwordInput2_.style.display = '';
+          this.backupPhraseInputLabel_.style.display = 'none';
+          this.backupPhraseInput_.style.display = 'none';
+          this.backupKeysCheckbox_.style.display = '';
+          this.backupKeysCheckboxLabel_.style.display = '';
+          this.loginButton_.textContent = 'Create Account';
+        },
+      },
+      recover: {
+        elem: document.querySelector('#recover-tab'),
+        message: 'Recovering account',
+        rpc: 'recoverAccount',
+        click: () => {
+          this.passwordInputLabel_.textContent = 'New password:';
+          this.passwordInput2Label_.style.display = '';
+          this.passwordInput2_.style.display = '';
+          this.backupPhraseInputLabel_.style.display = '';
+          this.backupPhraseInput_.style.display = '';
+          this.backupKeysCheckbox_.style.display = '';
+          this.backupKeysCheckboxLabel_.style.display = '';
+          this.loginButton_.textContent = 'Recover Account';
+        },
+      },
+    };
+    for (let tab of Object.keys(this.tabs_)) {
+      this.tabs_[tab].name = tab;
+      this.tabs_[tab].elem.addEventListener('click', tabClick);
+    }
+
     main.sendRPC('isLoggedIn')
-    .then(account => {
+    .then(({account, needKey}) => {
       if (account !== '') {
-        document.querySelector('#loggedin-account').textContent = account;
+        this.accountEmail_ = account;
+        this.loggedInAccount_.textContent = account;
         this.showLoggedIn_();
-        main.sendRPC('getUpdates')
+        if (needKey) {
+          return this.promptForBackupPhrase_();
+        }
+        return main.sendRPC('getUpdates')
           .catch(this.showError_.bind(this))
           .finally(this.refreshGallery_.bind(this));
       } else {
@@ -149,6 +259,29 @@ class UI {
       }
     })
     .catch(this.showLoggedOut_.bind(this));
+  }
+
+  showAccountMenu_(event) {
+    event.preventDefault();
+    const params = {
+      x: event.x,
+      y: event.y,
+      items: [
+        {
+          text: 'Profile',
+          onclick: this.showProfile_.bind(this),
+        },
+        {
+          text: 'Key backup',
+          onclick: this.showBackupPhrase_.bind(this),
+        },
+        {
+          text: 'Logout',
+          onclick: this.logout_.bind(this),
+        },
+      ],
+    };
+    this.contextMenu_(params);
   }
 
   popupMessage(title, message, className) {
@@ -215,6 +348,11 @@ class UI {
 
   showLoggedOut_() {
     this.clearView_();
+    this.selectedTab_ = 'login';
+    this.tabs_[this.selectedTab_].click();
+
+    document.querySelector('#password-input2-label').style.display = 'none';
+    this.passwordInput2_.style.display = 'none';
     document.querySelector('#loggedin-div').className = 'hidden';
     document.querySelector('#passphrase-div').className = 'hidden';
     document.querySelector('#loggedout-div').className = '';
@@ -222,23 +360,52 @@ class UI {
   }
 
   async login_() {
+    if (this.selectedTab_ !== 'login' && this.passwordInput_.value !== this.passwordInput2_.value) {
+      this.popupMessage('ERROR', 'Passwords don\'t match', 'error');
+      return;
+    }
     let old = this.loginButton_.textContent;
-    this.loginButton_.textContent = 'Logging in';
+    this.loginButton_.textContent = this.tabs_[this.selectedTab_].message;
     this.loginButton_.disabled = true;
     this.emailInput_.disabled = true;
     this.passwordInput_.disabled = true;
-    return main.sendRPC('login', this.emailInput_.value, this.passwordInput_.value)
-    .then(() => {
+    this.passwordInput2_.disabled = true;
+    this.backupPhraseInput_.value = this.backupPhraseInput_.value
+      .replace(/[\t\r\n ]+/g, ' ')
+      .replace(/^ */, '')
+      .replace(/ *$/, '');
+    this.backupPhraseInput_.disabled = true;
+    this.backupKeysCheckbox_.disabled = true;
+    return main.sendRPC(this.tabs_[this.selectedTab_].rpc, this.emailInput_.value, this.passwordInput_.value, this.backupKeysCheckbox_.checked, this.backupPhraseInput_.value)
+    .then(({needKey}) => {
+      this.accountEmail_ = this.emailInput_.value;
       document.querySelector('#loggedin-account').textContent = this.emailInput_.value;
       this.passwordInput_.value = '';
+      this.passwordInput2_.value = '';
+      this.backupPhraseInput_.value = '';
       this.showLoggedIn_();
-      return main.sendRPC('getUpdates');
-    })
-    .then(() => {
-      this.refreshGallery_();
+      if (needKey) {
+        return this.promptForBackupPhrase_();
+      }
+      return main.sendRPC('getUpdates')
+        .then(() => {
+          this.refreshGallery_();
+        });
     })
     .catch(e => {
-      if (e !== 'nok') {
+      if (e === 'nok') {
+        switch(this.selectedTab_) {
+          case 'login':
+            this.showError_('Login failed');
+            break;
+          case 'register':
+            this.showError_('Account creation failed');
+            break;
+          case 'recover':
+            this.showError_('Account recovery failed');
+            break;
+        }
+      } else {
         this.showError_(e);
       }
     })
@@ -247,31 +414,25 @@ class UI {
       this.loginButton_.disabled = false;
       this.emailInput_.disabled = false;
       this.passwordInput_.disabled = false;
+      this.passwordInput2_.disabled = false;
+      this.backupPhraseInput_.disabled = false;
+      this.backupKeysCheckbox_.disabled = false;
     });
   }
 
   async logout_() {
-    let old = this.logoutButton_.textContent;
-    this.logoutButton_.textContent = 'Logging out';
-    this.logoutButton_.disabled = true;
     return main.sendRPC('logout')
     .then(() => {
       this.showLoggedOut_();
-    })
-    .finally(() => {
-      this.logoutButton_.textContent = old;
-      this.logoutButton_.disabled = false;
     });
   }
 
   async refresh_() {
     this.refreshButton_.disabled = true;
-    this.refreshButton_.textContent = 'Refreshing';
     return main.sendRPC('getUpdates')
       .then(this.refreshGallery_.bind(this))
       .catch(this.showError_.bind(this))
       .finally(() => {
-        this.refreshButton_.textContent = 'Refresh';
         this.refreshButton_.disabled = false;
       });
   }
@@ -421,6 +582,9 @@ class UI {
         event.preventDefault();
         showContextMenu(event, c);
       });
+      div.addEventListener('click', () => {
+        this.switchView_(c);
+      });
       if (this.galleryState_.collection === c.collection) {
         collectionName = c.name;
         members = c.members;
@@ -443,9 +607,6 @@ class UI {
       img.style.width = sz;
       imgdiv.style.height = sz;
       imgdiv.style.width = sz;
-      img.addEventListener('click', () => {
-        this.switchView_(c);
-      });
       imgdiv.appendChild(img);
       div.appendChild(imgdiv);
       const n = document.createElement('div');
@@ -582,6 +743,36 @@ class UI {
       item.elem.classList.toggle('selected');
     };
 
+    const dragStart = (f, event, img) => {
+      const move = event.shiftKey === false;
+      event.dataTransfer.setData('application/json', JSON.stringify({collection: f.collection, file: f.file, move: move}));
+      event.dataTransfer.effectAllowed = move ? 'move' : 'copy';
+      event.dataTransfer.setDragImage(img, img.width/2, -20);
+
+      if (move) {
+        f.elem.classList.add('dragging');
+      }
+      if (document.documentElement.scrollTop > 50) {
+        document.querySelector('#collections').classList.add('fixed');
+      }
+    };
+    const dragEnd = (f, event) => {
+      f.elem.classList.remove('dragging');
+      document.querySelector('#collections').classList.remove('fixed');
+    };
+    const click = (f, event) => {
+      if (event.shiftKey || this.galleryState_.content.files.some(f => f.selected)) {
+        return f.select();
+      }
+      this.setUpPopup_(f);
+    };
+    const contextMenu = (f, event) => {
+      event.preventDefault();
+      showContextMenu(event, f);
+      // chrome bug
+      f.elem.classList.remove('dragging');
+    };
+
     for (let i = this.galleryState_.shown; i < this.galleryState_.content.files.length && i < max; i++) {
       this.galleryState_.shown++;
       const f = this.galleryState_.content.files[i];
@@ -601,34 +792,8 @@ class UI {
       const d = document.createElement('div');
       d.className = 'thumbdiv';
       f.elem = d;
-
       f.select = () => selectItem(i);
-      d.addEventListener('click', event => {
-        if (event.shiftKey || this.galleryState_.content.files.some(f => f.selected)) {
-          return f.select();
-        }
-        this.setUpPopup_(f);
-      });
-      d.addEventListener('contextmenu', event => {
-        event.preventDefault();
-        showContextMenu(event, f);
-      });
-      d.draggable = true;
-      d.addEventListener('dragstart', event => {
-        const move = event.shiftKey === false;
-        event.dataTransfer.setData('application/json', JSON.stringify({collection: f.collection, file: f.file, move: move}));
-        event.dataTransfer.effectAllowed = move ? 'move' : 'copy';
-        if (move) {
-          event.target.classList.add('dragging');
-        }
-        if (document.documentElement.scrollTop > 50) {
-          document.querySelector('#collections').classList.add('fixed');
-        }
-      });
-      d.addEventListener('dragend', event => {
-        event.target.classList.remove('dragging');
-        document.querySelector('#collections').classList.remove('fixed');
-      });
+
       d.appendChild(img);
       if (f.isVideo) {
         const div = document.createElement('div');
@@ -639,6 +804,13 @@ class UI {
         div.appendChild(dur);
         d.appendChild(div);
       }
+
+      d.draggable = true;
+      d.addEventListener('click', e => click(f, e));
+      d.addEventListener('dragstart', e => dragStart(f, e, img));
+      d.addEventListener('dragend', e => dragEnd(f, e));
+      d.addEventListener('contextmenu', e => contextMenu(f, e));
+
       g.appendChild(d);
     }
   }
@@ -787,6 +959,9 @@ class UI {
     }
     main.sendRPC('deleteCollection', collection)
     .then(() => {
+      if (this.galleryState_.collection === collection) {
+        this.switchView_({collection: 'gallery'});
+      }
       this.refresh_();
     })
     .catch(e => {
@@ -844,7 +1019,9 @@ class UI {
       item.textContent = params.items[i].text;
       item.addEventListener('click', e => {
         closeMenu();
-        params.items[i].onclick();
+        if (params.items[i].onclick) {
+          params.items[i].onclick();
+        }
       });
       menu.appendChild(item);
     }
@@ -1527,5 +1704,243 @@ class UI {
       }
       return [canvas.toDataURL(file.type), 0];
     }
+  }
+
+  async showProfile_() {
+    const {content, close} = this.commonPopup_({
+      title: 'Profile',
+    });
+    content.id = 'profile-content';
+
+    const form = document.createElement('div');
+    form.id = 'profile-form';
+
+    const emailLabel = document.createElement('label');
+    emailLabel.forHtml = 'profile-form-email';
+    emailLabel.textContent = 'Email:';
+    const email = document.createElement('input');
+    email.id = 'profile-form-email';
+    email.type = 'email';
+    email.value = this.accountEmail_;
+    form.appendChild(emailLabel);
+    form.appendChild(email);
+
+    const passLabel = document.createElement('label');
+    passLabel.forHtml = 'profile-form-password';
+    passLabel.textContent = 'Current password:';
+    const pass = document.createElement('input');
+    pass.id = 'profile-form-password';
+    pass.type = 'password';
+    form.appendChild(passLabel);
+    form.appendChild(pass);
+
+    const newPassLabel = document.createElement('label');
+    newPassLabel.forHtml = 'profile-form-new-password';
+    newPassLabel.textContent = 'New password:';
+    const newPass = document.createElement('input');
+    newPass.id = 'profile-form-new-password';
+    newPass.type = 'password';
+    newPass.autocomplete = 'new-password';
+    form.appendChild(newPassLabel);
+    form.appendChild(newPass);
+
+    const newPass2Label = document.createElement('label');
+    newPass2Label.forHtml = 'profile-form-new-password2';
+    newPass2Label.textContent = 'Retype password:';
+    const newPass2 = document.createElement('input');
+    newPass2.id = 'profile-form-new-password2';
+    newPass2.type = 'password';
+    newPass2.autocomplete = 'new-password';
+    form.appendChild(newPass2Label);
+    form.appendChild(newPass2);
+
+    const button = document.createElement('button');
+    button.id = 'profile-form-button';
+    button.textContent = 'Update';
+    button.addEventListener('click', () => {
+      if (pass.value === '') {
+        this.popupMessage('Error', 'Current password is required', 'error');
+        return;
+      }
+      if ((newPass.value !== '' || newPass2.value !== '') && newPass.value !== newPass2.value) {
+        this.popupMessage('Error', 'New password doesn\'t match', 'error');
+        return;
+      }
+      email.disabled = true;
+      pass.disabled = true;
+      newPass.disabled = true;
+      newPass2.disabled = true;
+      button.disabled = true;
+      button.textContent = 'Updating';
+      delButton.disabled = true;
+      main.sendRPC('updateProfile', email.value, pass.value, newPass.value)
+      .then(() => {
+        this.accountEmail_ = email.value;
+        this.loggedInAccount_.textContent = email.value;
+        this.popupMessage('Profile', 'Updated', 'info');
+        close();
+      })
+      .finally(() => {
+        email.disabled = false;
+        pass.disabled = false;
+        newPass.disabled = false;
+        newPass2.disabled = false;
+        button.disabled = false;
+        button.textContent = 'Update';
+        delButton.disabled = false;
+      });
+    });
+    form.appendChild(button);
+    content.appendChild(form);
+
+    const deleteMsg = document.createElement('div');
+    deleteMsg.innerHTML = '<hr><p>If you delete your account, all your data will be permanently deleted.</p>';
+    content.appendChild(deleteMsg);
+
+    const delButton = document.createElement('button');
+    delButton.id = 'profile-form-delete-button';
+    delButton.textContent = 'Delete my account';
+    delButton.addEventListener('click', () => {
+      if (pass.value === '') {
+        this.popupMessage('Error', 'Current password is required', 'error');
+        return;
+      }
+      if (!window.confirm('Are you sure you want to permanently delete your account?\nThe operation is not reversible.')) {
+        return;
+      }
+      email.disabled = true;
+      pass.disabled = true;
+      newPass.disabled = true;
+      newPass2.disabled = true;
+      button.disabled = true;
+      button.textContent = 'Updating';
+      delButton.disabled = true;
+      main.sendRPC('deleteAccount', pass.value)
+      .then(() => {
+        window.location.reload();
+      })
+      .finally(() => {
+        email.disabled = false;
+        pass.disabled = false;
+        newPass.disabled = false;
+        newPass2.disabled = false;
+        button.disabled = false;
+        button.textContent = 'Update';
+        delButton.disabled = false;
+      });
+    });
+    content.appendChild(delButton);
+  }
+
+  async showBackupPhrase_() {
+    const {content, close} = this.commonPopup_({
+      title: 'Key backup',
+    });
+    content.id = 'backup-phrase-content';
+    let keyBackupEnabled = await main.sendRPC('keyBackupEnabled');
+
+    const pwInput = document.createElement('div');
+    pwInput.id = 'key-backup-password-input';
+    const pw = document.createElement('input');
+    pw.type = 'password';
+    pw.id = 'key-backup-password';
+    pw.name = 'key-backup-password';
+    pw.autocomplete = 'new-password';
+    const pwLabel = document.createElement('label');
+    pwLabel.htmlFor = 'key-backup-password';
+    pwLabel.textContent = 'Enter you account password:';
+    pwInput.appendChild(pwLabel);
+    pwInput.appendChild(pw);
+    content.appendChild(pwInput);
+
+    const warning = document.createElement('div');
+    warning.id = 'backup-phrase-warning';
+    warning.className = 'warning';
+    warning.innerHTML = '<p>The backup phrase is your <b>unencrypted</b> secret key.</p><p>It is the most sensitive information in your account. It can be used to recover your account and your data if your secret key is not backed up on the server, or if you forget your password.</p><p>It can also be used to <b>TAKE OVER</b> your account.</p><p>It MUST be kept secret. Write it down on a piece of paper and store it in a safe.</p>';
+    content.appendChild(warning);
+
+    const phrase = document.createElement('div');
+    phrase.id = 'backup-phrase-value';
+    content.appendChild(phrase);
+
+    const button = document.createElement('button');
+    button.id = 'backup-phrase-show-button';
+    button.textContent = 'Show backup phrase';
+    content.appendChild(button);
+    button.addEventListener('click', () => {
+      if (phrase.textContent === '') {
+        button.disabled = true;
+        button.textContent = 'Checking password';
+        main.sendRPC('backupPhrase', pw.value).then(v => {
+          phrase.textContent = v;
+          button.textContent = 'Hide backup phrase';
+        })
+        .catch(err => {
+          button.textContent = 'Show backup phrase';
+          this.popupMessage('Key backup', err, 'error');
+        })
+        .finally(() => {
+          button.disabled = false;
+        });
+      } else {
+        phrase.textContent = '';
+        button.textContent = 'Show backup phrase';
+      }
+    });
+
+    const warning2 = document.createElement('div');
+    warning2.id = 'backup-phrase-warning2';
+    warning2.className = 'warning';
+    warning2.innerHTML = '<hr><p>Choose whether to keep an encrypted backup of your secret key on the server.<p><p>If you do NOT keep a backup, you will need to enter your backup phrase every time you login to your account.</p>';
+    content.appendChild(warning2);
+
+    const changeBackup = choice => {
+      inputYes.disabled = true;
+      inputNo.disabled = true;
+      main.sendRPC('changeKeyBackup', pw.value, choice)
+      .then(() => {
+        keyBackupEnabled = choice;
+        this.popupMessage('Key backup', choice ? 'Enabled' : 'Disabled', 'info');
+      })
+      .catch(err => {
+        inputYes.checked = keyBackupEnabled;
+        inputNo.checked = !keyBackupEnabled;
+        this.popupMessage('Key backup', err, 'error');
+      })
+      .finally(() => {
+        inputYes.disabled = false;
+        inputNo.disabled = false;
+      });
+    };
+    const divYes = document.createElement('div');
+    divYes.className = 'key-backup-option';
+    const inputYes = document.createElement('input');
+    inputYes.type = 'radio';
+    inputYes.id = 'choose-key-backup-yes';
+    inputYes.name = 'do-backup';
+    inputYes.checked = keyBackupEnabled;
+    inputYes.addEventListener('change', () => changeBackup(true));
+    const labelYes = document.createElement('label');
+    labelYes.htmlFor = 'choose-key-backup-yes';
+    labelYes.textContent = 'Keep a backup on the server (RECOMMENDED)';
+    divYes.appendChild(inputYes);
+    divYes.appendChild(labelYes);
+
+    const divNo = document.createElement('div');
+    divNo.className = 'key-backup-option';
+    const inputNo = document.createElement('input');
+    inputNo.type = 'radio';
+    inputNo.id = 'choose-key-backup-no';
+    inputNo.name = 'do-backup';
+    inputNo.checked = !keyBackupEnabled;
+    inputNo.addEventListener('change', () => changeBackup(false));
+    const labelNo = document.createElement('label');
+    labelNo.htmlFor = 'choose-key-backup-no';
+    labelNo.textContent = 'Do NOT keep a backup on the server';
+    divNo.appendChild(inputNo);
+    divNo.appendChild(labelNo);
+
+    content.appendChild(divYes);
+    content.appendChild(divNo);
   }
 }

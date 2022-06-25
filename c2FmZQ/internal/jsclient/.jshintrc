@@ -17,6 +17,7 @@
   "globals": {
     "base64Decode": true,
     "base64DecodeIntoArray": true,
+    "bip39": true,
     "ByteLengthQueuingStrategy": true,
     "c2FmZQClient": true,
     "CryptographyKey": true,

@@ -12,13 +12,16 @@ func TestPublicKeyBundle(t *testing.T) {
 	b := MakeKeyBundle(sk.PublicKey())
 	t.Logf("bundle: %s", b)
 
-	pk, err := DecodeKeyBundle(b)
+	pk, hasSK, err := DecodeKeyBundle(b)
 	if err != nil {
 		t.Fatalf("DecodeKeyBundle: %v", err)
 	}
 
 	if !reflect.DeepEqual(pk, sk.PublicKey()) {
 		t.Errorf("Public keys don't match. Want %v, got %v", sk.PublicKey(), pk)
+	}
+	if hasSK {
+		t.Error("hasSK = true, want false")
 	}
 }
 

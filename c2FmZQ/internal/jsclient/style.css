@@ -7,6 +7,9 @@ body {
   height: 100%;
   font-family: monospace;
 }
+body.waiting, body.waiting a:hover, body.waiting * {
+  cursor: wait !important;
+}
 h1 {
   overflow-wrap: break-word;
 }
@@ -42,6 +45,8 @@ a {
   background-color: yellow;
   font-size: 200%;
   cursor: pointer;
+  min-width: 25vw;
+  max-width: 75vw;
 }
 .info {
   animation: slideIn 1s;
@@ -53,6 +58,8 @@ a {
   background-color: white;
   font-size: 200%;
   cursor: pointer;
+  min-width: 25vw;
+  max-width: 75vw;
 }
 .collectionThumbdiv {
   margin: 5px;
@@ -82,6 +89,9 @@ a {
 .collectionThumbdiv img {
   object-fit: cover;
 }
+.collectionThumbdiv * {
+  pointer-events: none;
+}
 .thumbdiv {
   animation: fadeIn 1s;
   float: left;
@@ -94,6 +104,9 @@ a {
   align-items: start;
   justify-content: end;
   box-shadow: 3px 3px 5px black;
+}
+.thumbdiv * {
+  pointer-events: none;
 }
 .thumbdiv:hover {
   border-color: blue;
@@ -120,14 +133,11 @@ a {
   right: 0;
   top: 0;
 }
-#trash {
-  cursor: pointer;
+#trash-button {
 }
-#refresh {
-  cursor: pointer;
+#refresh-button {
 }
-#logout {
-  cursor: pointer;
+#loggedin-account {
 }
 #buttons {
   position: fixed;
@@ -135,6 +145,9 @@ a {
   right: 10px;
   z-index: 2;
   background-color: #eee;
+}
+#buttons button {
+  height: 2em;
 }
 #gallery {
   position: relative;
@@ -161,9 +174,20 @@ a {
   left: 50%;
   top: 40%;
   transform: translate(-50%, -50%);
+  padding: 0;
+}
+#login-form {
+  display: grid;
+  grid-auto-columns: 1fr 1fr;
+  grid-auto-rows: auto;
   padding: 10px;
-  border: 1px solid black;
   box-shadow: 5px 5px 5px black;
+  border: 1px solid black;
+  z-index: 1;
+  background-color: white;
+}
+#login-form * {
+  margin: 0.25em;
 }
 #collections {
   overflow-x: auto;
@@ -326,7 +350,7 @@ a {
   padding: 0.5em;
   display: grid;
   grid-template-columns: 1fr 2fr;
-  gap: 1em;
+  gap: 20px;
   align-items: start;
   overflow-y: scroll;
 }
@@ -350,5 +374,62 @@ a {
   margin-right: 0.5em;
 }
 #collection-properties-apply-button {
+  grid-column: 1 / 3;
+}
+#backup-phrase-content {
+  padding: 2em;
+  overflow-y: scroll;
+  max-width: 90vw;
+  max-height: 90vh;
+}
+#backup-phrase-value {
+  border: 2px solid darkgray;
+  margin: 0.5em;
+  padding: 0.5em;
+  color: gray;
+  font-style: italic;
+  background-color: yellow;
+}
+#backup-phrase-content .warning {
+  font-size: 150%;
+  color: red;
+}
+#key-backup-password-input {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+.tabs {
+  margin: 0;
+  padding: 0;
+  display: inline-flex;
+  width: 100%;
+}
+.tab {
+  border: 1px solid black;
+  border-bottom: none;
+  border-radius: 10px 10px 0 0;
+  background-color: lightgray;
+  padding: 0.5em;
+  margin: 0;
+  cursor: pointer;
+}
+.tab.select {
+  background-color: white;
+  z-index: 5;
+  transform: translate(0, 2px);
+  font-weight: bold;
+}
+#profile-content {
+  margin: 0.5em;
+}
+#profile-form {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+}
+#profile-form > * {
+  margin: 0.5em;
+}
+#profile-form-button {
   grid-column: 1 / 3;
 }

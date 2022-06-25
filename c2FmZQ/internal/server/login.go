@@ -43,7 +43,7 @@ const (
 //  - stingle.Response(ok)
 func (s *Server) handleCreateAccount(req *http.Request) *stingle.Response {
 	defer time.Sleep(time.Duration(time.Now().UnixNano()%200) * time.Millisecond)
-	pk, err := stingle.DecodeKeyBundle(req.PostFormValue("keyBundle"))
+	pk, _, err := stingle.DecodeKeyBundle(req.PostFormValue("keyBundle"))
 	if err != nil {
 		return stingle.ResponseNOK()
 	}
@@ -268,12 +268,17 @@ func (s *Server) handleChangePass(user database.User, req *http.Request) *stingl
 		return stingle.ResponseNOK()
 	}
 	user.TokenKey = etk
-	pk, err := stingle.DecodeKeyBundle(user.KeyBundle)
+	pk, hasSK, err := stingle.DecodeKeyBundle(user.KeyBundle)
 	if err != nil {
 		log.Errorf("DecodeKeyBundle: %v", err)
 		return stingle.ResponseNOK()
 	}
 	user.PublicKey = pk
+	if hasSK {
+		user.IsBackup = "1"
+	} else {
+		user.IsBackup = "0"
+	}
 
 	if err := s.db.UpdateUser(user); err != nil {
 		log.Errorf("UpdateUser: %v", err)
@@ -397,12 +402,17 @@ func (s *Server) handleRecoverAccount(req *http.Request) *stingle.Response {
 		return stingle.ResponseNOK()
 	}
 	user.TokenKey = etk
-	pk, err := stingle.DecodeKeyBundle(user.KeyBundle)
+	pk, hasSK, err := stingle.DecodeKeyBundle(user.KeyBundle)
 	if err != nil {
 		log.Errorf("DecodeKeyBundle: %v", err)
 		return stingle.ResponseNOK()
 	}
 	user.PublicKey = pk
+	if hasSK {
+		user.IsBackup = "1"
+	} else {
+		user.IsBackup = "0"
+	}
 
 	if err := s.db.UpdateUser(user); err != nil {
 		log.Errorf("UpdateUser: %v", err)
@@ -502,12 +512,17 @@ func (s *Server) handleReuploadKeys(user database.User, req *http.Request) *stin
 		return stingle.ResponseNOK()
 	}
 	user.KeyBundle = params["keyBundle"]
-	pk, err := stingle.DecodeKeyBundle(user.KeyBundle)
+	pk, hasSK, err := stingle.DecodeKeyBundle(user.KeyBundle)
 	if err != nil {
 		log.Errorf("DecodeKeyBundle: %v", err)
 		return stingle.ResponseNOK()
 	}
 	user.PublicKey = pk
+	if hasSK {
+		user.IsBackup = "1"
+	} else {
+		user.IsBackup = "0"
+	}
 
 	if err := s.db.UpdateUser(user); err != nil {
 		log.Errorf("UpdateUser: %v", err)

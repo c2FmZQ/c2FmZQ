@@ -80,8 +80,36 @@ class c2FmZQClient {
 
   /*
    */
-  async isLoggedIn() {
-    return Promise.resolve(typeof this.vars_.token === "string" && this.vars_.token.length > 0 ? this.vars_.email : '');
+  async isLoggedIn(clientId) {
+    const loggedIn = typeof this.vars_.token === "string" && this.vars_.token.length > 0 ? this.vars_.email : '';
+    const needKey = this.vars_.sk === undefined;
+    return Promise.resolve({account: loggedIn, needKey: needKey});
+  }
+
+  async passwordForLogin_(salt, password) {
+    return sodium.crypto_pwhash(64, password, salt,
+      sodium.CRYPTO_PWHASH_OPSLIMIT_MODERATE,
+      sodium.CRYPTO_PWHASH_MEMLIMIT_MODERATE,
+      sodium.CRYPTO_PWHASH_ALG_ARGON2ID13)
+      .then(p => p.toString('hex').toUpperCase());
+  }
+
+  async passwordForEncryption_(salt, password) {
+    return sodium.crypto_pwhash(32, password, salt,
+      sodium.CRYPTO_PWHASH_OPSLIMIT_MODERATE,
+      sodium.CRYPTO_PWHASH_MEMLIMIT_MODERATE,
+      sodium.CRYPTO_PWHASH_ALG_ARGON2ID13);
+  }
+
+  async passwordForValidation_(salt, password) {
+    return sodium.sodium_hex2bin(salt)
+      .then(salt => {
+        return sodium.crypto_pwhash(128, password, salt,
+          sodium.CRYPTO_PWHASH_OPSLIMIT_MODERATE,
+          sodium.CRYPTO_PWHASH_MEMLIMIT_MODERATE,
+          sodium.CRYPTO_PWHASH_ALG_ARGON2ID13);
+      })
+      .then(p => p.toString('hex').toUpperCase());
   }
 
   /*
@@ -96,12 +124,9 @@ class c2FmZQClient {
     return this.sendRequest_(clientId, 'v2/login/preLogin', {'email': email})
       .then(async resp => {
         console.log('SW hashing password');
+        this.vars_.loginSalt = resp.parts.salt;
         const salt = await sodium.sodium_hex2bin(resp.parts.salt);
-        let hashed = await sodium.crypto_pwhash(64, password, salt,
-          sodium.CRYPTO_PWHASH_OPSLIMIT_MODERATE,
-          sodium.CRYPTO_PWHASH_MEMLIMIT_MODERATE,
-          sodium.CRYPTO_PWHASH_ALG_ARGON2ID13);
-        hashed = hashed.toString('hex').toUpperCase();
+        const hashed = await this.passwordForLogin_(salt, password);
         return this.sendRequest_(clientId, 'v2/login/login', {'email': email, 'password': hashed});
       })
       .then(async resp => {
@@ -113,13 +138,246 @@ class c2FmZQClient {
         console.log('SW decrypting secret key');
         const keys = await this.decodeKeyBundle_(password, resp.parts.keyBundle);
         this.vars_.pk = keys.pk;
-        this.vars_.sk = keys.sk;
+        if (keys.sk !== undefined) {
+          this.vars_.sk = keys.sk;
+          this.vars_.keyIsBackedUp = true;
+        } else {
+          this.vars_.keyIsBackedUp = false;
+        }
         console.log('SW logged in');
         this.vars_.email = email;
         this.vars_.userId = resp.parts.userId;
+
+        console.log('SW save password hash');
+        this.vars_.passwordSalt = (await sodium.randombytes_buf(16)).toString('hex');
+        this.vars_.password = await this.passwordForValidation_(this.vars_.passwordSalt, password);
+
         await this.saveVars_();
-        return email;
+        return {account: email, needKey: this.vars_.sk === undefined};
       });
+  }
+
+  async checkPassword_(password) {
+    const hash = await this.passwordForValidation_(this.vars_.passwordSalt, password);
+    return hash === this.vars_.password;
+  }
+
+  async keyBackupEnabled(clientId) {
+    return this.vars_.keyIsBackedUp === true;
+  }
+
+  async changeKeyBackup(clientId, password, doBackup) {
+    if (!await this.checkPassword_(password)) {
+      throw new Error('incorrect password');
+    }
+    console.log('SW reuploading keys');
+    const params = {
+      keyBundle: await this.makeKeyBundle_(password, await sodiumPublicKey(this.vars_.pk), doBackup ? await sodiumSecretKey(this.vars_.sk) : undefined),
+    };
+    return this.sendRequest_(clientId, 'v2/keys/reuploadKeys', {
+      token: this.vars_.token,
+      params: await this.makeParams_(params),
+    }).then(resp => {
+      if (resp.status !== 'ok') {
+        throw resp.status;
+      }
+      this.vars_.keyIsBackedUp = doBackup;
+      return this.saveVars_()
+        .then(() => resp.status);
+    });
+  }
+
+  async restoreSecretKey(clientId, backupPhrase) {
+    return sodium.sodium_hex2bin(bip39.mnemonicToEntropy(backupPhrase))
+      .then(sk => {
+        return this.checkKey_(clientId, this.vars_.email, this.vars_.pk, sk)
+          .then(res => {
+            if (res !== true) {
+              throw new Error('incorrect backup phrase');
+            }
+            this.vars_.sk = sk;
+            return this.saveVars_();
+          });
+      });
+  }
+
+  async checkKey_(clientId, email, pk, sk) {
+    return this.sendRequest_(clientId, 'v2/login/checkKey', {'email': email})
+      .then(async resp => {
+        if (resp.status !== 'ok') {
+          throw resp.status;
+        }
+        this.vars_.serverPK = resp.parts.serverPK;
+        const challenge = self.base64Decode(resp.parts.challenge);
+        return sodium.crypto_box_seal_open(challenge, await sodiumPublicKey(pk), await sodiumSecretKey(sk));
+      })
+      .then(r => r.toString().startsWith('validkey_'));
+  }
+
+  async createAccount(clientId, email, password, enableBackup) {
+    console.log('SW createAccount', email, enableBackup);
+    const kp = await sodium.crypto_box_keypair();
+    const sk = await sodium.crypto_box_secretkey(kp);
+    const pk = await sodium.crypto_box_publickey(kp);
+    console.log('SW encrypting secret key');
+    const bundle = await this.makeKeyBundle_(password, pk, enableBackup ? sk : undefined);
+    const salt = await sodium.randombytes_buf(16);
+    console.log('SW hashing password');
+    const hashed = await this.passwordForLogin_(salt, password);
+    const form = {
+      email: email,
+      password: hashed,
+      salt: salt.toString('hex').toUpperCase(),
+      keyBundle: bundle,
+      isBackup: enableBackup ? '1' : '0',
+    };
+    console.log('SW creating account');
+    return this.sendRequest_(clientId, 'v2/register/createAccount', form)
+      .then(resp => {
+        if (resp.status !== 'ok') {
+          throw resp.status;
+        }
+        if (!enableBackup) {
+          self.sendMessage(clientId, {type: 'info', msg: 'Your secret key is NOT backed up. You will need a backup phrase next time you login.'});
+        }
+        this.vars_.pk = pk.getBuffer();
+        this.vars_.sk = sk.getBuffer();
+        return this.saveVars_();
+      })
+      .then(() => this.login(clientId, email, password))
+      .then(v => {
+        if (!enableBackup) {
+          self.sendMessage(clientId, {type: 'info', msg: 'Your secret key is NOT backed up. You will need a backup phrase next time you login.'});
+        }
+        return v;
+      });
+  }
+
+  async recoverAccount(clientId, email, password, enableBackup, backupPhrase) {
+    console.log('SW recoverAccount', enableBackup);
+    const sk = await sodiumSecretKey(await sodium.sodium_hex2bin(bip39.mnemonicToEntropy(backupPhrase)));
+    const pk = await sodium.crypto_box_publickey_from_secretkey(sk);
+    if (await this.checkKey_(clientId, email, pk, sk) !== true) {
+      throw new Error('incorrect backup phrase');
+    }
+    this.vars_.pk = pk.getBuffer();
+    this.vars_.sk = sk.getBuffer();
+    await this.saveVars_();
+    console.log('SW encrypting secret key');
+    const bundle = await this.makeKeyBundle_(password, pk, enableBackup ? sk : undefined);
+    const salt = await sodium.randombytes_buf(16);
+    console.log('SW hashing password');
+    const hashed = await this.passwordForLogin_(salt, password);
+    const params = {
+      newPassword: hashed,
+      newSalt: salt.toString('hex').toUpperCase(),
+      keyBundle: bundle,
+      isBackup: enableBackup ? '1' : '0',
+    };
+    const form = {
+      email: email,
+      params: await this.makeParams_(params),
+    };
+    console.log('SW recovering account');
+    return this.sendRequest_(clientId, 'v2/login/recoverAccount', form)
+      .then(resp => {
+        if (resp.status !== 'ok') {
+          throw resp.status;
+        }
+        return this.login(clientId, email, password);
+      })
+      .then(v => {
+        if (!enableBackup) {
+          self.sendMessage(clientId, {type: 'info', msg: 'Your secret key is NOT backed up. You will need a backup phrase next time you login.'});
+        }
+        return v;
+      });
+  }
+
+  async updateProfile(clientId, email, password, newPassword) {
+    console.log('SW updateProfile');
+    if (!await this.checkPassword_(password)) {
+      throw new Error('incorrect password');
+    }
+    if (this.vars_.email !== email) {
+      const resp = await this.sendRequest_(clientId, 'v2/login/changeEmail', {
+        token: this.vars_.token,
+        params: await this.makeParams_({newEmail: email}),
+      });
+      if (resp.status !== 'ok') {
+        throw resp.status;
+      }
+      this.vars_.email = email;
+    }
+    if (newPassword !== '') {
+      const salt = await sodium.randombytes_buf(16);
+      const pk = await sodiumPublicKey(this.vars_.pk);
+      const sk = this.vars_.keyIsBackedUp ? await sodiumSecretKey(this.vars_.sk) : undefined;
+      const bundle = await this.makeKeyBundle_(newPassword, pk, sk);
+      const hashed = await this.passwordForLogin_(salt, newPassword);
+      const params = {
+        keyBundle: bundle,
+        newPassword: hashed,
+        newSalt: salt.toString('hex').toUpperCase(),
+      };
+      const resp = await this.sendRequest_(clientId, 'v2/login/changePass', {
+        token: this.vars_.token,
+        params: await this.makeParams_(params),
+      });
+      if (resp.status !== 'ok') {
+        throw resp.status;
+      }
+      this.vars_.loginSalt = salt.toString('hex').toUpperCase();
+      this.vars_.token = resp.parts.token;
+      const salt2 = (await sodium.randombytes_buf(16)).toString('hex');
+      this.vars_.passwordSalt = salt2;
+      this.vars_.password = await this.passwordForValidation_(salt2, newPassword);
+    }
+    return this.saveVars_();
+  }
+
+  async deleteAccount(clientId, password) {
+    console.log('SW DELETE ACCOUNT!');
+    const salt = await sodium.sodium_hex2bin(this.vars_.loginSalt);
+    const params = {
+      password: await this.passwordForLogin_(salt, password),
+    };
+    const resp = await this.sendRequest_(clientId, 'v2/login/deleteUser', {
+      token: this.vars_.token,
+      params: await this.makeParams_(params),
+    });
+    if (resp.status !== 'ok') {
+      throw resp.status;
+    }
+    return this.logout(clientId);
+  }
+
+  async makeKeyBundle_(password, pk, sk) {
+    const out = [0x53, 0x50, 0x4B, 0x1]; // 'SPK', 1
+    out.push(sk === undefined ? 0x2 : 0x0);
+    out.push(...pk.getBuffer());
+
+    if (sk !== undefined) {
+      const salt = await sodium.randombytes_buf(16);
+      const key = await this.passwordForEncryption_(salt, password);
+      const nonce = await sodium.randombytes_buf(24);
+      const esk = await sodium.crypto_secretbox(sk.getBuffer(), nonce, key);
+      out.push(...esk);
+      out.push(...salt);
+      out.push(...nonce);
+    }
+    return self.base64StdEncode(out);
+  }
+
+  async backupPhrase(clientId, password) {
+    return this.checkPassword_(password)
+    .then(ok => {
+      if (!ok) {
+        throw new Error('incorrect password');
+      }
+      return sodiumSecretKey(this.vars_.sk);
+    })
+    .then(sk => bip39.entropyToMnemonic(sk.getBuffer()));
   }
 
   /*
@@ -690,7 +948,7 @@ class c2FmZQClient {
     for (let i = 0; i < binary.length; i++) {
       bytes.push(binary.charCodeAt(i));
     }
-    if (bytes.length !== 125) {
+    if (bytes.length !== 37 && bytes.length !== 125) {
       throw new Error('bundle is too short');
     }
     // Check header.
@@ -702,20 +960,21 @@ class c2FmZQClient {
       throw new Error('invalid bundle version');
     }
     // Check type
-    if (bytes[4] !== 0) {
-      throw new Error('secret key not in bundle');
+    if (bytes[4] !== 0 && bytes[4] !== 2) {
+      throw new Error('unexpected bundle type');
     }
     const pk = new Uint8Array(bytes.slice(5, 37));
+
+    if (bytes[4] !== 0) {
+      return {pk}; // secret key not in bundle.
+    }
     const esk = new Uint8Array(bytes.slice(37, -40));
     const salt = new Uint8Array(bytes.slice(-40, -24));
     const nonce = new Uint8Array(bytes.slice(-24));
 
-    const key = await sodium.crypto_pwhash(32, password, salt,
-              sodium.CRYPTO_PWHASH_OPSLIMIT_MODERATE,
-              sodium.CRYPTO_PWHASH_MEMLIMIT_MODERATE,
-              sodium.CRYPTO_PWHASH_ALG_ARGON2ID13);
+    const key = await this.passwordForEncryption_(salt, password);
     const sk = await sodium.crypto_secretbox_open(esk, nonce, key);
-    return {'pk': pk, 'sk': sk};
+    return {pk, sk};
   }
 
   /*
@@ -1060,6 +1319,7 @@ class c2FmZQClient {
         }
         const allowedMethods = [
           'isLoggedIn',
+          'keyBackupEnabled',
           'logout',
           'getContact',
           'getContacts',
@@ -1083,7 +1343,11 @@ class c2FmZQClient {
         if (allowedMethods.includes(func)) {
           this[func](null, ...args)
           .then(result => {
-            resolve(new Response(JSON.stringify({'resolve': result}), {'status': 200, 'statusText': 'OK'}));
+            let headers = {};
+            if (func === 'logout') {
+              headers['Clear-Site-Data'] = '*';
+            }
+            resolve(new Response(JSON.stringify({'resolve': result}), {'status': 200, 'statusText': 'OK', 'headers': headers}));
           })
           .catch(error => {
             console.log(`SW ${func} failed`, error);

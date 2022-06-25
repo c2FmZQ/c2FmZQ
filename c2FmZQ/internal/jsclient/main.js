@@ -105,7 +105,9 @@ class Main {
           }
           break;
         case 'rpc-result':
-          console.log('Received rpc-result', event.data);
+          if (event.data.func !== 'backupPhrase') {
+            console.log('Received rpc-result', event.data);
+          }
           if (event.data.id in this.msgWait_) {
             if (event.data.reject !== undefined) {
               this.msgWait_[event.data.id].reject(event.data.reject);
@@ -189,8 +191,29 @@ class Main {
   }
 
   async sendRPC(f, ...args) {
-    if (['login','upload'].includes(f)) return this.sendMessageRPC_(f, ...args);
-    return this.sendWebRPC_(f, ...args);
+    const sensitiveMethods = [
+      'login',
+      'createAccount',
+      'recoverAccount',
+      'upload',
+      'backupPhrase',
+      'changeKeyBackup',
+      'restoreSecretKey',
+      'updateProfile',
+      'deleteAccount',
+    ];
+    const body = document.querySelector('body');
+    body.classList.add('waiting');
+    let p;
+    if (sensitiveMethods.includes(f)) {
+      p = this.sendMessageRPC_(f, ...args);
+    } else {
+      p = this.sendWebRPC_(f, ...args);
+    }
+    return p.finally(v => {
+      body.classList.remove('waiting');
+      return v;
+    });
   }
 
   async sendMessageRPC_(f, ...args) {
