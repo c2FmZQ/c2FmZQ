@@ -1299,6 +1299,22 @@ class c2FmZQClient {
     });
   }
 
+  async setCachePreference(clientId, v) {
+    console.log('SW setCachePreference', v);
+    if (!['no-store','private','encrypted'].includes(v)) {
+      throw new Error('invalid cache option');
+    }
+    this.vars_.cachePref = v;
+    if (v !== 'encrypted') {
+      await this.deletePrefix_('cache/');
+    }
+    return this.saveVars_();
+  }
+
+  async cachePreference() {
+    return this.vars_.cachePref || 'encrypted';
+  }
+
   async ping() {
     return true;
   }
@@ -1338,6 +1354,8 @@ class c2FmZQClient {
           'leaveCollection',
           'createCollection',
           'deleteCollection',
+          'setCachePreference',
+          'cachePreference',
           'ping',
         ];
         if (allowedMethods.includes(func)) {
@@ -1408,6 +1426,29 @@ class c2FmZQClient {
       const symKey = await sodiumKey(this.decrypt_(file.headers[f.isThumb?1:0].encKey));
       const chunkSize = file.headers[f.isThumb?1:0].chunkSize;
 
+      const cachePref = await this.cachePreference();
+      const useCache = cachePref === 'encrypted' && reqOffset === 0 && f.isThumb;
+      if (useCache) {
+        const cached = await store.get(`cache/${f.file}`);
+        if (cached && Array.isArray(cached) && cached.length > 0) {
+          let h = {
+            'accept-ranges': 'bytes',
+            'cache-control': 'no-store, immutable',
+          };
+          if (haveRange) {
+            h['content-range'] = `bytes ${reqOffset}-${fileSize-1}/${fileSize}`;
+          } else {
+            h['content-length'] = fileSize;
+          }
+          resolve(new Response(new Blob([new Uint8Array(cached)]), {
+            'status': haveRange ? 206 : 200,
+            'statusText': haveRange ? 'Partial Content' : 'OK',
+            'headers': h,
+          }));
+          return;
+        }
+      }
+
       this.getContentUrl_(f)
       .then(url => {
         return fetch(url, {
@@ -1424,11 +1465,20 @@ class c2FmZQClient {
       .then(resp => resp.body)
       .then(rs => new ReadableStream(new Decrypter(rs.getReader(), symKey, chunkSize, chunkNum, chunkOffset), strategy))
       .then(rs => {
+        if (useCache) {
+          const [rs1, rs2] = rs.tee();
+          rs = rs1;
+          self.stream2blob(rs2)
+            .then(body => body.arrayBuffer())
+            .then(data => store.set(`cache/${f.file}`, Array.from(new Uint8Array(data))));
+        }
         let h = {
           'accept-ranges': 'bytes',
-          //'cache-control': 'no-store',
-          'cache-control': 'private, max-age=3600',
+          'cache-control': 'no-store, immutable',
         };
+        if (cachePref === 'private') {
+          h['cache-control'] = 'private, max-age=3600';
+        }
         if (haveRange) {
           h['content-range'] = `bytes ${reqOffset}-${fileSize-1}/${fileSize}`;
         } else {

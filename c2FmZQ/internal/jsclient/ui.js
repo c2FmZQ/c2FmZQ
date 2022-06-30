@@ -276,6 +276,10 @@ class UI {
           onclick: this.showBackupPhrase_.bind(this),
         },
         {
+          text: 'Preferences',
+          onclick: this.showPreferences_.bind(this),
+        },
+        {
           text: 'Logout',
           onclick: this.logout_.bind(this),
         },
@@ -1942,5 +1946,72 @@ class UI {
 
     content.appendChild(divYes);
     content.appendChild(divNo);
+  }
+
+  async showPreferences_() {
+    const {content, close} = this.commonPopup_({
+      title: 'Preferences',
+    });
+    content.id = 'preferences-content';
+
+    const text = document.createElement('div');
+    text.id = 'preferences-cache-text';
+    text.innerHTML = '<h1>Choose your cache preference:</h1>';
+    content.appendChild(text);
+
+    const current = await main.sendRPC('cachePreference');
+    const choices = [
+      {
+        value: 'encrypted',
+        label: 'Store thumbnails in a local encrypted database. Thumbnails are stored securely on local system, along with the App\'s metadata. The other files, e.g. photos and videos, are not cached. (DEFAULT)',
+      },
+      {
+        value: 'no-store',
+        label: 'Disable caching. All files, including thumbnails, are fetched and decrypted each time they are accessed. This is the slowest option.',
+      },
+      {
+        value: 'private',
+        label: 'Use the default browser cache. Decrypted files are stored in the browser\'s cache. This is the fastest option, but also the most likely the leak information.',
+      },
+    ];
+
+    const changeCachePref = choice => {
+      choices.forEach(c => {
+        c.disabled = true;
+      });
+      main.sendRPC('setCachePreference', choice)
+      .then(() => {
+        this.popupMessage('Cache preference', 'saved', 'info');
+      })
+      .catch(err => {
+        choices.forEach(c => {
+          c.input.checked = current === c.value;
+        });
+        this.popupMessage('Cache preference', err, 'error');
+      })
+      .finally(() => {
+        choices.forEach(c => {
+          c.disabled = false;
+        });
+      });
+    };
+
+    const opts = document.createElement('div');
+    opts.id = 'preferences-cache-choices';
+    choices.forEach(choice => {
+      const input = document.createElement('input');
+      input.type = 'radio';
+      input.id = `preferences-cache-${choice.value}`;
+      input.name = 'preferences-cache-option';
+      input.checked = current === choice.value;
+      input.addEventListener('change', () => changeCachePref(choice.value));
+      choice.input = input;
+      const label = document.createElement('label');
+      label.htmlFor = `preferences-cache-${choice.value}`;
+      label.innerHTML = choice.label;
+      opts.appendChild(input);
+      opts.appendChild(label);
+    });
+    content.appendChild(opts);
   }
 }

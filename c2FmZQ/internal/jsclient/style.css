@@ -433,3 +433,13 @@ a {
 #profile-form-button {
   grid-column: 1 / 3;
 }
+#preferences-content {
+  margin: 2em;
+  overflow-y: scroll;
+}
+#preferences-cache-choices {
+  display: grid;
+  grid-template-columns: 1fr 9fr;
+  align-items: start;
+  row-gap: 0.5em;
+}
