@@ -1963,7 +1963,7 @@ class UI {
     const choices = [
       {
         value: 'encrypted',
-        label: 'Store thumbnails in a local encrypted database. Thumbnails are stored securely on local system, along with the App\'s metadata. The other files, e.g. photos and videos, are not cached. (DEFAULT)',
+        label: 'Store thumbnails in a local encrypted database. Thumbnails are stored securely on the local system, along with the App\'s metadata. The other files, e.g. photos and videos, are not cached. This option might lead to quota issues. The cache is cleared on logout or when another option is selected. (DEFAULT)',
       },
       {
         value: 'no-store',
@@ -1977,7 +1977,7 @@ class UI {
 
     const changeCachePref = choice => {
       choices.forEach(c => {
-        c.disabled = true;
+        c.input.disabled = true;
       });
       main.sendRPC('setCachePreference', choice)
       .then(() => {
@@ -1991,7 +1991,7 @@ class UI {
       })
       .finally(() => {
         choices.forEach(c => {
-          c.disabled = false;
+          c.input.disabled = false;
         });
       });
     };

@@ -29,19 +29,14 @@ const MANIFEST = [
   'clear.png',
   'index.html',
   'main.js',
-  'secure-webstore.js',
-  'secure-webstore.js.map',
-  'sodium-plus.min.js',
   'store.js',
   'style.css',
   'ui.js',
   'version.js',
+  'thirdparty/libs.js',
 ];
 
-const window = self;
-self.importScripts('sodium-plus.min.js');
-self.importScripts('secure-webstore.js');
-self.importScripts('bip39.js');
+self.importScripts('thirdparty/libs.js');
 self.importScripts('store.js');
 self.importScripts('c2fmzq-client.js');
 
