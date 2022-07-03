@@ -701,6 +701,12 @@ class UI {
         text: 'Open',
         onclick: () => this.setUpPopup_(f),
       });
+      if (f.isImage && (this.galleryState_.isOwner || this.galleryState_.canAdd)) {
+        params.items.push({
+          text: 'Edit',
+          onclick: () => this.showEdit_(f),
+        });
+      }
       params.items.push({
         text: f.selected ? 'Unselect' : 'Select',
         onclick: f.select,
@@ -1079,7 +1085,7 @@ class UI {
       }
     };
     const handleClickOutside = e => {
-      if (!e.composedPath().includes(popup)) {
+      if (params.disableClickOutsideClose !== true && !e.composedPath().includes(popup)) {
         e.stopPropagation();
         closePopup();
       }
@@ -1131,6 +1137,54 @@ class UI {
       video.controls = 'controls';
       content.appendChild(video);
     }
+  }
+
+  showEdit_(f) {
+    if (!f.isImage) {
+      return;
+    }
+    const {content} = this.commonPopup_({
+      title: 'Edit ' +f.fileName,
+      className: 'popup photo-editor-popup',
+      disableClickOutsideClose: true,
+      onclose: () => editor.terminate(),
+    });
+
+    const editor = new FilerobotImageEditor(content, {
+      source: f.url,
+      onSave: (img, state) => {
+        console.log('saving', img.fullName);
+        const binary = atob(img.imageBase64.split(',')[1]);
+        const array = [];
+        for (let i = 0; i < binary.length; i++) {
+          array.push(binary.charCodeAt(i));
+        }
+        const blob = new Blob([new Uint8Array(array)], { type: img.mimeType });
+        this.makeThumbnail_(blob)
+        .then(([data, duration]) => {
+          const up = [{
+            file: blob,
+            thumbnail: data,
+            duration: duration,
+            name: img.fullName,
+            dateCreated: f.dateCreated,
+            dateModified: Date.now(),
+          }];
+          return main.sendRPC('upload', f.collection, up);
+        })
+        .then(() => {
+          this.refresh_();
+        })
+        .catch(e => {
+          this.showError_(e);
+        });
+      },
+      tabsIds: ['Adjust', 'Annotate', 'Filters', 'Finetune', 'Resize'],
+      defaultTabId: 'Adjust',
+      defaultToolId: 'Crop',
+      useBackendTranslations: false,
+    });
+    editor.render();
   }
 
   async collectionProperties_(c) {

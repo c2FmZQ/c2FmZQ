@@ -232,10 +232,7 @@ Currently implemented:
   * Sharing
 * Browsing albums with photos and videos
 * Uploading files (note: files currently need to fit in memory)
-
-Still to come:
-
-* Photo editing
+* Photo editing, using [Filerobot Image Editor](https://scaleflex.github.io/filerobot-image-editor/)
 
 ### <a name="totp"></a>One-time passwords (OTP)
 

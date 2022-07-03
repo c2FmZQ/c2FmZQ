@@ -68,3 +68,13 @@ https://github.com/paragonie/sodium-plus
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
+
+=====
+
+/*
+ * filerobot-image-editor v4.1.1
+ * https://github.com/scaleflex/filerobot-image-editor
+ * Copyright (c) 2019 Scaleflex
+ * Released under the MIT license
+ * Date: 2022-03-29T09:12:48.283Z
+ */

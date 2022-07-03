@@ -443,3 +443,15 @@ a {
   align-items: start;
   row-gap: 0.5em;
 }
+.photo-editor-popup {
+  width: 90vw;
+  height: 90vh;
+  display: flex;
+  flex-direction: column;
+  align-content: stretch;
+}
+.photo-editor-popup .popup-content {
+  width: 100%;
+  height: 100%;
+  overflow-y: hidden;
+}

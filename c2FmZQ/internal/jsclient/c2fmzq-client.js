@@ -1568,7 +1568,7 @@ class c2FmZQClient {
       dataSize: file.file.size,
       symmetricKey: self.crypto.getRandomValues(new Uint8Array(32)),
       fileType: fileType,
-      fileName: file.file.name,
+      fileName: file.name || file.file.name,
       duration: Math.floor(file.duration),
     }, {
       version: 1,
@@ -1576,7 +1576,7 @@ class c2FmZQClient {
       dataSize: tn.length,
       symmetricKey: self.crypto.getRandomValues(new Uint8Array(32)),
       fileType: fileType,
-      fileName: file.file.name,
+      fileName: file.name || file.file.name,
       duration: Math.floor(file.duration),
     }];
 
@@ -1696,8 +1696,8 @@ class UploadStream {
       headers: this.hdrBase64_,
       set: this.set_,
       albumId: this.albumId_,
-      dateCreated: ''+this.file_.file.lastModified,
-      dateModified: ''+this.file_.file.lastModified,
+      dateCreated: '' + (this.file_.dateCreated || this.file_.file.lastModified),
+      dateModified: '' + (this.file_.dateModified || this.file_.file.lastModified),
       version: '1',
       token: this.token_,
     };

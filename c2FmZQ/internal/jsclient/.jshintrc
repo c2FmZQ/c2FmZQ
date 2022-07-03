@@ -22,6 +22,7 @@
     "c2FmZQClient": true,
     "CryptographyKey": true,
     "DEVEL": true,
+    "FilerobotImageEditor": true,
     "main": true,
     "ReadableStream": true,
     "SecureStore": true,
