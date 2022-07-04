@@ -11,3 +11,4 @@ self.X25519PublicKey = X25519PublicKey;
 self.X25519SecretKey = X25519SecretKey;
 self.bip39 = require('bip39');
 self.SecureStore = require('secure-webstore');
+self.base64 = require('base64-js');

@@ -88,15 +88,15 @@ function fixme() {
   }, 5000);
 }
 
-function Uint8ArrayFromString(s) {
+function bytesFromString(s) {
   return new TextEncoder('utf-8').encode(s);
 }
 
-function Uint8ArrayToString(a) {
+function bytesToString(a) {
   return new TextDecoder('utf-8').decode(a);
 }
 
-function Uint8ArrayFromBin(bin) {
+function bytesFromBinary(bin) {
   let array = [];
   for (let i = 0; i < bin.length; i++) {
     array.push(bin.charCodeAt(i));
@@ -113,35 +113,27 @@ function bigEndian(n, size) {
   return new Uint8Array(a);
 }
 
-function base64RawUrlEncode(s) {
-  if (s instanceof Uint8Array || Array.isArray(s)) {
-    s = String.fromCharCode(...s);
-  }
-  return btoa(s).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
+function base64RawUrlEncode(v) {
+  return base64StdEncode(v).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
 }
 
-function base64StdEncode(s) {
-  if (s instanceof Uint8Array || Array.isArray(s)) {
-    s = String.fromCharCode(...s);
+function base64StdEncode(v) {
+  if (Array.isArray(v)) {
+    v = new Uint8Array(v);
   }
-  return btoa(s);
+  return base64.fromByteArray(v);
 }
 
-function base64Decode(v) {
-  let s = v.replaceAll('-', '+').replaceAll('_', '/');
-  while (s.length % 4 !== 0) {
-    s += '=';
-  }
-  try {
-    return atob(s);
-  } catch (error) {
-    console.error('SW base64Decode invalid input', v, error);
-    throw error;
-  }
+function base64DecodeToBinary(s) {
+  return String.fromCharCode(...base64DecodeToBytes(s));
 }
 
-function base64DecodeIntoArray(v) {
-  return Uint8ArrayFromBin(base64Decode(v));
+function base64DecodeToBytes(v) {
+  v = v.replaceAll('-', '+').replaceAll('_', '/');
+  while (v.length % 4 !== 0) {
+    v += '=';
+  }
+  return base64.toByteArray(v);
 }
 
 async function stream2blob(rs) {
@@ -180,7 +172,7 @@ async function sodiumKey(k, type) {
     }
   }
   if (typeof k === 'string' && k.length !== 32) {
-    k = base64DecodeIntoArray(k);
+    k = base64DecodeToBytes(k);
   }
   if (Array.isArray(k)) {
     k = new Uint8Array(k);

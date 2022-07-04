@@ -208,7 +208,7 @@ class c2FmZQClient {
           throw resp.status;
         }
         this.vars_.serverPK = resp.parts.serverPK;
-        const challenge = self.base64Decode(resp.parts.challenge);
+        const challenge = self.base64DecodeToBinary(resp.parts.challenge);
         return sodium.crypto_box_seal_open(challenge, await sodiumPublicKey(pk), await sodiumSecretKey(sk));
       })
       .then(r => r.toString().startsWith('validkey_'));
@@ -428,11 +428,11 @@ class c2FmZQClient {
         const sk = await sodiumSecretKey(this.vars_.sk);
         for (let a of resp.parts.albums) {
           try {
-            const apk = base64DecodeIntoArray(a.publicKey);
-            const ask = await sodium.crypto_box_seal_open(base64DecodeIntoArray(a.encPrivateKey), pk, sk);
+            const apk = base64DecodeToBytes(a.publicKey);
+            const ask = await sodium.crypto_box_seal_open(base64DecodeToBytes(a.encPrivateKey), pk, sk);
 
             const md = await Promise.all([
-              base64DecodeIntoArray(a.metadata),
+              base64DecodeToBytes(a.metadata),
               sodiumPublicKey(apk),
               sodiumSecretKey(ask),
             ]).then(v => sodium.crypto_box_seal_open(...v));
@@ -447,7 +447,7 @@ class c2FmZQClient {
             if (5+size > bytes.length) {
               throw new Error('invalid album metadata');
             }
-            const name = self.Uint8ArrayToString(md.slice(5, 5+size));
+            const name = self.bytesToString(md.slice(5, 5+size));
             let members = [];
             if (typeof a.members === 'string') {
               members = a.members.split(',').filter(m => m !== '');
@@ -456,7 +456,7 @@ class c2FmZQClient {
               'albumId': a.albumId,
               'pk': apk,
               'encSK': a.encPrivateKey,
-              'encName': await this.encrypt_(self.Uint8ArrayFromString(name)),
+              'encName': await this.encrypt_(self.bytesFromString(name)),
               'cover': a.cover,
               'members': members,
               'isOwner': a.isOwner === 1,
@@ -691,7 +691,7 @@ class c2FmZQClient {
   }
 
   async decryptString_(data) {
-    return this.decrypt_(data).then(r => self.Uint8ArrayToString(r));
+    return this.decrypt_(data).then(r => self.bytesToString(r));
   }
 
   async decryptAlbumSK_(albumId) {
@@ -701,7 +701,7 @@ class c2FmZQClient {
       throw new Error('invalid albumId');
     }
     const a = this.db_.albums[albumId];
-    return sodiumSecretKey(sodium.crypto_box_seal_open(base64DecodeIntoArray(a.encSK), pk, sk));
+    return sodiumSecretKey(sodium.crypto_box_seal_open(base64DecodeToBytes(a.encSK), pk, sk));
   }
 
   async insertFile_(collection, file, obj) {
@@ -943,11 +943,7 @@ class c2FmZQClient {
   /*
    */
   async decodeKeyBundle_(password, bundle) {
-    const binary = base64Decode(bundle);
-    let bytes = [];
-    for (let i = 0; i < binary.length; i++) {
-      bytes.push(binary.charCodeAt(i));
-    }
+    const bytes = base64DecodeToBytes(bundle);
     if (bytes.length !== 37 && bytes.length !== 125) {
       throw new Error('bundle is too short');
     }
@@ -980,7 +976,7 @@ class c2FmZQClient {
   /*
    */
   async decryptHeader_(encHeader, albumId) {
-    const bytes = base64DecodeIntoArray(encHeader);
+    const bytes = base64DecodeToBytes(encHeader);
     if (String.fromCharCode(bytes[0], bytes[1]) !== 'SP') {
       throw new Error('invalid header');
     }
@@ -1015,7 +1011,7 @@ class c2FmZQClient {
     if (fnSize < 0 || fnSize+50 > hdr.length) {
       throw new Error('invalid filename size');
     }
-    const fn = self.Uint8ArrayToString(hdr.slice(50, 50+fnSize));
+    const fn = self.bytesToString(hdr.slice(50, 50+fnSize));
     const dur = hdr[50+fnSize]<<24 | hdr[51+fnSize]<<16 | hdr[52+fnSize]<<8 | hdr[53+fnSize];
     if (dur < 0) {
       throw new Error('invalid duration');
@@ -1026,7 +1022,7 @@ class c2FmZQClient {
         dataSize: dataSize,
         encKey: await this.encrypt_(symKey),
         fileType: fileType,
-        encFileName: await this.encrypt_(self.Uint8ArrayFromString(fn.replace(/^ */, ''))),
+        encFileName: await this.encrypt_(self.bytesFromString(fn.replace(/^ */, ''))),
         duration: dur,
         headerSize: bytes.length,
     };
@@ -1034,7 +1030,7 @@ class c2FmZQClient {
   }
 
   async reEncryptHeader_(encHeader, pk, sk, toPK) {
-    const bytes = base64DecodeIntoArray(encHeader);
+    const bytes = base64DecodeToBytes(encHeader);
     if (String.fromCharCode(bytes[0], bytes[1]) !== 'SP') {
       throw new Error('invalid header');
     }
@@ -1056,7 +1052,7 @@ class c2FmZQClient {
   }
 
   async makeMetadata_(pk, name) {
-    const encoded = self.Uint8ArrayFromString(name);
+    const encoded = self.bytesFromString(name);
     const md = [ 1 ];
     md.push(...self.bigEndian(encoded.byteLength, 4));
     md.push(...encoded);
@@ -1099,7 +1095,7 @@ class c2FmZQClient {
       if (members[i] === this.vars_.userId) {
         continue;
       }
-      const pk = await sodiumPublicKey(base64DecodeIntoArray(this.db_.contacts[''+members[i]].publicKey));
+      const pk = await sodiumPublicKey(base64DecodeToBytes(this.db_.contacts[''+members[i]].publicKey));
       const enc = await sodium.crypto_box_seal(sk, pk);
       sharingKeys[''+members[i]] = self.base64StdEncode(enc);
     }
@@ -1215,7 +1211,7 @@ class c2FmZQClient {
         'albumId': params.albumId,
         'pk': pk.getBuffer(),
         'encSK': params.encPrivateKey,
-        'encName': await this.encrypt_(self.Uint8ArrayFromString(name)),
+        'encName': await this.encrypt_(self.bytesFromString(name)),
         'cover': '',
         'members': '',
         'isOwner': true,
@@ -1329,7 +1325,7 @@ class c2FmZQClient {
         const func = params.get('func');
         let args = [];
         try {
-          args = JSON.parse(base64Decode(params.get('args')));
+          args = JSON.parse(base64DecodeToBinary(params.get('args')));
         } catch (e) {
           console.log('SW invalid args', params.get('args'));
         }
@@ -1521,7 +1517,7 @@ class c2FmZQClient {
       }
       pk = await sodiumPublicKey(this.db_.albums[collection].pk);
     }
-    const tn = base64DecodeIntoArray(file.thumbnail.split(',')[1]);
+    const tn = base64DecodeToBytes(file.thumbnail.split(',')[1]);
     const [hdr, hdrBin, hdrBase64] = await this.makeHeaders_(pk, tn, file);
 
     const boundary = Array.from(self.crypto.getRandomValues(new Uint8Array(32))).map(v => ('0'+v.toString(16)).slice(-2)).join('');
@@ -1583,7 +1579,7 @@ class c2FmZQClient {
     const binHeaders = [];
     const b64Headers = [];
     for (let i = 0; i < 2; i++) {
-      const encFileName = self.Uint8ArrayFromString(headers[i].fileName);
+      const encFileName = self.bytesFromString(headers[i].fileName);
       let h = [];
       h.push(headers[i].version);
       h.push(...self.bigEndian(headers[i].chunkSize, 4));
@@ -1711,7 +1707,7 @@ class UploadStream {
         `\r\n` +
         `${fields[k]}\r\n`;
     }
-    controller.enqueue(self.Uint8ArrayFromBin(s));
+    controller.enqueue(self.bytesFromBinary(s));
 
     this.queue_ = [
       {
@@ -1735,14 +1731,14 @@ class UploadStream {
 
   async pull(controller) {
     if (this.queue_.length === 0) {
-      controller.enqueue(self.Uint8ArrayFromBin(`--${this.boundary_}--\r\n`));
+      controller.enqueue(self.bytesFromBinary(`--${this.boundary_}--\r\n`));
       controller.close();
       return;
     }
     return new Promise(async resolve => {
       const q = this.queue_[0];
       if (q.n === 0) {
-        controller.enqueue(self.Uint8ArrayFromBin(`--${this.boundary_}\r\n` +
+        controller.enqueue(self.bytesFromBinary(`--${this.boundary_}\r\n` +
         `Content-Disposition: form-data; name="${q.name}"; filename="${this.filename_}"\r\n` +
         `Content-Type: application/octet-stream\r\n` +
         `\r\n`));
@@ -1772,7 +1768,7 @@ class UploadStream {
         if (q.buf.byteLength > 0) {
           controller.enqueue(await this.encryptChunk_(q.n, q.buf, q.key));
         }
-        controller.enqueue(self.Uint8ArrayFromBin(`\r\n`));
+        controller.enqueue(self.bytesFromBinary(`\r\n`));
         this.queue_.shift();
       }
       return resolve();
