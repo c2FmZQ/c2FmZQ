@@ -47,6 +47,7 @@ func startServer(t *testing.T) (string, func()) {
 	db := database.New(filepath.Join(testdir, "data"), nil)
 	s := server.New(db, "", "", "")
 	s.AllowCreateAccount = true
+	s.AutoApproveNewAccounts = true
 	s.BaseURL = "http://unix/"
 	l, err := net.Listen("unix", sock)
 	if err != nil {

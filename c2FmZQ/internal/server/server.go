@@ -96,19 +96,20 @@ func init() {
 
 // An HTTP server that implements the Stingle server API.
 type Server struct {
-	AllowCreateAccount    bool
-	BaseURL               string
-	Redirect404           string
-	MaxConcurrentRequests int
-	EnableWebApp          bool
-	mux                   *http.ServeMux
-	srv                   *http.Server
-	db                    *database.Database
-	addr                  string
-	basicAuth             *basicauth.BasicAuth
-	pathPrefix            string
-	preLoginCache         *lru.Cache
-	checkKeyCache         *lru.Cache
+	AllowCreateAccount     bool
+	AutoApproveNewAccounts bool
+	BaseURL                string
+	Redirect404            string
+	MaxConcurrentRequests  int
+	EnableWebApp           bool
+	mux                    *http.ServeMux
+	srv                    *http.Server
+	db                     *database.Database
+	addr                   string
+	basicAuth              *basicauth.BasicAuth
+	pathPrefix             string
+	preLoginCache          *lru.Cache
+	checkKeyCache          *lru.Cache
 }
 
 // New returns an instance of Server that's fully initialized and ready to run.

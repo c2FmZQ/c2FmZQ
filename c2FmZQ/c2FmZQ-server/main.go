@@ -41,24 +41,25 @@ import (
 )
 
 var (
-	flagDatabase              string
-	flagAddress               string
-	flagBaseURL               string
-	flagRedirect404           string
-	flagPathPrefix            string
-	flagTLSCert               string
-	flagTLSKey                string
-	flagAllowNewAccounts      bool
-	flagLogLevel              int
-	flagEncryptMetadata       bool
-	flagPassphraseFile        string
-	flagPassphraseCmd         string
-	flagPassphrase            string
-	flagHTDigestFile          string
-	flagAutocertDomain        string
-	flagAutocertAddr          string
-	flagMaxConcurrentRequests int
-	flagEnableWebApp          bool
+	flagDatabase                string
+	flagAddress                 string
+	flagBaseURL                 string
+	flagRedirect404             string
+	flagPathPrefix              string
+	flagTLSCert                 string
+	flagTLSKey                  string
+	flagAllowNewAccounts        bool
+	flagsAutoApproveNewAccounts bool
+	flagLogLevel                int
+	flagEncryptMetadata         bool
+	flagPassphraseFile          string
+	flagPassphraseCmd           string
+	flagPassphrase              string
+	flagHTDigestFile            string
+	flagAutocertDomain          string
+	flagAutocertAddr            string
+	flagMaxConcurrentRequests   int
+	flagEnableWebApp            bool
 )
 
 func main() {
@@ -137,6 +138,12 @@ func main() {
 				Value:       true,
 				Usage:       "Allow new account registrations.",
 				Destination: &flagAllowNewAccounts,
+			},
+			&cli.BoolFlag{
+				Name:        "auto-approve-new-accounts",
+				Value:       true,
+				Usage:       "Newly created accounts are auto-approved.",
+				Destination: &flagsAutoApproveNewAccounts,
 			},
 			&cli.IntFlag{
 				Name:        "verbose",
@@ -231,6 +238,7 @@ func startServer(c *cli.Context) error {
 
 	s := server.New(db, flagAddress, flagHTDigestFile, flagPathPrefix)
 	s.AllowCreateAccount = flagAllowNewAccounts
+	s.AutoApproveNewAccounts = flagsAutoApproveNewAccounts
 	s.BaseURL = flagBaseURL
 	s.Redirect404 = flagRedirect404
 	s.MaxConcurrentRequests = flagMaxConcurrentRequests

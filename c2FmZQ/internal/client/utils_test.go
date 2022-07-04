@@ -47,6 +47,7 @@ func startServer(t *testing.T) (*client.Client, string, func()) {
 	db := database.New(filepath.Join(testdir, "data"), nil)
 	s := server.New(db, "", "", "")
 	s.AllowCreateAccount = true
+	s.AutoApproveNewAccounts = true
 
 	srv := httptest.NewServer(s.Handler())
 	hc = srv.Client()

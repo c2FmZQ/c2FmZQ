@@ -87,6 +87,7 @@ func (s *Server) handleCreateAccount(req *http.Request) *stingle.Response {
 			KeyBundle:      req.PostFormValue("keyBundle"),
 			IsBackup:       req.PostFormValue("isBackup"),
 			PublicKey:      pk,
+			NeedApproval:   !s.AutoApproveNewAccounts,
 		}); err != nil {
 		log.Errorf("AddUser: %v", err)
 		return stingle.ResponseNOK()
@@ -175,7 +176,7 @@ func (s *Server) handleLogin(req *http.Request) *stingle.Response {
 		return stingle.ResponseNOK()
 	}
 	defer tk.Wipe()
-	return stingle.ResponseOK().
+	resp := stingle.ResponseOK().
 		AddPart("keyBundle", u.KeyBundle).
 		AddPart("serverPublicKey", u.ServerPublicKeyForExport()).
 		AddPart("token", token.Mint(tk,
@@ -183,6 +184,10 @@ func (s *Server) handleLogin(req *http.Request) *stingle.Response {
 		AddPart("userId", fmt.Sprintf("%d", u.UserID)).
 		AddPart("isKeyBackedUp", u.IsBackup).
 		AddPart("homeFolder", u.HomeFolder)
+	if u.NeedApproval {
+		resp.AddInfo("Your account hasn't been approved yet. Some features are disabled.")
+	}
+	return resp
 }
 
 func (s *Server) decoyLogin(user database.User, hash string) *database.User {

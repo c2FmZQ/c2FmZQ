@@ -50,7 +50,7 @@ var (
 	flagEncryptMetadata bool
 	flagPassphraseFile  string
 	flagPassphraseCmd   string
-	flagPassphrase   string
+	flagPassphrase      string
 )
 
 func main() {
@@ -246,14 +246,28 @@ func main() {
 				},
 			},
 			&cli.Command{
-				Name:     "rename-user",
-				Category: "System",
+				Name:     "approve",
+				Category: "Users",
+				Usage:    "Approve a new user account.",
+				Action:   approveUser,
+				Flags: []cli.Flag{
+					&cli.Int64Flag{
+						Name:    "userid",
+						Usage:   "The userid to update.",
+						Aliases: []string{"u"},
+					},
+				},
+			},
+			&cli.Command{
+				Name:     "rename",
+				Category: "Users",
 				Usage:    "Change the email address of a user.",
 				Action:   renameUser,
 				Flags: []cli.Flag{
 					&cli.Int64Flag{
-						Name:  "userid",
-						Usage: "The userid to update.",
+						Name:    "userid",
+						Usage:   "The userid to update.",
+						Aliases: []string{"u"},
 					},
 					&cli.StringFlag{
 						Name:  "new-email",
@@ -653,6 +667,18 @@ func changeMasterKey(c *cli.Context) error {
 		log.Infof("Updated user %d", uid)
 	}
 	return nil
+}
+
+func approveUser(c *cli.Context) error {
+	db, err := initDB(c)
+	if err != nil {
+		return err
+	}
+	id := c.Int64("userid")
+	if id <= 0 {
+		return cli.ShowSubcommandHelp(c)
+	}
+	return db.ApproveUser(id)
 }
 
 func renameUser(c *cli.Context) error {

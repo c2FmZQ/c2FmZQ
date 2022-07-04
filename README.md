@@ -162,6 +162,7 @@ GLOBAL OPTIONS:
    --autocert-domain domain         Use autocert (letsencrypt.org) to get TLS credentials for this domain. The special value 'any' means accept any domain. The credentials are saved in the database. [$C2FMZQ_DOMAIN]
    --autocert-address value         The autocert http server will listen on this address. It must be reachable externally on port 80. (default: ":http")
    --allow-new-accounts             Allow new account registrations. (default: true)
+   --auto-approve-new-accounts      Newly created accounts are auto-approved. (default: true)
    --verbose value, -v value        The level of logging verbosity: 1:Error 2:Info 3:Debug (default: 2 (info))
    --encrypt-metadata               Encrypt the server metadata (strongly recommended). (default: true)
    --passphrase-command COMMAND     Read the database passphrase from the standard output of COMMAND. [$C2FMZQ_PASSPHRASE_CMD]

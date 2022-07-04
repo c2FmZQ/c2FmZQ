@@ -21,6 +21,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io/fs"
 	"math"
@@ -51,6 +52,9 @@ type userList struct {
 type User struct {
 	// Whether login with this account is disabled.
 	LoginDisabled bool `json:"loginDisabled"`
+	// Whether this user account needs to be approved. Accounts that need
+	// approval can't upload or share files.
+	NeedApproval bool `json:"needApproval"`
 	// The unique user ID of the user.
 	UserID int64 `json:"userId"`
 	// The unique email address of the user.
@@ -212,6 +216,19 @@ func (d *Database) UpdateUser(u User) error {
 		return err
 	}
 	f = u
+	return commit(true, nil)
+}
+
+// ApproveUser approves a new user account.
+func (d *Database) ApproveUser(id int64) error {
+	defer recordLatency("ApproveUser")()
+
+	var u User
+	commit, err := d.storage.OpenForUpdate(d.filePath(homeByUserID(id, userFile)), &u)
+	if err != nil {
+		return err
+	}
+	u.NeedApproval = false
 	return commit(true, nil)
 }
 
@@ -469,6 +486,9 @@ func (d *Database) AddContact(user User, contactEmail string) (*Contact, error) 
 	c, err := d.User(contactEmail)
 	if err != nil {
 		return nil, err
+	}
+	if c.NeedApproval {
+		return nil, errors.New("account is not approved yet")
 	}
 	return d.addContactToUser(user, c)
 }

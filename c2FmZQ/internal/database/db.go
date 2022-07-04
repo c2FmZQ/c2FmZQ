@@ -331,7 +331,11 @@ func (d *Database) DumpUsers(details bool) {
 		if user.LoginDisabled {
 			disabled = " DISABLED"
 		}
-		fmt.Printf("ID %d%s [%s]: %s\n", u.UserID, disabled, u.Email, d.filePath(user.home(userFile)))
+		approved := " APPROVED"
+		if user.NeedApproval {
+			approved = ""
+		}
+		fmt.Printf("ID %d%s%s [%s]: %s\n", u.UserID, approved, disabled, u.Email, d.filePath(user.home(userFile)))
 		if details {
 			fmt.Printf("  -contacts: %s\n", d.filePath(user.home(contactListFile)))
 			fmt.Printf("  -trash: %s\n", d.fileSetPath(user, stingle.TrashSet))

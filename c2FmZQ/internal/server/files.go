@@ -68,6 +68,10 @@ func (s *Server) handleUpload(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	log.Infof("%s %s (UserID:%d)", req.Method, req.URL, user.UserID)
+	if user.NeedApproval {
+		http.Error(w, "Account is not approved yet", http.StatusForbidden)
+		return
+	}
 
 	if up.set == stingle.AlbumSet {
 		albumSpec, err := s.db.Album(user, up.albumID)
