@@ -40,8 +40,8 @@ class Main {
   constructor() {
     this.salt_ = null;
     this.storeKey_ = null;
-    this.msgId_ = Math.floor(Math.random() * 1000000000);
-    this.msgWait_ = {};
+    this.rpcId_ = Math.floor(Math.random() * 1000000000);
+    this.rpcWait_ = {};
     this.fixing_ = false;
 
     const salt = localStorage.getItem('salt');
@@ -108,13 +108,13 @@ class Main {
           if (event.data.func !== 'backupPhrase') {
             console.log('Received rpc-result', event.data);
           }
-          if (event.data.id in this.msgWait_) {
+          if (event.data.id in this.rpcWait_) {
             if (event.data.reject !== undefined) {
-              this.msgWait_[event.data.id].reject(event.data.reject);
+              this.rpcWait_[event.data.id].reject(event.data.reject);
             } else {
-              this.msgWait_[event.data.id].resolve(event.data.resolve);
+              this.rpcWait_[event.data.id].resolve(event.data.resolve);
             }
-            delete this.msgWait_[event.data.id];
+            delete this.rpcWait_[event.data.id];
           }
           break;
         default:
@@ -231,9 +231,9 @@ class Main {
         args: args,
       });
     };
-    const id = this.msgId_++;
+    const id = this.rpcId_++;
     return new Promise((resolve, reject) => {
-      this.msgWait_[id] = {'resolve': resolve, 'reject': reject};
+      this.rpcWait_[id] = {'resolve': resolve, 'reject': reject};
       send();
     });
   }

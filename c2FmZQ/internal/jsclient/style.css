@@ -292,8 +292,8 @@ a {
 }
 #footer {
   position: fixed;
-  bottom: 0;
-  right: 0;
+  bottom: 0.25em;
+  right: 0.25em;
 }
 #add-button {
   position: fixed;

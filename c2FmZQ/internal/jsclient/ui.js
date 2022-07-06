@@ -34,6 +34,7 @@ class UI {
       shown: UI.SHOW_ITEMS_INCREMENT,
     };
 
+    this.title_ = document.querySelector('title');
     this.passphraseInput_ = document.querySelector('#passphrase-input');
     this.setPassphraseButton_ = document.querySelector('#set-passphrase-button');
     this.showPassphraseButton_ = document.querySelector('#show-passphrase-button');
@@ -204,6 +205,7 @@ class UI {
           this.backupKeysCheckbox_.style.display = 'none';
           this.backupKeysCheckboxLabel_.style.display = 'none';
           this.loginButton_.textContent = 'Login';
+          this.title_.textContent = 'Login';
         },
       },
       register: {
@@ -219,6 +221,7 @@ class UI {
           this.backupKeysCheckbox_.style.display = '';
           this.backupKeysCheckboxLabel_.style.display = '';
           this.loginButton_.textContent = 'Create Account';
+          this.title_.textContent = 'Register';
         },
       },
       recover: {
@@ -234,6 +237,7 @@ class UI {
           this.backupKeysCheckbox_.style.display = '';
           this.backupKeysCheckboxLabel_.style.display = '';
           this.loginButton_.textContent = 'Recover Account';
+          this.title_.textContent = 'Recover Account';
         },
       },
     };
@@ -337,6 +341,7 @@ class UI {
 
   showPassphraseBox_() {
     this.clearView_();
+    this.title_.textContent = 'c2FmZQ';
     document.querySelector('#loggedout-div').className = 'hidden';
     document.querySelector('#loggedin-div').className = 'hidden';
     document.querySelector('#passphrase-div').className = '';
@@ -344,6 +349,7 @@ class UI {
   }
 
   showLoggedIn_() {
+    this.title_.textContent = 'Gallery';
     document.querySelector('#loggedout-div').className = 'hidden';
     document.querySelector('#passphrase-div').className = 'hidden';
     document.querySelector('#loggedin-div').className = '';
@@ -351,6 +357,7 @@ class UI {
   }
 
   showLoggedOut_() {
+    this.title_.textContent = 'Login';
     this.clearView_();
     this.selectedTab_ = 'login';
     this.tabs_[this.selectedTab_].click();
@@ -590,6 +597,7 @@ class UI {
         this.switchView_(c);
       });
       if (this.galleryState_.collection === c.collection) {
+        this.title_.textContent = c.name;
         collectionName = c.name;
         members = c.members;
         scrollTo = div;
