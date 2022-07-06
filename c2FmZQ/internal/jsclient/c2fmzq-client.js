@@ -1500,6 +1500,16 @@ class c2FmZQClient {
     if (files.length === 0) {
       return;
     }
+    if (this.streamingUploadWorks_ === undefined) {
+      try {
+        const ok = await this.testUploadStream_();
+        this.streamingUploadWorks_ = ok === true;
+      } catch (e) {
+        this.streamingUploadWorks_ = false;
+      }
+    }
+    console.log(this.streamingUploadWorks_ ? 'SW streaming upload is supported by browser' : 'SW streaming upload is NOT supported by browser');
+
     let p = this.uploadFile_(clientId, collection, files[0]);
     for (let i = 1; i < files.length; i++) {
        p = p.then(() => this.uploadFile_(collection, files[i]));
@@ -1523,9 +1533,12 @@ class c2FmZQClient {
     const boundary = Array.from(self.crypto.getRandomValues(new Uint8Array(32))).map(v => ('0'+v.toString(16)).slice(-2)).join('');
     const rs = new ReadableStream(new UploadStream(boundary, hdr, hdrBin, hdrBase64, collection, tn, file, this.vars_.token));
 
-    // Streaming upload not supported in chrome yet.
-    // https://bugs.chromium.org/p/chromium/issues/detail?id=688906
-    const body = await self.stream2blob(rs);
+    let body = rs;
+    if (!this.streamingUploadWorks_) {
+      // Streaming upload not supported in chrome yet.
+      // https://bugs.chromium.org/p/chromium/issues/detail?id=688906
+      body = await self.stream2blob(rs);
+    }
 
     return fetch(this.options_.pathPrefix + 'v2/sync/upload', {
       method: 'POST',
@@ -1536,7 +1549,6 @@ class c2FmZQClient {
       redirect: 'error',
       referrerPolicy: 'no-referrer',
       credentials: 'omit',
-      //body: rs,
       body: body,
     })
     .then(async resp => {
@@ -1549,6 +1561,39 @@ class c2FmZQClient {
         throw body;
       }
       return 'ok';
+    });
+  }
+
+  async testUploadStream_() {
+    const msg = 'Hello World';
+    const body = new Blob([msg]).stream();
+    return fetch(this.options_.pathPrefix + 'c2/config/echo', {
+      method: 'POST',
+      mode: 'same-origin',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      redirect: 'error',
+      referrerPolicy: 'no-referrer',
+      credentials: 'omit',
+      body: new Blob([`token=${this.vars_.token}&echo=${msg}`]).stream(),
+    })
+    .then(resp => self.stream2blob(resp.body))
+    .then(blob => blob.text())
+    .then(body => {
+      console.log('SW testStreamingUpload got', body);
+      try {
+        const resp = JSON.parse(body);
+        if (resp.status !== 'ok') {
+          throw body;
+        }
+        if (resp.parts.echo !== msg) {
+          throw new Error('incorrect response');
+        }
+        return 'ok';
+      } catch(e) {
+        throw body;
+      }
     });
   }
 

@@ -23,8 +23,10 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -148,7 +150,7 @@ func New(db *database.Database, addr, htdigest, pathPrefix string) *Server {
 			http.NotFound(w, req)
 			return
 		}
-		log.Infof("%s %s", req.Method, req.RequestURI)
+		log.Infof("%s %s %s", req.Proto, req.Method, req.RequestURI)
 
 		p := strings.TrimPrefix(req.URL.Path, pathPrefix+"/")
 		if p == "" {
@@ -195,6 +197,8 @@ func New(db *database.Database, addr, htdigest, pathPrefix string) *Server {
 	s.mux.HandleFunc(pathPrefix+"/v2/sync/removeAlbumMember", s.auth(s.handleRemoveAlbumMember))
 	s.mux.HandleFunc(pathPrefix+"/v2/sync/unshareAlbum", s.auth(s.handleUnshareAlbum))
 	s.mux.HandleFunc(pathPrefix+"/v2/sync/leaveAlbum", s.auth(s.handleLeaveAlbum))
+
+	s.mux.HandleFunc(pathPrefix+"/c2/config/echo", s.method("POST", s.handleEcho))
 
 	return s
 }
@@ -339,7 +343,7 @@ func (s *Server) noauth(f func(*http.Request) *stingle.Response) http.HandlerFun
 		defer timer.ObserveDuration()
 		s.setDeadline(req.Context(), time.Now().Add(30*time.Second))
 		defer s.setDeadline(req.Context(), time.Time{})
-		log.Infof("%s %s", req.Method, req.URL)
+		log.Infof("%s %s %s", req.Proto, req.Method, req.URL)
 		req.ParseForm()
 		if err := rl.Wait(req.Context()); err != nil {
 			return
@@ -399,7 +403,7 @@ func (s *Server) auth(f func(database.User, *http.Request) *stingle.Response) ht
 			}
 			return
 		}
-		log.Infof("%s %s (UserID:%d)", req.Method, req.URL, user.UserID)
+		log.Infof("%s %s %s (UserID:%d)", req.Proto, req.Method, req.URL, user.UserID)
 		sr := f(user, req)
 		if err := sr.Send(w); err != nil {
 			log.Errorf("Send: %v", err)
@@ -430,4 +434,46 @@ func (s *Server) handleNotFound(w http.ResponseWriter, req *http.Request) {
 // is not implemented.
 func (s *Server) handleNotImplemented(req *http.Request) *stingle.Response {
 	return stingle.ResponseNOK().AddError("This functionality is not yet implemented in the server")
+}
+
+// handleEcho handles the /c2/config/echo endpoint. It is used to test client
+// features. In particular, it is used the javascript client to test whether
+// streaming upload is supported by the browser.
+//
+// Arguments:
+//  - w: The http response writer.
+//  - req: The http request.
+//
+// Form arguments
+//  - token: The signed session token.
+//  - echo: An arbitrary string to be returned to the client.
+//
+// Returns:
+//  - stingle.Response("ok")
+//        Parts("echo", the arbitrary string)
+func (s *Server) handleEcho(w http.ResponseWriter, req *http.Request) {
+	log.Infof("%s %s %s", req.Proto, req.Method, req.RequestURI)
+	buf := make([]byte, 4096)
+	n, err := io.ReadFull(req.Body, buf)
+	if err != io.EOF && err != io.ErrUnexpectedEOF {
+		log.Errorf("handleEcho: ReadFull failed: %v", err)
+		http.Error(w, "Internal Error", http.StatusInternalServerError)
+		return
+	}
+	body := string(buf[:n])
+	form, err := url.ParseQuery(body)
+	if err != nil {
+		log.Errorf("handleEcho: ParseQuery failed: %v", err)
+		http.Error(w, body, http.StatusInternalServerError)
+		return
+	}
+	if !form.Has("token") {
+		http.Error(w, body, http.StatusInternalServerError)
+		return
+	}
+	if _, _, err := s.checkToken(form.Get("token"), "session"); err != nil {
+		http.Error(w, body, http.StatusInternalServerError)
+		return
+	}
+	stingle.ResponseOK().AddPart("echo", form.Get("echo")).Send(w)
 }
