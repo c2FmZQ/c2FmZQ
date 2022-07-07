@@ -201,6 +201,7 @@ class Main {
       'restoreSecretKey',
       'updateProfile',
       'deleteAccount',
+      'generateOTP',
     ];
     const body = document.querySelector('body');
     body.classList.add('waiting');

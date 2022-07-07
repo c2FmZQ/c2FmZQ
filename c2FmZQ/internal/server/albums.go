@@ -194,6 +194,10 @@ func (s *Server) handleRenameAlbum(user database.User, req *http.Request) *sting
 //  - stingle.Response(ok).
 //      Part(contact, contact object)
 func (s *Server) handleGetContact(user database.User, req *http.Request) *stingle.Response {
+	if user.NeedApproval {
+		return stingle.ResponseNOK().
+			AddError("Account is not approved yet")
+	}
 	params, err := s.decodeParams(req.PostFormValue("params"), user)
 	if err != nil {
 		log.Errorf("decodeParams: %v", err)

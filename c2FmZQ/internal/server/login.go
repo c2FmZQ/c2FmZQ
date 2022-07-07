@@ -28,7 +28,6 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/pquerna/otp/totp"
 	"golang.org/x/crypto/bcrypt"
 
 	"c2FmZQ/internal/database"
@@ -132,6 +131,7 @@ func (s *Server) handlePreLogin(req *http.Request) *stingle.Response {
 // The form arguments:
 //  - email: The email address of the account.
 //  - password: The hashed password.
+//  - _code: The OTP code.
 //
 // Returns:
 //  - stingle.Response(ok)
@@ -143,6 +143,9 @@ func (s *Server) handlePreLogin(req *http.Request) *stingle.Response {
 //      Part(homeFolder, A "Home folder" used on the app's device)
 func (s *Server) handleLogin(req *http.Request) *stingle.Response {
 	email, passcode := parseOTP(req.PostFormValue("email"))
+	if code := req.PostFormValue("_code"); code != "" {
+		passcode = code
+	}
 	pass := req.PostFormValue("password")
 	u, err := s.db.User(email)
 	if err != nil {
@@ -184,6 +187,9 @@ func (s *Server) handleLogin(req *http.Request) *stingle.Response {
 		AddPart("userId", fmt.Sprintf("%d", u.UserID)).
 		AddPart("isKeyBackedUp", u.IsBackup).
 		AddPart("homeFolder", u.HomeFolder)
+	if u.OTPKey != "" {
+		resp.AddPart("_otpEnabled", "1")
+	}
 	if u.NeedApproval {
 		resp.AddInfo("Your account hasn't been approved yet. Some features are disabled.")
 	}
@@ -561,13 +567,6 @@ func parseOTP(v string) (email string, passcode string) {
 		return p[1], p[0]
 	}
 	return v, ""
-}
-
-func validateOTP(key, passcode string) bool {
-	if key == "" && passcode == "" {
-		return true
-	}
-	return totp.Validate(passcode, key)
 }
 
 func validateEmail(email string) bool {

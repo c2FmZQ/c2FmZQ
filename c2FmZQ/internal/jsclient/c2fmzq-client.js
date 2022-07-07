@@ -83,7 +83,11 @@ class c2FmZQClient {
   async isLoggedIn(clientId) {
     const loggedIn = typeof this.vars_.token === "string" && this.vars_.token.length > 0 ? this.vars_.email : '';
     const needKey = this.vars_.sk === undefined;
-    return Promise.resolve({account: loggedIn, needKey: needKey});
+    return Promise.resolve({
+      account: loggedIn,
+      otpEnabled: this.vars_.otpEnabled,
+      needKey: needKey
+    });
   }
 
   async passwordForLogin_(salt, password) {
@@ -118,16 +122,17 @@ class c2FmZQClient {
    * - send login request
    * - decode / decrypt the keybundle
    */
-  async login(clientId, email, password) {
+  async login(clientId, args) {
+    const {email, password, otpCode} = args;
     console.log(`SW login ${email}`);
 
-    return this.sendRequest_(clientId, 'v2/login/preLogin', {'email': email})
+    return this.sendRequest_(clientId, 'v2/login/preLogin', {email: email})
       .then(async resp => {
         console.log('SW hashing password');
         this.vars_.loginSalt = resp.parts.salt;
         const salt = await sodium.sodium_hex2bin(resp.parts.salt);
         const hashed = await this.passwordForLogin_(salt, password);
-        return this.sendRequest_(clientId, 'v2/login/login', {'email': email, 'password': hashed});
+        return this.sendRequest_(clientId, 'v2/login/login', {email: email, password: hashed, _code: otpCode});
       })
       .then(async resp => {
         if (resp.status !== 'ok') {
@@ -147,13 +152,18 @@ class c2FmZQClient {
         console.log('SW logged in');
         this.vars_.email = email;
         this.vars_.userId = resp.parts.userId;
+        this.vars_.otpEnabled = resp.parts._otpEnabled === '1';
 
         console.log('SW save password hash');
         this.vars_.passwordSalt = (await sodium.randombytes_buf(16)).toString('hex');
         this.vars_.password = await this.passwordForValidation_(this.vars_.passwordSalt, password);
 
         await this.saveVars_();
-        return {account: email, needKey: this.vars_.sk === undefined};
+        return {
+          account: email,
+          otpEnabled: this.vars_.otpEnabled,
+          needKey: this.vars_.sk === undefined,
+        };
       });
   }
 
@@ -214,7 +224,8 @@ class c2FmZQClient {
       .then(r => r.toString().startsWith('validkey_'));
   }
 
-  async createAccount(clientId, email, password, enableBackup) {
+  async createAccount(clientId, args) {
+    const {email, password, enableBackup} = args;
     console.log('SW createAccount', email, enableBackup);
     const kp = await sodium.crypto_box_keypair();
     const sk = await sodium.crypto_box_secretkey(kp);
@@ -253,7 +264,8 @@ class c2FmZQClient {
       });
   }
 
-  async recoverAccount(clientId, email, password, enableBackup, backupPhrase) {
+  async recoverAccount(clientId, args) {
+    const {email, password, enableBackup, backupPhrase} = args;
     console.log('SW recoverAccount', enableBackup);
     const sk = await sodiumSecretKey(await sodium.sodium_hex2bin(bip39.mnemonicToEntropy(backupPhrase)));
     const pk = await sodium.crypto_box_publickey_from_secretkey(sk);
@@ -294,27 +306,41 @@ class c2FmZQClient {
       });
   }
 
-  async updateProfile(clientId, email, password, newPassword) {
+  async updateProfile(clientId, args) {
     console.log('SW updateProfile');
-    if (!await this.checkPassword_(password)) {
+    if (!await this.checkPassword_(args.password)) {
       throw new Error('incorrect password');
     }
-    if (this.vars_.email !== email) {
-      const resp = await this.sendRequest_(clientId, 'v2/login/changeEmail', {
+    if (args.setOTP !== this.vars_.otpEnabled) {
+      const params = {
+        key: ''+args.otpKey,
+        code: ''+args.otpCode,
+      };
+      const resp = await this.sendRequest_(clientId, 'c2/config/setOTP', {
         token: this.vars_.token,
-        params: await this.makeParams_({newEmail: email}),
+        params: await this.makeParams_(params),
       });
       if (resp.status !== 'ok') {
-        throw resp.status;
+        throw new Error('OTP update failed');
       }
-      this.vars_.email = email;
+      this.vars_.otpEnabled = args.setOTP;
     }
-    if (newPassword !== '') {
+    if (this.vars_.email !== args.email) {
+      const resp = await this.sendRequest_(clientId, 'v2/login/changeEmail', {
+        token: this.vars_.token,
+        params: await this.makeParams_({newEmail: args.email}),
+      });
+      if (resp.status !== 'ok') {
+        throw new Error('email update failed');
+      }
+      this.vars_.email = args.email;
+    }
+    if (args.newPassword !== '') {
       const salt = await sodium.randombytes_buf(16);
       const pk = await sodiumPublicKey(this.vars_.pk);
       const sk = this.vars_.keyIsBackedUp ? await sodiumSecretKey(this.vars_.sk) : undefined;
-      const bundle = await this.makeKeyBundle_(newPassword, pk, sk);
-      const hashed = await this.passwordForLogin_(salt, newPassword);
+      const bundle = await this.makeKeyBundle_(args.newPassword, pk, sk);
+      const hashed = await this.passwordForLogin_(salt, args.newPassword);
       const params = {
         keyBundle: bundle,
         newPassword: hashed,
@@ -325,13 +351,13 @@ class c2FmZQClient {
         params: await this.makeParams_(params),
       });
       if (resp.status !== 'ok') {
-        throw resp.status;
+        throw new Error('password update failed');
       }
       this.vars_.loginSalt = salt.toString('hex').toUpperCase();
       this.vars_.token = resp.parts.token;
       const salt2 = (await sodium.randombytes_buf(16)).toString('hex');
       this.vars_.passwordSalt = salt2;
-      this.vars_.password = await this.passwordForValidation_(salt2, newPassword);
+      this.vars_.password = await this.passwordForValidation_(salt2, args.newPassword);
     }
     return this.saveVars_();
   }
@@ -415,6 +441,9 @@ class c2FmZQClient {
     return this.sendRequest_(clientId, 'v2/sync/getUpdates', data)
       .then(async resp => {
         console.log('SW getUpdates', resp);
+        if (resp.status !== 'ok') {
+          throw resp.status;
+        }
         /* contacts */
         for (let c of resp.parts.contacts) {
           this.db_.contacts[''+c.userId] = c;
@@ -919,7 +948,12 @@ class c2FmZQClient {
       'set': file.set,
       'thumb': f.isThumb ? '1' : '0',
     })
-    .then(resp => resp.parts.url);
+    .then(resp => {
+      if (resp.status !== 'ok') {
+        throw resp.status;
+      }
+      return resp.parts.url;
+    });
   }
 
   /*
@@ -1247,6 +1281,17 @@ class c2FmZQClient {
     });
   }
 
+  async generateOTP(clientId) {
+    return this.sendRequest_(clientId, 'c2/config/generateOTP', {
+      'token': this.vars_.token,
+    }).then(resp => {
+      if (resp.status !== 'ok') {
+        throw resp.status;
+      }
+      return {key: resp.parts.key, img: resp.parts.img};
+    });
+  }
+
   /*
    */
   async sendRequest_(clientId, endpoint, data) {
@@ -1287,11 +1332,7 @@ class c2FmZQClient {
         store.clear();
         sendLoggedOut();
       }
-      if (resp.status === 'ok') {
-        //console.log(`SW ${endpoint} response`, resp);
-        return resp;
-      }
-      throw resp.status;
+      return resp;
     });
   }
 

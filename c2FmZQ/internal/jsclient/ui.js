@@ -26,7 +26,6 @@ class UI {
     this.uiStarted_ = false;
     this.promptingForPassphrase_ = false;
     this.addingFiles_ = false;
-    this.popupZ_ = 1000;
     this.galleryState_ = {
       collection: main.getHash('collection', 'gallery'),
       files: [],
@@ -49,6 +48,8 @@ class UI {
     this.backupPhraseInput_ = document.querySelector('#backup-phrase-input');
     this.backupKeysCheckbox_ = document.querySelector('#backup-keys-checkbox');
     this.backupKeysCheckboxLabel_ = document.querySelector('#backup-keys-checkbox-label');
+    this.otpInputLabel_ = document.querySelector('#otp-input-label');
+    this.otpInput_ = document.querySelector('#otp-input');
     this.loginButton_ = document.querySelector('#login-button');
     this.refreshButton_ = document.querySelector('#refresh-button');
     this.trashButton_ = document.querySelector('#trash-button');
@@ -153,7 +154,7 @@ class UI {
       if (e.key === 'Enter') {
         switch(this.selectedTab_) {
           case 'login':
-            this.login_();
+            this.otpInput_.focus();
             break;
           case 'register':
           case 'recover':
@@ -174,6 +175,11 @@ class UI {
             this.backupPhraseInput_.focus();
             break;
         }
+      }
+    });
+    this.otpInput_.addEventListener('keyup', e => {
+      if (e.key === 'Enter') {
+        this.login_();
       }
     });
 
@@ -204,6 +210,8 @@ class UI {
           this.backupPhraseInput_.style.display = 'none';
           this.backupKeysCheckbox_.style.display = 'none';
           this.backupKeysCheckboxLabel_.style.display = 'none';
+          this.otpInputLabel_.style.display = '';
+          this.otpInput_.style.display = '';
           this.loginButton_.textContent = 'Login';
           this.title_.textContent = 'Login';
         },
@@ -220,6 +228,8 @@ class UI {
           this.backupPhraseInput_.style.display = 'none';
           this.backupKeysCheckbox_.style.display = '';
           this.backupKeysCheckboxLabel_.style.display = '';
+          this.otpInputLabel_.style.display = 'none';
+          this.otpInput_.style.display = 'none';
           this.loginButton_.textContent = 'Create Account';
           this.title_.textContent = 'Register';
         },
@@ -236,6 +246,8 @@ class UI {
           this.backupPhraseInput_.style.display = '';
           this.backupKeysCheckbox_.style.display = '';
           this.backupKeysCheckboxLabel_.style.display = '';
+          this.otpInputLabel_.style.display = 'none';
+          this.otpInput_.style.display = 'none';
           this.loginButton_.textContent = 'Recover Account';
           this.title_.textContent = 'Recover Account';
         },
@@ -247,9 +259,10 @@ class UI {
     }
 
     main.sendRPC('isLoggedIn')
-    .then(({account, needKey}) => {
+    .then(({account, otpEnabled, needKey}) => {
       if (account !== '') {
         this.accountEmail_ = account;
+        this.otpEnabled_ = otpEnabled;
         this.loggedInAccount_.textContent = account;
         this.showLoggedIn_();
         if (needKey) {
@@ -295,7 +308,6 @@ class UI {
   popupMessage(title, message, className) {
     const div = document.createElement('div');
     div.className = className;
-    div.style.zIndex = this.popupZ_++;
     const v = document.createElement('span');
     v.textContent = '✖';
     v.style = 'float: right;';
@@ -307,15 +319,21 @@ class UI {
     div.appendChild(t);
     div.appendChild(m);
 
+    const container = document.querySelector('#popup-messages');
     const remove = () => {
       div.style.animation = 'slideOut 1s';
       div.addEventListener('animationend', () => {
-        body.removeChild(div);
+        try {
+          container.removeChild(div);
+        } catch(e) {}
       });
     };
-    const body = document.querySelector('body');
     div.addEventListener('click', remove);
-    body.appendChild(div);
+    if (container.firstChild) {
+      container.insertBefore(div, container.firstChild);
+    } else {
+      container.appendChild(div);
+    }
 
     setTimeout(remove, 5000);
   }
@@ -387,9 +405,18 @@ class UI {
       .replace(/ *$/, '');
     this.backupPhraseInput_.disabled = true;
     this.backupKeysCheckbox_.disabled = true;
-    return main.sendRPC(this.tabs_[this.selectedTab_].rpc, this.emailInput_.value, this.passwordInput_.value, this.backupKeysCheckbox_.checked, this.backupPhraseInput_.value)
-    .then(({needKey}) => {
+    this.otpInput_.disabled = true;
+    const args = {
+      email: this.emailInput_.value,
+      password: this.passwordInput_.value,
+      enableBackup: this.backupKeysCheckbox_.checked,
+      backupPhrase: this.backupPhraseInput_.value,
+      otpCode: this.otpInput_.value,
+    };
+    return main.sendRPC(this.tabs_[this.selectedTab_].rpc, args)
+    .then(({otpEnabled, needKey}) => {
       this.accountEmail_ = this.emailInput_.value;
+      this.otpEnabled_ = otpEnabled;
       document.querySelector('#loggedin-account').textContent = this.emailInput_.value;
       this.passwordInput_.value = '';
       this.passwordInput2_.value = '';
@@ -428,6 +455,7 @@ class UI {
       this.passwordInput2_.disabled = false;
       this.backupPhraseInput_.disabled = false;
       this.backupKeysCheckbox_.disabled = false;
+      this.otpInput_.disabled = false;
     });
   }
 
@@ -1778,6 +1806,24 @@ class UI {
     });
     content.id = 'profile-content';
 
+    const onchange = () => {
+      delButton.disabled = pass.value == '';
+      if (pass.value === '') {
+        return false;
+      }
+      let changed = false;
+      if (email.value !== this.accountEmail_) {
+        changed = true;
+      }
+      if (newPass.value !== '' && newPass2.value !== '') {
+        changed = true;
+      }
+      if (otp.checked !== this.otpEnabled_ && (!otp.checked || form.querySelector('#profile-form-otp-code').value !== '')) {
+        changed = true;
+      }
+      button.disabled = !changed;
+    };
+
     const form = document.createElement('div');
     form.id = 'profile-form';
 
@@ -1788,6 +1834,8 @@ class UI {
     email.id = 'profile-form-email';
     email.type = 'email';
     email.value = this.accountEmail_;
+    email.addEventListener('keyup', onchange);
+    email.addEventListener('change', onchange);
     form.appendChild(emailLabel);
     form.appendChild(email);
 
@@ -1797,6 +1845,9 @@ class UI {
     const pass = document.createElement('input');
     pass.id = 'profile-form-password';
     pass.type = 'password';
+    pass.placeholder = 'required';
+    pass.addEventListener('keyup', onchange);
+    pass.addEventListener('change', onchange);
     form.appendChild(passLabel);
     form.appendChild(pass);
 
@@ -1806,7 +1857,10 @@ class UI {
     const newPass = document.createElement('input');
     newPass.id = 'profile-form-new-password';
     newPass.type = 'password';
+    newPass.placeholder = 'optional';
     newPass.autocomplete = 'new-password';
+    newPass.addEventListener('keyup', onchange);
+    newPass.addEventListener('change', onchange);
     form.appendChild(newPassLabel);
     form.appendChild(newPass);
 
@@ -1817,12 +1871,62 @@ class UI {
     newPass2.id = 'profile-form-new-password2';
     newPass2.type = 'password';
     newPass2.autocomplete = 'new-password';
+    newPass2.addEventListener('keyup', onchange);
+    newPass2.addEventListener('change', onchange);
     form.appendChild(newPass2Label);
     form.appendChild(newPass2);
+
+    let otpKey = '';
+    const otpLabel = document.createElement('label');
+    otpLabel.forHtml = 'profile-form-enable-otp';
+    otpLabel.textContent = 'Enable OTP?';
+    const otpDiv = document.createElement('div');
+    otpDiv.id = 'profile-form-enable-otp-div';
+    const otp = document.createElement('input');
+    otp.id = 'profile-form-enable-otp';
+    otp.type = 'checkbox';
+    otp.checked = this.otpEnabled_;
+    otp.addEventListener('change', () => {
+      if (otp.checked && !this.otpEnabled_) {
+        otp.disabled = true;
+        main.sendRPC('generateOTP')
+        .then(({key, img}) => {
+          otpKey = key;
+          const image = new Image();
+          image.src = img;
+          const keyDiv = document.createElement('div');
+          keyDiv.textContent = 'KEY: ' + key;
+          const code = document.createElement('input');
+          code.id = 'profile-form-otp-code';
+          code.type = 'text';
+          code.placeholder = 'Enter code';
+          code.addEventListener('keyup', onchange);
+          code.addEventListener('change', onchange);
+          otpDiv.appendChild(image);
+          otpDiv.appendChild(keyDiv);
+          otpDiv.appendChild(code);
+        })
+        .finally(() => {
+          otp.disabled = false;
+          onchange();
+        });
+      } else {
+        otpKey = '';
+        while (otpDiv.firstChild) {
+          otpDiv.removeChild(otpDiv.firstChild);
+        }
+        otpDiv.appendChild(otp);
+        onchange();
+      }
+    });
+    otpDiv.appendChild(otp);
+    form.appendChild(otpLabel);
+    form.appendChild(otpDiv);
 
     const button = document.createElement('button');
     button.id = 'profile-form-button';
     button.textContent = 'Update';
+    button.disabled = true;
     button.addEventListener('click', () => {
       if (pass.value === '') {
         this.popupMessage('Error', 'Current password is required', 'error');
@@ -1832,25 +1936,43 @@ class UI {
         this.popupMessage('Error', 'New password doesn\'t match', 'error');
         return;
       }
+      const code = form.querySelector('#profile-form-otp-code');
+      if (otp.checked && !this.otpEnabled_ && !code?.value) {
+        this.popupMessage('Error', 'OTP code required', 'error');
+        return;
+      }
       email.disabled = true;
       pass.disabled = true;
       newPass.disabled = true;
       newPass2.disabled = true;
+      otp.disabled = true;
       button.disabled = true;
       button.textContent = 'Updating';
       delButton.disabled = true;
-      main.sendRPC('updateProfile', email.value, pass.value, newPass.value)
+      main.sendRPC('updateProfile', {
+        email: email.value,
+        password: pass.value,
+        newPassword: newPass.value,
+        setOTP: otp.checked,
+        otpKey: otpKey,
+        otpCode: code ? code.value : '',
+      })
       .then(() => {
         this.accountEmail_ = email.value;
         this.loggedInAccount_.textContent = email.value;
+        this.otpEnabled_ = otp.checked;
         this.popupMessage('Profile', 'Updated', 'info');
         close();
+      })
+      .catch(err => {
+        console.log('updateProfile error', err);
       })
       .finally(() => {
         email.disabled = false;
         pass.disabled = false;
         newPass.disabled = false;
         newPass2.disabled = false;
+        otp.disabled = false;
         button.disabled = false;
         button.textContent = 'Update';
         delButton.disabled = false;
@@ -1866,6 +1988,7 @@ class UI {
     const delButton = document.createElement('button');
     delButton.id = 'profile-form-delete-button';
     delButton.textContent = 'Delete my account';
+    delButton.disabled = true;
     delButton.addEventListener('click', () => {
       if (pass.value === '') {
         this.popupMessage('Error', 'Current password is required', 'error');
