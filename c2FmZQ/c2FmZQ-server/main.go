@@ -123,7 +123,7 @@ func main() {
 			&cli.StringFlag{
 				Name:        "autocert-domain",
 				Value:       "",
-				Usage:       "Use autocert (letsencrypt.org) to get TLS credentials for this `domain`. The special value 'any' means accept any domain. The credentials are saved in the database.",
+				Usage:       "Use autocert (letsencrypt.org) to get TLS credentials for this `domain`. For multiple domains, separate them with commas. The special value 'any' means accept any domain. The credentials are saved in the database.",
 				EnvVars:     []string{"C2FMZQ_DOMAIN"},
 				Destination: &flagAutocertDomain,
 			},

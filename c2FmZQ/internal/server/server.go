@@ -249,7 +249,7 @@ func (s *Server) RunWithAutocert(domain, addr string) error {
 		Cache:  s.db.AutocertCache(),
 	}
 	if domain != "any" && domain != "*" {
-		certManager.HostPolicy = autocert.HostWhitelist(domain)
+		certManager.HostPolicy = autocert.HostWhitelist(strings.Split(domain, ",")...)
 	}
 	go func() {
 		if addr == "" {
