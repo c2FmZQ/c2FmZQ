@@ -37,6 +37,7 @@ class UI {
     this.passphraseInput_ = document.querySelector('#passphrase-input');
     this.setPassphraseButton_ = document.querySelector('#set-passphrase-button');
     this.showPassphraseButton_ = document.querySelector('#show-passphrase-button');
+    this.skipPassphraseButton_ = document.querySelector('#skip-passphrase-button');
     this.resetDbButton_ = document.querySelector('#resetdb-button');
 
     this.emailInput_ = document.querySelector('#email-input');
@@ -70,10 +71,25 @@ class UI {
         this.showPassphraseButton_.textContent = 'Hide';
       }
     });
+    this.skipPassphraseButton_.addEventListener('click', () => {
+      if (!window.confirm('Skipping the passphrase is less secure. Never used this option on a public or shared computer. Continue?')) {
+        return;
+      }
+      const passphrase = btoa(String.fromCharCode(...window.crypto.getRandomValues(new Uint8Array(64))));
+      localStorage.setItem('_', passphrase);
+      this.passphraseInput_.value = passphrase;
+      this.setPassphrase_();
+    });
     this.resetDbButton_.addEventListener('click', main.resetServiceWorker.bind(main));
   }
 
   promptForPassphrase() {
+    const p = localStorage.getItem('_');
+    if (p) {
+      this.passphraseInput_.value = p;
+      this.setPassphrase_();
+      return
+    }
     this.promptingForPassphrase_ = true;
     this.setPassphraseButton_.textContent = 'Set';
     this.setPassphraseButton_.disabled = false;
@@ -113,6 +129,10 @@ class UI {
   }
 
   wrongPassphrase(err) {
+    if (localStorage.getItem('_')) {
+      main.resetServiceWorker();
+      return;
+    }
     this.resetDbButton_.className = 'resetdb-button';
     this.popupMessage('Error', err, 'error');
   }
