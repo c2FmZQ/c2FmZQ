@@ -79,6 +79,8 @@ type User struct {
 	// The server's secret key used for encrypting tokens for this user,
 	// encrypted with master key.
 	TokenKey string `json:"serverTokenKey"`
+	// A set of valid tokens. Each Login adds a token. Each logout remove one.
+	ValidTokens map[string]bool `json:"validTokens"`
 	// The OTP key for this user.
 	OTPKey string `json:"otpKey,omitempty"`
 	// Decoy accounts that the user can access with different passwords.
@@ -292,6 +294,9 @@ func (d *Database) UserByID(id int64) (User, error) {
 
 	var u User
 	err := d.storage.ReadDataFile(d.filePath("home", fmt.Sprintf("%d", id), userFile), &u)
+	if u.ValidTokens == nil {
+		u.ValidTokens = make(map[string]bool)
+	}
 	return u, err
 }
 

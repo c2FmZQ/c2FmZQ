@@ -179,11 +179,16 @@ func (s *Server) handleLogin(req *http.Request) *stingle.Response {
 		return stingle.ResponseNOK()
 	}
 	defer tk.Wipe()
+	tok := token.Mint(tk, token.Token{Scope: "session", Subject: u.UserID}, tokenDuration)
+	u.ValidTokens[tok] = true
+	if err := s.db.UpdateUser(u); err != nil {
+		log.Errorf("UpdateUser: %v", err)
+		return stingle.ResponseNOK()
+	}
 	resp := stingle.ResponseOK().
 		AddPart("keyBundle", u.KeyBundle).
 		AddPart("serverPublicKey", u.ServerPublicKeyForExport()).
-		AddPart("token", token.Mint(tk,
-			token.Token{Scope: "session", Subject: u.UserID}, tokenDuration)).
+		AddPart("token", tok).
 		AddPart("userId", fmt.Sprintf("%d", u.UserID)).
 		AddPart("isKeyBackedUp", u.IsBackup).
 		AddPart("homeFolder", u.HomeFolder)
@@ -244,12 +249,7 @@ func (s *Server) decoyLogin(user database.User, hash string) *database.User {
 // Returns:
 //  - StringleResponse(ok)
 func (s *Server) handleLogout(user database.User, req *http.Request) *stingle.Response {
-	etk, err := s.db.NewEncryptedTokenKey()
-	if err != nil {
-		log.Errorf("NewEncryptedTokenKey: %v", err)
-		return stingle.ResponseNOK()
-	}
-	user.TokenKey = etk
+	delete(user.ValidTokens, req.PostFormValue("token"))
 	if err := s.db.UpdateUser(user); err != nil {
 		log.Errorf("UpdateUser: %v", err)
 		return stingle.ResponseNOK()
@@ -307,19 +307,20 @@ func (s *Server) handleChangePass(user database.User, req *http.Request) *stingl
 	} else {
 		user.IsBackup = "0"
 	}
-
-	if err := s.db.UpdateUser(user); err != nil {
-		log.Errorf("UpdateUser: %v", err)
-		return stingle.ResponseNOK()
-	}
 	tk, err := s.db.DecryptTokenKey(user.TokenKey)
 	if err != nil {
 		log.Errorf("DecryptTokenKey: %v", err)
 		return stingle.ResponseNOK()
 	}
 	defer tk.Wipe()
+	tok := token.Mint(tk, token.Token{Scope: "session", Subject: user.UserID}, tokenDuration)
+	user.ValidTokens = map[string]bool{tok: true}
+	if err := s.db.UpdateUser(user); err != nil {
+		log.Errorf("UpdateUser: %v", err)
+		return stingle.ResponseNOK()
+	}
 	return stingle.ResponseOK().
-		AddPart("token", token.Mint(tk, token.Token{Scope: "session", Subject: user.UserID}, tokenDuration))
+		AddPart("token", tok)
 }
 
 // handleGetServerPK handles the /v2/keys/getServerPK endpoint. The server's
