@@ -1184,14 +1184,20 @@ class UI {
       img.alt = f.fileName;
       img.src = f.url;
       content.appendChild(img);
-    }
-    if (f.isVideo) {
+    } else if (f.isVideo) {
       const video = document.createElement('video');
       video.className = 'popup-media';
       video.src = f.url;
       video.poster = f.thumbUrl;
       video.controls = 'controls';
       content.appendChild(video);
+    } else {
+      const anchor = document.createElement('a');
+      anchor.href = f.url;
+      anchor.target = '_blank';
+      anchor.textContent = 'Open document';
+      content.classList.add('popup-download');
+      content.appendChild(anchor);
     }
   }
 

@@ -1421,6 +1421,7 @@ class c2FmZQClient {
     }
 
     const p = new Promise(async (resolve, reject) => {
+      const ext = url.pathname.replace(/^.*(\.[^.]+)$/, '$1').toLowerCase();
       const params = url.searchParams;
       const f = {
         collection: params.get('collection'),
@@ -1447,6 +1448,30 @@ class c2FmZQClient {
         }
       }
 
+      let ctype = 'application/octet-stream';
+      switch (ext) {
+        case '.jpg':
+        case '.jpeg':
+          ctype = 'image/jpeg'; break;
+        case '.png':
+          ctype = 'image/png'; break;
+        case '.gif':
+          ctype = 'image/gif'; break;
+        case '.webp':
+          ctype = 'image/webp'; break;
+        case '.mp4':
+          ctype = 'video/mp4'; break;
+        case '.pdf':
+          ctype = 'application/pdf'; break;
+        case '.txt':
+          ctype = 'text/plain'; break;
+        case '.gz':
+        case '.tgz':
+          ctype = 'application/gzip'; break;
+        default:
+          console.log(`SW Using default content-type for ${ext}`); break;
+      }
+
       const strategy = new ByteLengthQueuingStrategy({
         highWaterMark: 5*(file.headers[0].chunkSize+40),
       });
@@ -1471,6 +1496,7 @@ class c2FmZQClient {
           let h = {
             'accept-ranges': 'bytes',
             'cache-control': 'no-store, immutable',
+            'content-type': ctype,
           };
           if (haveRange) {
             h['content-range'] = `bytes ${reqOffset}-${fileSize-1}/${fileSize}`;
@@ -1512,6 +1538,7 @@ class c2FmZQClient {
         let h = {
           'accept-ranges': 'bytes',
           'cache-control': 'no-store, immutable',
+          'content-type': ctype,
         };
         if (cachePref === 'private') {
           h['cache-control'] = 'private, max-age=3600';
