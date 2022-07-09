@@ -90,6 +90,13 @@ class c2FmZQClient {
     });
   }
 
+  async quota(clientId) {
+    return Promise.resolve({
+      usage: this.vars_.spaceUsed,
+      quota: this.vars_.spaceQuota,
+    });
+  }
+
   async passwordForLogin_(salt, password) {
     return sodium.crypto_pwhash(64, password, salt,
       sodium.CRYPTO_PWHASH_OPSLIMIT_MODERATE,
@@ -444,6 +451,10 @@ class c2FmZQClient {
         if (resp.status !== 'ok') {
           throw resp.status;
         }
+        // Quota
+        this.vars_.spaceUsed = parseInt(resp.parts.spaceUsed);
+        this.vars_.spaceQuota = parseInt(resp.parts.spaceQuota);
+
         /* contacts */
         for (let c of resp.parts.contacts) {
           this.db_.contacts[''+c.userId] = c;
@@ -1372,6 +1383,7 @@ class c2FmZQClient {
         }
         const allowedMethods = [
           'isLoggedIn',
+          'quota',
           'keyBackupEnabled',
           'logout',
           'getContact',

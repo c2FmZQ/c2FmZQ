@@ -280,6 +280,7 @@ class UI {
 
     main.sendRPC('isLoggedIn')
     .then(({account, otpEnabled, needKey}) => {
+      this.showQuota_();
       if (account !== '') {
         this.accountEmail_ = account;
         this.otpEnabled_ = otpEnabled;
@@ -296,6 +297,14 @@ class UI {
       }
     })
     .catch(this.showLoggedOut_.bind(this));
+  }
+
+  showQuota_() {
+    main.sendRPC('quota')
+    .then(({usage, quota}) => {
+      const pct = Math.floor(100 * usage / quota) + '%';
+      document.querySelector('#quota').textContent = this.formatSizeMB_(usage) + ' / ' + this.formatSizeMB_(quota) + ' (' + pct + ')';
+    });
   }
 
   showAccountMenu_(event) {
@@ -493,6 +502,7 @@ class UI {
       .catch(this.showError_.bind(this))
       .finally(() => {
         this.refreshButton_.disabled = false;
+        this.showQuota_();
       });
   }
 
@@ -1585,6 +1595,12 @@ class UI {
     if (s > 1024*1024) return Math.floor(s * 100 / 1024 / 1024) / 100 + ' MiB';
     if (s > 1024) return Math.floor(s * 100 / 1024) / 100 + ' KiB';
     return s + ' B';
+  }
+
+  formatSizeMB_(s) {
+    if (s > 1024*1024) return Math.floor(s * 100 / 1024 / 1024) / 100 + ' TiB';
+    if (s > 1024) return Math.floor(s * 100 / 1024) / 100 + ' GiB';
+    return s + ' MiB';
   }
 
   async showUploadView_() {
