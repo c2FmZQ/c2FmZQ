@@ -474,7 +474,8 @@ func (s *Server) handleEcho(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, body, http.StatusInternalServerError)
 		return
 	}
-	if _, _, err := s.checkToken(form.Get("token"), "session"); err != nil {
+	token := form.Get("token")
+	if _, user, err := s.checkToken(token, "session"); err != nil || !user.ValidTokens[token] {
 		http.Error(w, body, http.StatusInternalServerError)
 		return
 	}
