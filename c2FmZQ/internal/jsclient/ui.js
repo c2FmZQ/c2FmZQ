@@ -1591,15 +1591,15 @@ class UI {
   }
 
   formatSize_(s) {
-    if (s > 1024*1024*1024) return Math.floor(s * 100 / 1024 / 1024 / 1024) / 100 + ' GiB';
-    if (s > 1024*1024) return Math.floor(s * 100 / 1024 / 1024) / 100 + ' MiB';
-    if (s > 1024) return Math.floor(s * 100 / 1024) / 100 + ' KiB';
+    if (s >= 1024*1024*1024) return Math.floor(s * 100 / 1024 / 1024 / 1024) / 100 + ' GiB';
+    if (s >= 1024*1024) return Math.floor(s * 100 / 1024 / 1024) / 100 + ' MiB';
+    if (s >= 1024) return Math.floor(s * 100 / 1024) / 100 + ' KiB';
     return s + ' B';
   }
 
   formatSizeMB_(s) {
-    if (s > 1024*1024) return Math.floor(s * 100 / 1024 / 1024) / 100 + ' TiB';
-    if (s > 1024) return Math.floor(s * 100 / 1024) / 100 + ' GiB';
+    if (s >= 1024*1024) return Math.floor(s * 100 / 1024 / 1024) / 100 + ' TiB';
+    if (s >= 1024) return Math.floor(s * 100 / 1024) / 100 + ' GiB';
     return s + ' MiB';
   }
 
