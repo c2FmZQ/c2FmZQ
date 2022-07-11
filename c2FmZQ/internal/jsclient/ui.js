@@ -280,7 +280,6 @@ class UI {
 
     main.sendRPC('isLoggedIn')
     .then(({account, otpEnabled, needKey}) => {
-      this.showQuota_();
       if (account !== '') {
         this.accountEmail_ = account;
         this.otpEnabled_ = otpEnabled;
@@ -290,6 +289,9 @@ class UI {
           return this.promptForBackupPhrase_();
         }
         return main.sendRPC('getUpdates')
+          .then(() => {
+            this.showQuota_();
+          })
           .catch(this.showError_.bind(this))
           .finally(this.refreshGallery_.bind(this));
       } else {
@@ -456,6 +458,7 @@ class UI {
       }
       return main.sendRPC('getUpdates')
         .then(() => {
+          this.showQuota_();
           this.refreshGallery_();
         });
     })

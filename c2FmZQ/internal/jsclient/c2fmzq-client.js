@@ -615,7 +615,7 @@ class c2FmZQClient {
           store.set('contacts', this.db_.contacts),
           Promise.all(Object.keys(changed).map(collection => this.indexCollection_(collection))),
         ];
-        await Promise.all(p);
+        return Promise.all(p);
       });
   }
 
