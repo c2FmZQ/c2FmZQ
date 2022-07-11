@@ -62,7 +62,7 @@ func (s *Server) handleUpload(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	_, user, err := s.checkToken(up.token, "session")
-	if err != nil || !user.ValidTokens[up.token] {
+	if err != nil || !user.ValidTokens[token.Hash(up.token)] {
 		log.Errorf("handleUpload: checkToken failed: %v", err)
 		http.Error(w, "Internal Error", http.StatusInternalServerError)
 		return

@@ -180,7 +180,7 @@ func (s *Server) handleLogin(req *http.Request) *stingle.Response {
 	}
 	defer tk.Wipe()
 	tok := token.Mint(tk, token.Token{Scope: "session", Subject: u.UserID}, tokenDuration)
-	u.ValidTokens[tok] = true
+	u.ValidTokens[token.Hash(tok)] = true
 	if err := s.db.UpdateUser(u); err != nil {
 		log.Errorf("UpdateUser: %v", err)
 		return stingle.ResponseNOK()
@@ -249,7 +249,7 @@ func (s *Server) decoyLogin(user database.User, hash string) *database.User {
 // Returns:
 //  - StringleResponse(ok)
 func (s *Server) handleLogout(user database.User, req *http.Request) *stingle.Response {
-	delete(user.ValidTokens, req.PostFormValue("token"))
+	delete(user.ValidTokens, token.Hash(req.PostFormValue("token")))
 	if err := s.db.UpdateUser(user); err != nil {
 		log.Errorf("UpdateUser: %v", err)
 		return stingle.ResponseNOK()
@@ -314,7 +314,7 @@ func (s *Server) handleChangePass(user database.User, req *http.Request) *stingl
 	}
 	defer tk.Wipe()
 	tok := token.Mint(tk, token.Token{Scope: "session", Subject: user.UserID}, tokenDuration)
-	user.ValidTokens = map[string]bool{tok: true}
+	user.ValidTokens = map[string]bool{token.Hash(tok): true}
 	if err := s.db.UpdateUser(user); err != nil {
 		log.Errorf("UpdateUser: %v", err)
 		return stingle.ResponseNOK()

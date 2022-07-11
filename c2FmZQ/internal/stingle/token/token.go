@@ -33,6 +33,7 @@ package token
 
 import (
 	"crypto/rand"
+	"crypto/sha1"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
@@ -204,4 +205,10 @@ func Decrypt(key *Key, t string) (Token, error) {
 		return Token{}, ErrValidationFailed
 	}
 	return tok, nil
+}
+
+// Hash returns a token.
+func Hash(token string) string {
+	h := sha1.Sum([]byte(token))
+	return base64.RawURLEncoding.EncodeToString(h[:])
 }

@@ -398,7 +398,7 @@ func (s *Server) auth(f func(database.User, *http.Request) *stingle.Response) ht
 
 		tok := req.PostFormValue("token")
 		_, user, err := s.checkToken(tok, "session")
-		if err != nil || !user.ValidTokens[tok] {
+		if err != nil || !user.ValidTokens[token.Hash(tok)] {
 			log.Errorf("%s %s (INVALID TOKEN: %v)", req.Method, req.URL, err)
 			sr := stingle.ResponseNOK().AddPart("logout", "1").AddError("You are not logged in")
 			if err := sr.Send(w); err != nil {
@@ -474,8 +474,8 @@ func (s *Server) handleEcho(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, body, http.StatusInternalServerError)
 		return
 	}
-	token := form.Get("token")
-	if _, user, err := s.checkToken(token, "session"); err != nil || !user.ValidTokens[token] {
+	tok := form.Get("token")
+	if _, user, err := s.checkToken(tok, "session"); err != nil || !user.ValidTokens[token.Hash(tok)] {
 		http.Error(w, body, http.StatusInternalServerError)
 		return
 	}
