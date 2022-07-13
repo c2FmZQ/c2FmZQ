@@ -55,6 +55,8 @@ type User struct {
 	// Whether this user account needs to be approved. Accounts that need
 	// approval can't upload or share files.
 	NeedApproval bool `json:"needApproval"`
+	// Whether this user is an administrator of the system.
+	Admin bool `json:"admin"`
 	// The unique user ID of the user.
 	UserID int64 `json:"userId"`
 	// The unique email address of the user.

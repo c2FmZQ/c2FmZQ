@@ -470,3 +470,46 @@ input[type=checkbox] {
   align-items: center;
   justify-content: center;
 }
+.admin-console-popup {
+  max-width: 95vw;
+  max-height: 90vh;
+  overflow-y: scroll;
+}
+.admin-console-popup .popup-content {
+  padding: 1em;
+}
+#admin-console-default-quota-value {
+  width: 5em;
+  text-align: right;
+}
+#admin-console-table {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr 2fr;
+  overflow-y: scroll;
+  justify-content: start;
+  align-items: stretch;
+  border: 1px solid black;
+}
+#admin-console-table>div:nth-child(-n+5) {
+  font-weight: bold;
+}
+#admin-console-table>div:nth-child(10n+1),#admin-console-table>div:nth-child(10n+2),#admin-console-table>div:nth-child(10n+3),#admin-console-table>div:nth-child(10n+4),#admin-console-table>div:nth-child(10n+5) {
+  background-color: #eee;
+}
+#admin-console-table > div {
+  padding: 0.5em;
+}
+#admin-console-table>div:nth-child(5n+2),#admin-console-table>div:nth-child(5n+3),#admin-console-table>div:nth-child(5n+4) {
+  text-align: center;
+}
+.quota-cell {
+  display: flex;
+}
+.quota-cell > input {
+  width: 5em;
+  text-align: right;
+}
+.changed {
+  background-color: lightgreen;
+  box-shadow: 0 0 2px 2px lightgreen;
+}

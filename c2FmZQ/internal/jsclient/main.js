@@ -202,6 +202,7 @@ class Main {
       'updateProfile',
       'deleteAccount',
       'generateOTP',
+      'adminUsers',
     ];
     const body = document.querySelector('body');
     body.classList.add('waiting');

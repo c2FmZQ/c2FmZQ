@@ -86,6 +86,7 @@ class c2FmZQClient {
     return Promise.resolve({
       account: loggedIn,
       otpEnabled: this.vars_.otpEnabled,
+      isAdmin: this.vars_.isAdmin,
       needKey: needKey
     });
   }
@@ -160,6 +161,7 @@ class c2FmZQClient {
         this.vars_.email = email;
         this.vars_.userId = resp.parts.userId;
         this.vars_.otpEnabled = resp.parts._otpEnabled === '1';
+        this.vars_.isAdmin = resp.parts._admin === '1';
 
         console.log('SW save password hash');
         this.vars_.passwordSalt = (await sodium.randombytes_buf(16)).toString('hex');
@@ -169,6 +171,7 @@ class c2FmZQClient {
         return {
           account: email,
           otpEnabled: this.vars_.otpEnabled,
+          isAdmin: this.vars_.isAdmin,
           needKey: this.vars_.sk === undefined,
         };
       });
@@ -1301,6 +1304,24 @@ class c2FmZQClient {
       }
       return {key: resp.parts.key, img: resp.parts.img};
     });
+  }
+
+  async adminUsers(clientId, changes) {
+    const params = {};
+    if (changes !== undefined) {
+      params.changes = JSON.stringify(changes);
+    }
+    return this.sendRequest_(clientId, 'c2/admin/users', {
+      token: this.vars_.token,
+      params: await this.makeParams_(params),
+    }).then(async resp => {
+      if (resp.status !== 'ok') {
+        throw resp.status;
+      }
+      const enc = self.base64DecodeToBinary(resp.parts.users);
+      return sodium.crypto_box_seal_open(enc, await sodiumPublicKey(this.vars_.pk), await sodiumSecretKey(this.vars_.sk));
+    })
+    .then(j => JSON.parse(j));
   }
 
   /*

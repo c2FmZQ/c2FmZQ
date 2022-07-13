@@ -29,8 +29,9 @@ const (
 
 // Quotas contains the quota limits, keyed by user ID.
 type Quotas struct {
-	Limits       map[int64]Limit `json:"limits"`
-	DefaultLimit int64           `json:"defaultLimit"`
+	Limits           map[int64]Limit `json:"limits"`
+	DefaultLimit     int64           `json:"defaultLimit"`
+	DefaultLimitUnit string          `json:"defaultLimitUnit"`
 }
 
 type Limit struct {
@@ -45,28 +46,32 @@ func (d *Database) Quota(userID int64) (int64, error) {
 		return 0, err
 	}
 	if q, ok := quotas.Limits[userID]; ok {
-		limit := q.Value
-		switch strings.ToLower(q.Unit) {
-		case "k", "kb":
-			limit <<= 10
-		case "m", "mb":
-			limit <<= 20
-		case "g", "gb":
-			limit <<= 30
-		case "t", "tb":
-			limit <<= 40
-		default:
-		}
-		return limit, nil
+		return applyUnit(q.Value, q.Unit), nil
 	}
-	return quotas.DefaultLimit, nil
+	return applyUnit(quotas.DefaultLimit, quotas.DefaultLimitUnit), nil
+}
+
+func applyUnit(value int64, unit string) int64 {
+	switch strings.ToLower(unit) {
+	case "k", "kb":
+		value <<= 10
+	case "m", "mb":
+		value <<= 20
+	case "g", "gb":
+		value <<= 30
+	case "t", "tb":
+		value <<= 40
+	default:
+	}
+	return value
 }
 
 // CreateEmptyQuotaFile creates an empty quota file with a large default limit.
 func (d *Database) CreateEmptyQuotaFile() error {
 	q := Quotas{
-		Limits:       map[int64]Limit{0: Limit{0, "MB"}}, // Example.
-		DefaultLimit: 100 << 40,                          // 100 TB (arbitrarily large value)
+		Limits:           map[int64]Limit{0: Limit{0, "MB"}}, // Example.
+		DefaultLimit:     100,                                // 100 TB (arbitrarily large value)
+		DefaultLimitUnit: "TB",
 	}
 	return d.storage.CreateEmptyFile(d.filePath(quotaFile), &q)
 }

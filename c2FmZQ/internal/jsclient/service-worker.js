@@ -297,6 +297,7 @@ self.addEventListener('message', async event => {
         'updateProfile',
         'deleteAccount',
         'generateOTP',
+        'adminUsers',
       ];
       if (!methods.includes(event.data.func)) {
         console.log('SW RPC method not allowed', event.data.func);

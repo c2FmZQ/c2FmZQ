@@ -195,6 +195,9 @@ func (s *Server) handleLogin(req *http.Request) *stingle.Response {
 	if u.OTPKey != "" {
 		resp.AddPart("_otpEnabled", "1")
 	}
+	if u.Admin {
+		resp.AddPart("_admin", "1")
+	}
 	if u.NeedApproval {
 		resp.AddInfo("Your account hasn't been approved yet. Some features are disabled.")
 	}

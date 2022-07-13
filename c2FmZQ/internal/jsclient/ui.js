@@ -88,7 +88,7 @@ class UI {
     if (p) {
       this.passphraseInput_.value = p;
       this.setPassphrase_();
-      return
+      return;
     }
     this.promptingForPassphrase_ = true;
     this.setPassphraseButton_.textContent = 'Set';
@@ -279,10 +279,11 @@ class UI {
     }
 
     main.sendRPC('isLoggedIn')
-    .then(({account, otpEnabled, needKey}) => {
+    .then(({account, otpEnabled, isAdmin, needKey}) => {
       if (account !== '') {
         this.accountEmail_ = account;
         this.otpEnabled_ = otpEnabled;
+        this.isAdmin_ = isAdmin;
         this.loggedInAccount_.textContent = account;
         this.showLoggedIn_();
         if (needKey) {
@@ -327,12 +328,18 @@ class UI {
           text: 'Preferences',
           onclick: this.showPreferences_.bind(this),
         },
-        {
-          text: 'Logout',
-          onclick: this.logout_.bind(this),
-        },
       ],
     };
+    if (this.isAdmin_) {
+      params.items.push({
+        text: 'Admin',
+        onclick: this.showAdminConsole_.bind(this),
+      });
+    }
+    params.items.push({
+      text: 'Logout',
+      onclick: this.logout_.bind(this),
+    });
     this.contextMenu_(params);
   }
 
@@ -445,9 +452,10 @@ class UI {
       otpCode: this.otpInput_.value,
     };
     return main.sendRPC(this.tabs_[this.selectedTab_].rpc, args)
-    .then(({otpEnabled, needKey}) => {
+    .then(({otpEnabled, isAdmin, needKey}) => {
       this.accountEmail_ = this.emailInput_.value;
       this.otpEnabled_ = otpEnabled;
+      this.isAdmin_ = isAdmin;
       document.querySelector('#loggedin-account').textContent = this.emailInput_.value;
       this.passwordInput_.value = '';
       this.passwordInput2_.value = '';
@@ -1852,7 +1860,7 @@ class UI {
     content.id = 'profile-content';
 
     const onchange = () => {
-      delButton.disabled = pass.value == '';
+      delButton.disabled = pass.value === '';
       if (pass.value === '') {
         return false;
       }
@@ -2243,5 +2251,222 @@ class UI {
       opts.appendChild(label);
     });
     content.appendChild(opts);
+  }
+
+  async showAdminConsole_() {
+    const data = await main.sendRPC('adminUsers');
+    const {content} = this.commonPopup_({
+      title: 'Admin Console',
+      className: 'popup admin-console-popup',
+    });
+    return this.showAdminConsoleData_(content, data);
+  }
+
+  async showAdminConsoleData_(content, data) {
+    while (content.firstChild) {
+      content.removeChild(content.firstChild);
+    }
+    const changes = () => {
+      const out = {};
+      for (let p of Object.keys(data).filter(k => k.startsWith('_'))) {
+        out[p.substring(1)] = data[p];
+      }
+      out.users = [];
+      for (let u of data.users) {
+        const keys = Object.keys(u).filter(k => k.startsWith('_'));
+        if (keys.length === 0) {
+          continue;
+        }
+        const n = {
+          userId: u.userId,
+        };
+        for (let p of keys) {
+          n[p.substring(1)] = u[p];
+        }
+        out.users.push(n);
+      }
+      if (out.users.length === 0) {
+        delete out.users;
+      }
+      if (Object.keys(out).length === 0) {
+        return null;
+      }
+      out.tag = data.tag;
+      return out;
+    };
+    const onchange = () => {
+      saveButton.disabled = changes() === null;
+    };
+    const saveButton = document.createElement('button');
+    saveButton.textContent = 'Save changes';
+    saveButton.disabled = true;
+    saveButton.addEventListener('click', () => {
+      const c = changes();
+      content.querySelectorAll('input,select').forEach(elem => {
+        elem.disabled = true;
+      });
+      main.sendRPC('adminUsers', c)
+      .then(data => {
+        this.popupMessage('Admin', 'Data updated', 'info');
+        return this.showAdminConsoleData_(content, data);
+      })
+      .finally(() => {
+        content.querySelectorAll('input,select').forEach(elem => {
+          elem.disabled = false;
+        });
+      });
+    });
+    content.appendChild(saveButton);
+
+    const defQuotaDiv = document.createElement('div');
+    defQuotaDiv.id = 'admin-console-default-quota-div';
+    const defQuotaLabel = document.createElement('label');
+    defQuotaLabel.htmlFor = 'admin-console-default-quota-value';
+    defQuotaLabel.textContent = 'Default quota:';
+    defQuotaDiv.appendChild(defQuotaLabel);
+    const defQuotaValue = document.createElement('input');
+    defQuotaValue.id = 'admin-console-default-quota-value';
+    defQuotaValue.type = 'number';
+    defQuotaValue.size = 5;
+    defQuotaValue.value = data.defaultQuota;
+    defQuotaValue.addEventListener('change', () => {
+      const v = parseInt(defQuotaValue.value);
+      if (v === data.defaultQuota) {
+        delete data._defaultQuota;
+        defQuotaValue.classList.remove('changed');
+      } else {
+        data._defaultQuota = v;
+        defQuotaValue.classList.add('changed');
+      }
+      onchange();
+    });
+    defQuotaDiv.appendChild(defQuotaValue);
+    const defQuotaUnit = document.createElement('select');
+    for (let u of ['','MB','GB','TB']) {
+      const opt = document.createElement('option');
+      opt.value = u;
+      opt.textContent = u;
+      opt.selected = u === data.defaultQuotaUnit;
+      defQuotaUnit.appendChild(opt);
+    }
+    defQuotaUnit.addEventListener('change', () => {
+      const v = defQuotaUnit.options[defQuotaUnit.options.selectedIndex].value;
+      if (v === data.defaultQuotaUnit || (v === '' && data.defaultQuotaUnit === undefined)) {
+        delete data._defaultQuotaUnit;
+        defQuotaUnit.classList.remove('changed');
+      } else {
+        data._defaultQuotaUnit = v;
+        defQuotaUnit.classList.add('changed');
+      }
+      onchange();
+    });
+    defQuotaDiv.appendChild(defQuotaUnit);
+    content.appendChild(defQuotaDiv);
+
+    const table = document.createElement('div');
+    table.id = 'admin-console-table';
+    content.appendChild(table);
+
+    table.innerHTML = '<div>Email</div><div>Locked</div><div>Approved</div><div>Admin</div><div>Quota</div>';
+
+    for (let user of data.users) {
+      const email = document.createElement('div');
+      email.textContent = user.email;
+      table.appendChild(email);
+
+      const lockedDiv = document.createElement('div');
+      const locked = document.createElement('input');
+      locked.type = 'checkbox';
+      locked.checked = user.locked;
+      locked.addEventListener('change', () => {
+        const v = locked.checked;
+        if (v === user.locked) {
+          delete user._locked;
+          locked.classList.remove('changed');
+        } else {
+          user._locked = v;
+          locked.classList.add('changed');
+        }
+        onchange();
+      });
+      lockedDiv.appendChild(locked);
+      table.appendChild(lockedDiv);
+
+      const approvedDiv = document.createElement('div');
+      const approved = document.createElement('input');
+      approved.type = 'checkbox';
+      approved.checked = user.approved;
+      approved.addEventListener('change', () => {
+        const v = approved.checked;
+        if (v === user.approved) {
+          delete user._approved;
+          approved.classList.remove('changed');
+        } else {
+          user._approved = v;
+          approved.classList.add('changed');
+        }
+        onchange();
+      });
+      approvedDiv.appendChild(approved);
+      table.appendChild(approvedDiv);
+
+      const adminDiv = document.createElement('div');
+      const admin = document.createElement('input');
+      admin.type = 'checkbox';
+      admin.checked = user.admin;
+      admin.addEventListener('change', () => {
+        const v = admin.checked;
+        if (v === user.admin) {
+          delete user._admin;
+          admin.classList.remove('changed');
+        } else {
+          user._admin = v;
+          admin.classList.add('changed');
+        }
+        onchange();
+      });
+      adminDiv.appendChild(admin);
+      table.appendChild(adminDiv);
+
+      const quotaDiv = document.createElement('div');
+      quotaDiv.className = 'quota-cell';
+      const quotaValue = document.createElement('input');
+      quotaValue.type = 'number';
+      quotaValue.size = 5;
+      quotaValue.value = user.quota;
+      quotaValue.addEventListener('change', () => {
+        const v = parseInt(quotaValue.value);
+        if ((quotaValue.value === '' && user.quota === undefined) || v === user.quota) {
+          delete user._quota;
+          quotaValue.classList.remove('changed');
+        } else {
+          user._quota = quotaValue.value === '' ? -1 : v;
+          quotaValue.classList.add('changed');
+        }
+        onchange();
+      });
+      quotaDiv.appendChild(quotaValue);
+      const quotaUnit = document.createElement('select');
+      for (let u of ['','MB','GB','TB']) {
+        const opt = document.createElement('option');
+        opt.value = u;
+        opt.textContent = u;
+        opt.selected = u === user.quotaUnit;
+        quotaUnit.appendChild(opt);
+      }
+      quotaUnit.addEventListener('change', () => {
+        const v = quotaUnit.options[quotaUnit.options.selectedIndex].value;
+        if (v === user.quotaUnit || (v === '' && user.quotaUnit === undefined)) {
+          delete user._quotaUnit;
+          quotaUnit.classList.remove('changed');
+        } else {
+          user._quotaUnit = v;
+          quotaUnit.classList.add('changed');
+        }
+        onchange();
+      });
+      quotaDiv.appendChild(quotaUnit);
+      table.appendChild(quotaDiv);
+    }
   }
 }
