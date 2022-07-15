@@ -1483,8 +1483,7 @@ class c2FmZQClient {
 
       let ctype = 'application/octet-stream';
       switch (ext) {
-        case '.jpg':
-        case '.jpeg':
+        case '.jpg': case '.jpeg':
           ctype = 'image/jpeg'; break;
         case '.png':
           ctype = 'image/png'; break;
@@ -1494,12 +1493,23 @@ class c2FmZQClient {
           ctype = 'image/webp'; break;
         case '.mp4':
           ctype = 'video/mp4'; break;
+        case '.avi':
+          ctype = 'video/avi'; break;
+        case '.wmv':
+          ctype = 'video/x-ms-wmv'; break;
+        case '.3gp':
+          ctype = 'video/3gpp'; break;
+        case '.m1v': case '.m2v': case '.mp2': case '.mpg': case '.mpeg':
+          ctype = 'video/mpeg'; break;
+        case '.qt': case '.mov': case '.moov':
+          ctype = 'video/quicktime'; break;
+        case '.mjpg':
+          ctype = 'video/x-motion-jpeg'; break;
         case '.pdf':
           ctype = 'application/pdf'; break;
         case '.txt':
           ctype = 'text/plain'; break;
-        case '.gz':
-        case '.tgz':
+        case '.gz': case '.tgz':
           ctype = 'application/gzip'; break;
         default:
           console.log(`SW Using default content-type for ${ext}`); break;
