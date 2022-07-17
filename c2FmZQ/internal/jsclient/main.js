@@ -32,7 +32,7 @@ window.addEventListener('load', () => {
   window.ui = new UI();
   document.getElementById('version').textContent = VERSION + (DEVEL?' DEVEL':'');
   window.addEventListener('unhandledrejection', event => {
-    ui.popupMessage('ERROR', event.reason, 'error');
+    ui.popupMessage(event.reason);
   });
 });
 
@@ -73,10 +73,10 @@ class Main {
           this.resetServiceWorker();
           break;
         case 'error':
-          ui.popupMessage('ERROR', event.data.msg, 'error');
+          ui.popupMessage(event.data.msg);
           break;
         case 'info':
-          ui.popupMessage('INFO', event.data.msg, 'info');
+          ui.popupMessage(event.data.msg, 'info');
           break;
         case 'loggedout':
           window.location.reload();

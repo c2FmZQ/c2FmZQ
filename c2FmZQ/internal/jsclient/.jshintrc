@@ -25,6 +25,7 @@
     "CryptographyKey": true,
     "DEVEL": true,
     "FilerobotImageEditor": true,
+    "Lang": true,
     "main": true,
     "ReadableStream": true,
     "SecureStore": true,
