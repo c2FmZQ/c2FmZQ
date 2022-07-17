@@ -19,6 +19,8 @@
 /* jshint -W083 */
 'use strict';
 
+let _T;
+
 class UI {
   static SHOW_ITEMS_INCREMENT = 10;
 
@@ -32,6 +34,27 @@ class UI {
       lastDate: '',
       shown: UI.SHOW_ITEMS_INCREMENT,
     };
+
+    _T = Lang.text;
+
+    const langSelect = document.querySelector('#language');
+    while (langSelect.firstChild) {
+      langSelect.removeChild(langSelect.firstChild);
+    }
+    const languages = Lang.languages();
+    for (let l of Object.keys(languages)) {
+      const opt = document.createElement('option');
+      opt.value = l;
+      opt.textContent = languages[l];
+      if (l === Lang.current) {
+        opt.selected = true;
+      }
+      langSelect.appendChild(opt);
+    }
+    langSelect.addEventListener('change', () => {
+      localStorage.setItem('lang', langSelect.options[langSelect.options.selectedIndex].value);
+      window.location.reload();
+    });
 
     this.title_ = document.querySelector('title');
     this.passphraseInput_ = document.querySelector('#passphrase-input');
@@ -56,6 +79,18 @@ class UI {
     this.trashButton_ = document.querySelector('#trash-button');
     this.loggedInAccount_ = document.querySelector('#loggedin-account');
 
+    document.querySelector('title').textContent = _T('login');
+    document.querySelector('#login-tab').textContent = _T('login');
+    document.querySelector('#register-tab').textContent = _T('register');
+    document.querySelector('#recover-tab').textContent = _T('recover');
+    document.querySelector('label[for=email]').textContent = _T('form-email');
+    document.querySelector('label[for=password]').textContent = _T('form-password');
+    document.querySelector('label[for=password2]').textContent = _T('form-confirm-password');
+    document.querySelector('label[for=backup-phrase]').textContent = _T('form-backup-phrase');
+    document.querySelector('label[for=backup-keys-checkbox]').textContent = _T('form-backup-keys?');
+    document.querySelector('label[for=code]').textContent = _T('form-otp-code');
+    document.querySelector('#login-button').textContent = _T('login');
+
     this.passphraseInput_.addEventListener('keyup', e => {
       if (e.key === 'Enter') {
         this.setPassphrase_();
@@ -65,14 +100,14 @@ class UI {
     this.showPassphraseButton_.addEventListener('click', () => {
       if (this.passphraseInput_.type === 'text') {
         this.passphraseInput_.type = 'password';
-        this.showPassphraseButton_.textContent = 'Show';
+        this.showPassphraseButton_.textContent = _T('show');
       } else {
         this.passphraseInput_.type = 'text';
-        this.showPassphraseButton_.textContent = 'Hide';
+        this.showPassphraseButton_.textContent = _T('hide');
       }
     });
     this.skipPassphraseButton_.addEventListener('click', () => {
-      if (!window.confirm('Skipping the passphrase is less secure. Never used this option on a public or shared computer. Continue?')) {
+      if (!window.confirm(_T('skip-passphrase-warning'))) {
         return;
       }
       const passphrase = btoa(String.fromCharCode(...window.crypto.getRandomValues(new Uint8Array(64))));
@@ -98,13 +133,13 @@ class UI {
   }
 
   promptForBackupPhrase_() {
-    return main.sendRPC('restoreSecretKey', window.prompt('Enter backup phrase:'))
+    return main.sendRPC('restoreSecretKey', window.prompt(_T('enter-backup-phrase')))
     .then(() => {
       this.refresh_();
     })
     .catch(err => {
       console.log('restoreSecretKey failed', err);
-      this.popupMessage('Backup Phrase', err, 'error');
+      this.popupMessage(err);
       window.setTimeout(this.promptForBackupPhrase_.bind(this), 10000);
     });
   }
@@ -134,7 +169,7 @@ class UI {
       return;
     }
     this.resetDbButton_.className = 'resetdb-button';
-    this.popupMessage('Error', err, 'error');
+    this.popupMessage(err);
   }
 
   startUI() {
@@ -220,10 +255,10 @@ class UI {
     this.tabs_ = {
       login: {
         elem: document.querySelector('#login-tab'),
-        message: 'Logging in',
+        message: _T('logging-in'),
         rpc: 'login',
         click: () => {
-          this.passwordInputLabel_.textContent = 'Password:';
+          this.passwordInputLabel_.textContent = _T('form-password');
           this.passwordInput2Label_.style.display = 'none';
           this.passwordInput2_.style.display = 'none';
           this.backupPhraseInputLabel_.style.display = 'none';
@@ -232,16 +267,16 @@ class UI {
           this.backupKeysCheckboxLabel_.style.display = 'none';
           this.otpInputLabel_.style.display = '';
           this.otpInput_.style.display = '';
-          this.loginButton_.textContent = 'Login';
-          this.title_.textContent = 'Login';
+          this.loginButton_.textContent = _T('login');
+          this.title_.textContent = _T('login');
         },
       },
       register: {
         elem: document.querySelector('#register-tab'),
-        message: 'Creating account',
+        message: _T('creating-account'),
         rpc: 'createAccount',
         click: () => {
-          this.passwordInputLabel_.textContent = 'New password:';
+          this.passwordInputLabel_.textContent = _T('form-new-password');
           this.passwordInput2Label_.style.display = '';
           this.passwordInput2_.style.display = '';
           this.backupPhraseInputLabel_.style.display = 'none';
@@ -250,16 +285,16 @@ class UI {
           this.backupKeysCheckboxLabel_.style.display = '';
           this.otpInputLabel_.style.display = 'none';
           this.otpInput_.style.display = 'none';
-          this.loginButton_.textContent = 'Create Account';
-          this.title_.textContent = 'Register';
+          this.loginButton_.textContent = _T('create-account');
+          this.title_.textContent = _T('register');
         },
       },
       recover: {
         elem: document.querySelector('#recover-tab'),
-        message: 'Recovering account',
+        message: _T('recovering-account'),
         rpc: 'recoverAccount',
         click: () => {
-          this.passwordInputLabel_.textContent = 'New password:';
+          this.passwordInputLabel_.textContent = _T('form-new-password');
           this.passwordInput2Label_.style.display = '';
           this.passwordInput2_.style.display = '';
           this.backupPhraseInputLabel_.style.display = '';
@@ -268,8 +303,8 @@ class UI {
           this.backupKeysCheckboxLabel_.style.display = '';
           this.otpInputLabel_.style.display = 'none';
           this.otpInput_.style.display = 'none';
-          this.loginButton_.textContent = 'Recover Account';
-          this.title_.textContent = 'Recover Account';
+          this.loginButton_.textContent = _T('recover-account');
+          this.title_.textContent = _T('recover-account');
         },
       },
     };
@@ -317,44 +352,41 @@ class UI {
       y: event.y,
       items: [
         {
-          text: 'Profile',
+          text: _T('profile'),
           onclick: this.showProfile_.bind(this),
         },
         {
-          text: 'Key backup',
+          text: _T('key-backup'),
           onclick: this.showBackupPhrase_.bind(this),
         },
         {
-          text: 'Preferences',
+          text: _T('prefs'),
           onclick: this.showPreferences_.bind(this),
         },
       ],
     };
     if (this.isAdmin_) {
       params.items.push({
-        text: 'Admin',
+        text: _T('admin-console'),
         onclick: this.showAdminConsole_.bind(this),
       });
     }
     params.items.push({
-      text: 'Logout',
+      text: _T('logout'),
       onclick: this.logout_.bind(this),
     });
     this.contextMenu_(params);
   }
 
-  popupMessage(title, message, className) {
+  popupMessage(message, className) {
     const div = document.createElement('div');
-    div.className = className;
+    div.className = className || 'error';
     const v = document.createElement('span');
     v.textContent = '✖';
     v.style = 'float: right;';
-    const t = document.createElement('div');
-    t.textContent = title;
     const m = document.createElement('div');
     m.textContent = message;
     div.appendChild(v);
-    div.appendChild(t);
     div.appendChild(m);
 
     const container = document.querySelector('#popup-messages');
@@ -379,7 +411,7 @@ class UI {
   showError_(e) {
     console.log('Show Error', e);
     console.trace();
-    this.popupMessage('ERROR', e.toString(), 'error');
+    this.popupMessage(e.toString());
   }
 
   clearElement_(id) {
@@ -413,7 +445,7 @@ class UI {
   }
 
   showLoggedOut_() {
-    this.title_.textContent = 'Login';
+    this.title_.textContent = _T('login');
     this.clearView_();
     this.selectedTab_ = 'login';
     this.tabs_[this.selectedTab_].click();
@@ -428,7 +460,7 @@ class UI {
 
   async login_() {
     if (this.selectedTab_ !== 'login' && this.passwordInput_.value !== this.passwordInput2_.value) {
-      this.popupMessage('ERROR', 'Passwords don\'t match', 'error');
+      this.popupMessage(_T('new-pass-doesnt-match'));
       return;
     }
     let old = this.loginButton_.textContent;
@@ -474,13 +506,13 @@ class UI {
       if (e === 'nok') {
         switch(this.selectedTab_) {
           case 'login':
-            this.showError_('Login failed');
+            this.showError_(_T('login-failed'));
             break;
           case 'register':
-            this.showError_('Account creation failed');
+            this.showError_(_T('create-account-failed'));
             break;
           case 'recover':
-            this.showError_('Account recovery failed');
+            this.showError_(_T('recover-account-failed'));
             break;
         }
       } else {
@@ -548,11 +580,11 @@ class UI {
       y: event.y,
       items: [
         {
-          text: 'Upload files',
+          text: _T('upload-files'),
           onclick: this.showUploadView_.bind(this),
         },
         {
-          text: 'Create collection',
+          text: _T('create-collection'),
           onclick: () => this.collectionProperties_(),
         },
       ],
@@ -589,19 +621,19 @@ class UI {
       let params = { x: event.x, y: event.y, items: [] };
       if (this.galleryState_.collection !== c.collection) {
         params.items.push({
-          text: 'Open',
+          text: _T('open'),
           onclick: () => this.switchView_({collection: c.collection}),
         });
         if ((this.galleryState_.collection !== 'trash' || c.collection === 'gallery') && this.galleryState_.content.files.some(f => f.selected)) {
           const f = this.galleryState_.content.files.find(f => f.selected);
           if (this.galleryState_.collection !== 'trash') {
             params.items.push({
-              text: 'Copy selected files',
+              text: _T('copy-selected'),
               onclick: () => this.moveFiles_({file: f.file, collection: f.collection, move: false}, c.collection),
             });
           }
           params.items.push({
-            text: 'Move selected files',
+            text: _T('move-selected'),
             onclick: () => this.moveFiles_({file: f.file, collection: f.collection, move: true}, c.collection),
           });
         }
@@ -609,25 +641,25 @@ class UI {
       if (c.collection !== 'trash' && c.collection !== 'gallery') {
         if (c.isOwner) {
           params.items.push({
-            text: 'Default cover',
+            text: _T('default-cover'),
             onclick: () => this.changeCover_(c.collection, ''),
           });
           params.items.push({
-            text: 'No cover',
+            text: _T('no-cover'),
             onclick: () => this.changeCover_(c.collection, '__b__'),
           });
           params.items.push({
-            text: 'Delete',
+            text: _T('delete'),
             onclick: () => this.deleteCollection_(c.collection),
           });
         } else {
           params.items.push({
-            text: 'Leave',
+            text: _T('leave'),
             onclick: () => this.leaveCollection_(c.collection),
           });
         }
         params.items.push({
-          text: 'Properties',
+          text: _T('properties'),
           onclick: () => this.collectionProperties_(c),
         });
       }
@@ -643,6 +675,9 @@ class UI {
       const c = collections[i];
       if (c.collection === 'trash' && this.galleryState_.collection !== c.collection) {
         continue;
+      }
+      if (c.name === 'gallery' || c.name === 'trash') {
+        c.name = _T(c.name);
       }
       const div = document.createElement('div');
       div.className = 'collectionThumbdiv';
@@ -666,8 +701,8 @@ class UI {
         this.switchView_(c);
       });
       if (this.galleryState_.collection === c.collection) {
-        this.title_.textContent = c.name;
         collectionName = c.name;
+        this.title_.textContent = c.name;
         members = c.members;
         scrollTo = div;
         isOwner = c.isOwner;
@@ -711,11 +746,11 @@ class UI {
     br.clear = 'all';
     g.appendChild(br);
     const h1 = document.createElement('h1');
-    h1.textContent = 'Collection: ' + collectionName;
+    h1.textContent = _T('collection:', collectionName);
     if (this.galleryState_.collection === 'trash') {
       const button = document.createElement('button');
       button.className = 'empty-trash';
-      button.textContent = 'Empty';
+      button.textContent = _T('empty');
       button.addEventListener('click', e => {
         this.emptyTrash_(e.target);
       });
@@ -725,7 +760,7 @@ class UI {
     if (members?.length > 0) {
       UI.sortBy(members, 'email');
       const div = document.createElement('div');
-      div.textContent = 'Shared with ' + members.map(m => m.email).join(', ');
+      div.textContent = _T('shared-with', members.map(m => m.email).join(', '));
       g.appendChild(div);
     }
 
@@ -775,45 +810,45 @@ class UI {
     const showContextMenu = (event, f) => {
       let params = { x: event.x, y: event.y, items: [] };
       params.items.push({
-        text: 'Open',
+        text: _T('open'),
         onclick: () => this.setUpPopup_(f),
       });
       if (f.isImage && (this.galleryState_.isOwner || this.galleryState_.canAdd)) {
         params.items.push({
-          text: 'Edit',
+          text: _T('edit'),
           onclick: () => this.showEdit_(f),
         });
       }
       params.items.push({
-        text: f.selected ? 'Unselect' : 'Select',
+        text: f.selected ? _T('unselect') : _T('select'),
         onclick: f.select,
       });
       if (this.galleryState_.isOwner) {
         if (this.galleryState_.collection !== 'trash') {
           params.items.push({
-            text: 'Move to trash',
-            onclick: () => confirm('Move to trash?') && this.moveFiles_({file: f.file, collection: f.collection, move: true}, 'trash'),
+            text: _T('move-to-trash'),
+            onclick: () => confirm(_T('confirm-move-to-trash')) && this.moveFiles_({file: f.file, collection: f.collection, move: true}, 'trash'),
           });
         } else {
           params.items.push({
-            text: 'Move to gallery',
-            onclick: () => confirm('Move to gallery?') && this.moveFiles_({file: f.file, collection: f.collection, move: true}, 'gallery'),
+            text: _T('move-to-gallery'),
+            onclick: () => confirm(_T('confirm-move-to-gallery')) && this.moveFiles_({file: f.file, collection: f.collection, move: true}, 'gallery'),
           });
           params.items.push({
-            text: 'Delete permanently',
-            onclick: () => confirm('Delete permanently?') && this.deleteFiles_({file: f.file, collection: f.collection}),
+            text: _T('delete-perm'),
+            onclick: () => confirm(_T('confirm-delete-perm')) && this.deleteFiles_({file: f.file, collection: f.collection}),
           });
         }
         if (f.collection !== 'trash' && f.collection !== 'gallery') {
           params.items.push({
-            text: 'Use as cover',
+            text: _T('use-as-cover'),
             onclick: () => this.changeCover_(f.collection, f.file),
           });
         }
       }
       if (this.galleryState_.content.files.filter(f => f.selected).length > 1) {
         params.items.push({
-          text: 'Unselect all',
+          text: _T('unselect-all'),
           onclick: () => {
             this.galleryState_.content.files.forEach(f => {
               if (f.selected) f.select();
@@ -961,12 +996,16 @@ class UI {
       return false;
     }
     if (file.collection === 'trash' && collection !== 'gallery') {
-      this.popupMessage('', 'Must move from trash to gallery', 'info');
+      this.popupMessage(_T('move-to-gallery-only'), 'info');
       return false;
     }
     return main.sendRPC('moveFiles', file.collection, collection, files, file.move)
       .then(() => {
-        this.popupMessage('', (file.move ? 'Moved' : 'Copied')+ ` ${files.length} file`+(files.length > 1 ? 's' : ''), 'info');
+        if (file.move) {
+          this.popupMessage(files.length === 1 ? _T('moved-one-file') : _T('moved-many-files', files.length), 'info');
+        } else {
+          this.popupMessage(files.length === 1 ? _T('copied-one-file') : _T('copied-many-files', files.length), 'info');
+        }
         this.refresh_();
       })
       .catch(e => {
@@ -994,7 +1033,7 @@ class UI {
     }
     return main.sendRPC('deleteFiles', files)
       .then(() => {
-        this.popupMessage('', `Deleted ${files.length} file`+(files.length > 1 ? 's' : ''), 'info');
+        this.popupMessage(files.length === 1 ? _T('deleted-one-file') : _T('deleted-many-files', files.length), 'info');
         this.refresh_();
       })
       .catch(e => {
@@ -1028,7 +1067,7 @@ class UI {
   }
 
   async leaveCollection_(collection) {
-    if (!window.confirm('Are you sure you want to leave this collection?')) {
+    if (!window.confirm(_T('confirm-leave'))) {
       return;
     }
     main.sendRPC('leaveCollection', collection)
@@ -1041,7 +1080,7 @@ class UI {
   }
 
   async deleteCollection_(collection) {
-    if (!window.confirm('Are you sure you want to delete this collection?')) {
+    if (!window.confirm(_T('confirm-delete'))) {
       return;
     }
     main.sendRPC('deleteCollection', collection)
@@ -1216,7 +1255,7 @@ class UI {
       const anchor = document.createElement('a');
       anchor.href = f.url;
       anchor.target = '_blank';
-      anchor.textContent = 'Open document';
+      anchor.textContent = _T('open-doc');
       content.classList.add('popup-download');
       content.appendChild(anchor);
     }
@@ -1227,7 +1266,7 @@ class UI {
       return;
     }
     const {content} = this.commonPopup_({
-      title: 'Edit ' +f.fileName,
+      title: _T('edit:', f.fileName),
       className: 'popup photo-editor-popup',
       disableClickOutsideClose: true,
       onclose: () => editor.terminate(),
@@ -1282,7 +1321,7 @@ class UI {
     }
     const contacts = await main.sendRPC('getContacts');
     const {content, close} = this.commonPopup_({
-      title: 'Properties: ' + (c.name !== '' ? c.name : 'NEW COLLECTION'),
+      title: _T('properties:', c.name !== '' ? c.name : _T('new-collection')),
     });
     content.id = 'collection-properties';
 
@@ -1344,7 +1383,7 @@ class UI {
       const any = Object.keys(getChanges()).length > 0;
       const elem = content.querySelector('#collection-properties-apply-button');
       elem.disabled = !any;
-      elem.textContent = any ? 'Apply Changes' : 'No Changes';
+      elem.textContent = any ? _T('apply-changes') : _T('no-changes');
     };
 
     const applyChanges = async () => {
@@ -1385,7 +1424,7 @@ class UI {
 
     const nameLabel = document.createElement('div');
     nameLabel.id = 'collection-properties-name-label';
-    nameLabel.textContent = 'Name';
+    nameLabel.textContent = _T('name');
     content.appendChild(nameLabel);
 
     if (c.isOwner) {
@@ -1410,7 +1449,7 @@ class UI {
 
     const sharedLabel = document.createElement('div');
     sharedLabel.id = 'collection-properties-shared-label';
-    sharedLabel.textContent = 'Shared';
+    sharedLabel.textContent = _T('shared');
     content.appendChild(sharedLabel);
 
     if (c.isOwner) {
@@ -1423,7 +1462,7 @@ class UI {
     } else {
       const sharedDiv = document.createElement('div');
       sharedDiv.id = 'collection-properties-shared-div';
-      sharedDiv.textContent = c.isShared ? 'Yes' : 'No';
+      sharedDiv.textContent = c.isShared ? _T('yes') : _T('no');
       content.appendChild(sharedDiv);
     }
 
@@ -1431,7 +1470,7 @@ class UI {
     permLabel.id = 'collection-properties-perm-label';
     permLabel.className = 'sharing-setting';
     permLabel.style.display = c.isShared ? '' : 'none';
-    permLabel.textContent = 'Permissions';
+    permLabel.textContent = _T('permissions');
     content.appendChild(permLabel);
 
     const permDiv = document.createElement('div');
@@ -1446,7 +1485,7 @@ class UI {
     permAdd.disabled = !c.isOwner;
     permAdd.addEventListener('change', onChange);
     const permAddLabel = document.createElement('label');
-    permAddLabel.textContent = 'Add';
+    permAddLabel.textContent = _T('perm-add');
     permAddLabel.htmlFor = 'collection-properties-perm-add';
     permDiv.appendChild(permAdd);
     permDiv.appendChild(permAddLabel);
@@ -1458,7 +1497,7 @@ class UI {
     permCopy.disabled = !c.isOwner;
     permCopy.addEventListener('change', onChange);
     const permCopyLabel = document.createElement('label');
-    permCopyLabel.textContent = 'Copy';
+    permCopyLabel.textContent = _T('perm-copy');
     permCopyLabel.htmlFor = 'collection-properties-perm-copy';
     permDiv.appendChild(permCopy);
     permDiv.appendChild(permCopyLabel);
@@ -1470,7 +1509,7 @@ class UI {
     permShare.disabled = !c.isOwner;
     permShare.addEventListener('change', onChange);
     const permShareLabel = document.createElement('label');
-    permShareLabel.textContent = 'Share';
+    permShareLabel.textContent = _T('perm-share');
     permShareLabel.htmlFor = 'collection-properties-perm-share';
     permDiv.appendChild(permShare);
     permDiv.appendChild(permShareLabel);
@@ -1481,7 +1520,7 @@ class UI {
     membersLabel.id = 'collection-properties-members-label';
     membersLabel.className = 'sharing-setting';
     membersLabel.style.display = c.isShared ? '' : 'none';
-    membersLabel.textContent = 'Members';
+    membersLabel.textContent = _T('members');
     content.appendChild(membersLabel);
 
     const membersDiv = document.createElement('div');
@@ -1492,7 +1531,7 @@ class UI {
 
     const applyButton = document.createElement('button');
     applyButton.id = 'collection-properties-apply-button';
-    applyButton.textContent = 'No Changes';
+    applyButton.textContent = _T('no-changes');
     applyButton.disabled = true;
     applyButton.addEventListener('click', applyChanges);
     content.appendChild(applyButton);
@@ -1525,13 +1564,13 @@ class UI {
         const input = document.createElement('input');
         input.type = 'search';
         input.id = 'collection-properties-members-input';
-        input.placeholder = 'contact email';
+        input.placeholder = _T('contact-email');
         input.setAttribute('list', 'collection-properties-members-contacts');
         membersDiv.appendChild(input);
 
         const addButton = document.createElement('button');
         addButton.id = 'collection-properties-members-add-button';
-        addButton.textContent = 'Add';
+        addButton.textContent = _T('add-member');
         const addFunc = () => {
           const c = contacts.find(e => e.email === input.value);
           if (c) {
@@ -1554,7 +1593,7 @@ class UI {
           })
           .catch(err => {
             if (err !== 'nok') {
-              this.popupMessage('ERROR', err, 'error');
+              this.popupMessage(err);
             }
           })
           .finally(() => {
@@ -1573,7 +1612,7 @@ class UI {
       }
       if (members.length === 0) {
         const div = document.createElement('div');
-        div.innerHTML = '<i>none</i>';
+        div.innerHTML = '<i>'+_T('none')+'</i>';
         membersDiv.appendChild(div);
       }
       for (let i = 0; i < members.length; i++) {
@@ -1602,16 +1641,16 @@ class UI {
   }
 
   formatSize_(s) {
-    if (s >= 1024*1024*1024) return Math.floor(s * 100 / 1024 / 1024 / 1024) / 100 + ' GiB';
-    if (s >= 1024*1024) return Math.floor(s * 100 / 1024 / 1024) / 100 + ' MiB';
-    if (s >= 1024) return Math.floor(s * 100 / 1024) / 100 + ' KiB';
-    return s + ' B';
+    if (s >= 1024*1024*1024) return _T('GiB', Math.floor(s * 100 / 1024 / 1024 / 1024) / 100);
+    if (s >= 1024*1024) return _T('MiB', Math.floor(s * 100 / 1024 / 1024) / 100);
+    if (s >= 1024) return _T('KiB', Math.floor(s * 100 / 1024) / 100);
+    return _T('B', s);
   }
 
   formatSizeMB_(s) {
-    if (s >= 1024*1024) return Math.floor(s * 100 / 1024 / 1024) / 100 + ' TiB';
-    if (s >= 1024) return Math.floor(s * 100 / 1024) / 100 + ' GiB';
-    return s + ' MiB';
+    if (s >= 1024*1024) return _T('TiB', Math.floor(s * 100 / 1024 / 1024) / 100);
+    if (s >= 1024) return _T('GiB', Math.floor(s * 100 / 1024) / 100);
+    return _T('MiB', s);
   }
 
   async showUploadView_() {
@@ -1632,17 +1671,17 @@ class UI {
       }
     }
     const {popup, content, close} = this.commonPopup_({
-      title: `Upload: ${collectionName}`,
+      title: _T('upload:', collectionName),
       className: 'popup upload',
     });
 
     const h1 = document.createElement('h1');
-    h1.textContent = 'Collection: ' + collectionName;
+    h1.textContent = _T('collection:', collectionName);
     content.appendChild(h1);
     if (members?.length > 0) {
       UI.sortBy(members, 'email');
       const div = document.createElement('div');
-      div.textContent = 'Shared with ' + members.map(m => m.email).join(', ');
+      div.textContent = _T('shared-with', members.map(m => m.email).join(', '));
       content.appendChild(div);
     }
 
@@ -1673,14 +1712,14 @@ class UI {
         div.className = 'upload-item-attrs';
         elem.appendChild(div);
         const nameSpan = document.createElement('span');
-        nameSpan.textContent = `Name: ${f.name}`;
+        nameSpan.textContent = _T('name:', f.name);
         div.appendChild(nameSpan);
         const sizeSpan = document.createElement('span');
-        sizeSpan.textContent = 'Size: ' + this.formatSize_(f.size);
+        sizeSpan.textContent = _T('size:', this.formatSize_(f.size));
         div.appendChild(sizeSpan);
         const removeButton = document.createElement('button');
         removeButton.className = 'upload-item-remove-button';
-        removeButton.textContent = 'Remove';
+        removeButton.textContent = _T('remove');
         removeButton.addEventListener('click', () => {
           files = files.filter(f => f.elem !== elem);
           processFiles([]);
@@ -1698,7 +1737,7 @@ class UI {
       if (files.length > 0) {
         const uploadButton = document.createElement('button');
         uploadButton.className = 'upload-file-list-upload-button';
-        uploadButton.textContent = 'Upload';
+        uploadButton.textContent = _T('upload');
         uploadButton.addEventListener('click', () => {
           let toUpload = [];
           for (let i = 0; i < files.length; i++) {
@@ -1709,7 +1748,7 @@ class UI {
             });
           }
           uploadButton.disabled = true;
-          uploadButton.textContent = 'Uploading';
+          uploadButton.textContent = _T('uploading');
           main.sendRPC('upload', this.galleryState_.collection, toUpload)
           .then(() => {
             close();
@@ -1720,7 +1759,7 @@ class UI {
           })
           .finally(() => {
             uploadButton.disabled = false;
-            uploadButton.textContent = 'Upload';
+            uploadButton.textContent = _T('upload');
           });
         });
         list.appendChild(uploadButton);
@@ -1736,7 +1775,7 @@ class UI {
 
     const label = document.createElement('label');
     label.for = 'files';
-    label.textContent = 'Select files to upload (or drag & drop files anywhere):';
+    label.textContent = _T('select-upload');
     fileInputs.appendChild(label);
     const input = document.createElement('input');
     input.id = 'upload-file-input';
@@ -1855,7 +1894,7 @@ class UI {
 
   async showProfile_() {
     const {content, close} = this.commonPopup_({
-      title: 'Profile',
+      title: _T('profile'),
     });
     content.id = 'profile-content';
 
@@ -1882,7 +1921,7 @@ class UI {
 
     const emailLabel = document.createElement('label');
     emailLabel.forHtml = 'profile-form-email';
-    emailLabel.textContent = 'Email:';
+    emailLabel.textContent = _T('form-email');
     const email = document.createElement('input');
     email.id = 'profile-form-email';
     email.type = 'email';
@@ -1894,11 +1933,11 @@ class UI {
 
     const passLabel = document.createElement('label');
     passLabel.forHtml = 'profile-form-password';
-    passLabel.textContent = 'Current password:';
+    passLabel.textContent = _T('form-current-password');
     const pass = document.createElement('input');
     pass.id = 'profile-form-password';
     pass.type = 'password';
-    pass.placeholder = 'required';
+    pass.placeholder = _T('required');
     pass.addEventListener('keyup', onchange);
     pass.addEventListener('change', onchange);
     form.appendChild(passLabel);
@@ -1906,11 +1945,11 @@ class UI {
 
     const newPassLabel = document.createElement('label');
     newPassLabel.forHtml = 'profile-form-new-password';
-    newPassLabel.textContent = 'New password:';
+    newPassLabel.textContent = _T('form-new-password');
     const newPass = document.createElement('input');
     newPass.id = 'profile-form-new-password';
     newPass.type = 'password';
-    newPass.placeholder = 'optional';
+    newPass.placeholder = _T('optional');
     newPass.autocomplete = 'new-password';
     newPass.addEventListener('keyup', onchange);
     newPass.addEventListener('change', onchange);
@@ -1919,7 +1958,7 @@ class UI {
 
     const newPass2Label = document.createElement('label');
     newPass2Label.forHtml = 'profile-form-new-password2';
-    newPass2Label.textContent = 'Retype password:';
+    newPass2Label.textContent = _T('form-confirm-password');
     const newPass2 = document.createElement('input');
     newPass2.id = 'profile-form-new-password2';
     newPass2.type = 'password';
@@ -1932,7 +1971,7 @@ class UI {
     let otpKey = '';
     const otpLabel = document.createElement('label');
     otpLabel.forHtml = 'profile-form-enable-otp';
-    otpLabel.textContent = 'Enable OTP?';
+    otpLabel.textContent = _T('enable-otp?');
     const otpDiv = document.createElement('div');
     otpDiv.id = 'profile-form-enable-otp-div';
     const otp = document.createElement('input');
@@ -1952,7 +1991,7 @@ class UI {
           const code = document.createElement('input');
           code.id = 'profile-form-otp-code';
           code.type = 'text';
-          code.placeholder = 'Enter code';
+          code.placeholder = _T('enter-code');
           code.addEventListener('keyup', onchange);
           code.addEventListener('change', onchange);
           otpDiv.appendChild(image);
@@ -1978,20 +2017,20 @@ class UI {
 
     const button = document.createElement('button');
     button.id = 'profile-form-button';
-    button.textContent = 'Update';
+    button.textContent = _T('update');
     button.disabled = true;
     button.addEventListener('click', () => {
       if (pass.value === '') {
-        this.popupMessage('Error', 'Current password is required', 'error');
+        this.popupMessage(_T('current-password-required'));
         return;
       }
       if ((newPass.value !== '' || newPass2.value !== '') && newPass.value !== newPass2.value) {
-        this.popupMessage('Error', 'New password doesn\'t match', 'error');
+        this.popupMessage(_T('new-pass-doesnt-match'));
         return;
       }
       const code = form.querySelector('#profile-form-otp-code');
       if (otp.checked && !this.otpEnabled_ && !code?.value) {
-        this.popupMessage('Error', 'OTP code required', 'error');
+        this.popupMessage(_T('otp-code-required'));
         return;
       }
       email.disabled = true;
@@ -2000,7 +2039,7 @@ class UI {
       newPass2.disabled = true;
       otp.disabled = true;
       button.disabled = true;
-      button.textContent = 'Updating';
+      button.textContent = _T('updating');
       delButton.disabled = true;
       main.sendRPC('updateProfile', {
         email: email.value,
@@ -2014,7 +2053,7 @@ class UI {
         this.accountEmail_ = email.value;
         this.loggedInAccount_.textContent = email.value;
         this.otpEnabled_ = otp.checked;
-        this.popupMessage('Profile', 'Updated', 'info');
+        this.popupMessage(_T('updated'), 'info');
         close();
       })
       .catch(err => {
@@ -2027,7 +2066,7 @@ class UI {
         newPass2.disabled = false;
         otp.disabled = false;
         button.disabled = false;
-        button.textContent = 'Update';
+        button.textContent = _T('update');
         delButton.disabled = false;
       });
     });
@@ -2035,19 +2074,19 @@ class UI {
     content.appendChild(form);
 
     const deleteMsg = document.createElement('div');
-    deleteMsg.innerHTML = '<hr><p>If you delete your account, all your data will be permanently deleted.</p>';
+    deleteMsg.innerHTML = '<hr>' + _T('delete-warning');
     content.appendChild(deleteMsg);
 
     const delButton = document.createElement('button');
     delButton.id = 'profile-form-delete-button';
-    delButton.textContent = 'Delete my account';
+    delButton.textContent = _T('delete-account');
     delButton.disabled = true;
     delButton.addEventListener('click', () => {
       if (pass.value === '') {
-        this.popupMessage('Error', 'Current password is required', 'error');
+        this.popupMessage(_T('current-password-required'));
         return;
       }
-      if (!window.confirm('Are you sure you want to permanently delete your account?\nThe operation is not reversible.')) {
+      if (!window.confirm(_T('confirm-delete-account'))) {
         return;
       }
       email.disabled = true;
@@ -2055,7 +2094,7 @@ class UI {
       newPass.disabled = true;
       newPass2.disabled = true;
       button.disabled = true;
-      button.textContent = 'Updating';
+      button.textContent = _T('updating');
       delButton.disabled = true;
       main.sendRPC('deleteAccount', pass.value)
       .then(() => {
@@ -2067,7 +2106,7 @@ class UI {
         newPass.disabled = false;
         newPass2.disabled = false;
         button.disabled = false;
-        button.textContent = 'Update';
+        button.textContent = _T('update');
         delButton.disabled = false;
       });
     });
@@ -2076,7 +2115,7 @@ class UI {
 
   async showBackupPhrase_() {
     const {content, close} = this.commonPopup_({
-      title: 'Key backup',
+      title: _T('key-backup'),
     });
     content.id = 'backup-phrase-content';
     let keyBackupEnabled = await main.sendRPC('keyBackupEnabled');
@@ -2090,7 +2129,7 @@ class UI {
     pw.autocomplete = 'new-password';
     const pwLabel = document.createElement('label');
     pwLabel.htmlFor = 'key-backup-password';
-    pwLabel.textContent = 'Enter you account password:';
+    pwLabel.textContent = _T('enter-current-password');
     pwInput.appendChild(pwLabel);
     pwInput.appendChild(pw);
     content.appendChild(pwInput);
@@ -2098,7 +2137,7 @@ class UI {
     const warning = document.createElement('div');
     warning.id = 'backup-phrase-warning';
     warning.className = 'warning';
-    warning.innerHTML = '<p>The backup phrase is your <b>unencrypted</b> secret key.</p><p>It is the most sensitive information in your account. It can be used to recover your account and your data if your secret key is not backed up on the server, or if you forget your password.</p><p>It can also be used to <b>TAKE OVER</b> your account.</p><p>It MUST be kept secret. Write it down on a piece of paper and store it in a safe.</p>';
+    warning.innerHTML = _T('key-backup-warning');
     content.appendChild(warning);
 
     const phrase = document.createElement('div');
@@ -2107,33 +2146,33 @@ class UI {
 
     const button = document.createElement('button');
     button.id = 'backup-phrase-show-button';
-    button.textContent = 'Show backup phrase';
+    button.textContent = _T('show-backup-phrase');
     content.appendChild(button);
     button.addEventListener('click', () => {
       if (phrase.textContent === '') {
         button.disabled = true;
-        button.textContent = 'Checking password';
+        button.textContent = _T('checking-password');
         main.sendRPC('backupPhrase', pw.value).then(v => {
           phrase.textContent = v;
-          button.textContent = 'Hide backup phrase';
+          button.textContent = _T('hide-backup-phrase');
         })
         .catch(err => {
-          button.textContent = 'Show backup phrase';
-          this.popupMessage('Key backup', err, 'error');
+          button.textContent = _T('show-backup-phrase');
+          this.popupMessage(err);
         })
         .finally(() => {
           button.disabled = false;
         });
       } else {
         phrase.textContent = '';
-        button.textContent = 'Show backup phrase';
+        button.textContent = _T('show-backup-phrase');
       }
     });
 
     const warning2 = document.createElement('div');
     warning2.id = 'backup-phrase-warning2';
     warning2.className = 'warning';
-    warning2.innerHTML = '<hr><p>Choose whether to keep an encrypted backup of your secret key on the server.<p><p>If you do NOT keep a backup, you will need to enter your backup phrase every time you login to your account.</p>';
+    warning2.innerHTML = '<hr>' + _T('key-backup-warning2');
     content.appendChild(warning2);
 
     const changeBackup = choice => {
@@ -2142,12 +2181,12 @@ class UI {
       main.sendRPC('changeKeyBackup', pw.value, choice)
       .then(() => {
         keyBackupEnabled = choice;
-        this.popupMessage('Key backup', choice ? 'Enabled' : 'Disabled', 'info');
+        this.popupMessage(choice ? _T('enabled') : _T('disabled'), 'info');
       })
       .catch(err => {
         inputYes.checked = keyBackupEnabled;
         inputNo.checked = !keyBackupEnabled;
-        this.popupMessage('Key backup', err, 'error');
+        this.popupMessage(err);
       })
       .finally(() => {
         inputYes.disabled = false;
@@ -2164,7 +2203,7 @@ class UI {
     inputYes.addEventListener('change', () => changeBackup(true));
     const labelYes = document.createElement('label');
     labelYes.htmlFor = 'choose-key-backup-yes';
-    labelYes.textContent = 'Keep a backup on the server (RECOMMENDED)';
+    labelYes.textContent = _T('opt-keep-backup');
     divYes.appendChild(inputYes);
     divYes.appendChild(labelYes);
 
@@ -2178,7 +2217,7 @@ class UI {
     inputNo.addEventListener('change', () => changeBackup(false));
     const labelNo = document.createElement('label');
     labelNo.htmlFor = 'choose-key-backup-no';
-    labelNo.textContent = 'Do NOT keep a backup on the server';
+    labelNo.textContent = _T('opt-dont-keep-backup');
     divNo.appendChild(inputNo);
     divNo.appendChild(labelNo);
 
@@ -2188,28 +2227,28 @@ class UI {
 
   async showPreferences_() {
     const {content, close} = this.commonPopup_({
-      title: 'Preferences',
+      title: _T('prefs'),
     });
     content.id = 'preferences-content';
 
     const text = document.createElement('div');
     text.id = 'preferences-cache-text';
-    text.innerHTML = '<h1>Choose your cache preference:</h1>';
+    text.innerHTML = _T('choose-cache-pref');
     content.appendChild(text);
 
     const current = await main.sendRPC('cachePreference');
     const choices = [
       {
         value: 'encrypted',
-        label: 'Store thumbnails in a local encrypted database. Thumbnails are stored securely on the local system, along with the App\'s metadata. The other files, e.g. photos and videos, are not cached. This option might lead to quota issues. The cache is cleared on logout or when another option is selected. (DEFAULT)',
+        label: _T('opt-encrypted'),
       },
       {
         value: 'no-store',
-        label: 'Disable caching. All files, including thumbnails, are fetched and decrypted each time they are accessed. This is the slowest option.',
+        label: _T('opt-no-store'),
       },
       {
         value: 'private',
-        label: 'Use the default browser cache. Decrypted files are stored in the browser\'s cache. This is the fastest option, but also the most likely the leak information.',
+        label: _T('opt-private'),
       },
     ];
 
@@ -2219,13 +2258,13 @@ class UI {
       });
       main.sendRPC('setCachePreference', choice)
       .then(() => {
-        this.popupMessage('Cache preference', 'saved', 'info');
+        this.popupMessage(_T('saved'), 'info');
       })
       .catch(err => {
         choices.forEach(c => {
           c.input.checked = current === c.value;
         });
-        this.popupMessage('Cache preference', err, 'error');
+        this.popupMessage(err);
       })
       .finally(() => {
         choices.forEach(c => {
@@ -2256,7 +2295,7 @@ class UI {
   async showAdminConsole_() {
     const data = await main.sendRPC('adminUsers');
     const {content} = this.commonPopup_({
-      title: 'Admin Console',
+      title: _T('admin-console'),
       className: 'popup admin-console-popup',
     });
     return this.showAdminConsoleData_(content, data);
@@ -2298,7 +2337,7 @@ class UI {
       saveButton.disabled = changes() === null;
     };
     const saveButton = document.createElement('button');
-    saveButton.textContent = 'Save changes';
+    saveButton.textContent = _T('save-changes');
     saveButton.disabled = true;
     saveButton.addEventListener('click', () => {
       const c = changes();
@@ -2307,7 +2346,7 @@ class UI {
       });
       main.sendRPC('adminUsers', c)
       .then(data => {
-        this.popupMessage('Admin', 'Data updated', 'info');
+        this.popupMessage(_T('data-updated'), 'info');
         return this.showAdminConsoleData_(content, data);
       })
       .finally(() => {
@@ -2345,7 +2384,7 @@ class UI {
     for (let u of ['','MB','GB','TB']) {
       const opt = document.createElement('option');
       opt.value = u;
-      opt.textContent = u;
+      opt.textContent = u === '' ? '' : _T(u);
       opt.selected = u === data.defaultQuotaUnit;
       defQuotaUnit.appendChild(opt);
     }
@@ -2367,7 +2406,7 @@ class UI {
     table.id = 'admin-console-table';
     content.appendChild(table);
 
-    table.innerHTML = '<div>Email</div><div>Locked</div><div>Approved</div><div>Admin</div><div>Quota</div>';
+    table.innerHTML = `<div>${_T('email')}</div><div>${_T('locked')}</div><div>${_T('approved')}</div><div>${_T('admin')}</div><div>${_T('quota')}</div>`;
 
     for (let user of data.users) {
       const email = document.createElement('div');
@@ -2450,7 +2489,7 @@ class UI {
       for (let u of ['','MB','GB','TB']) {
         const opt = document.createElement('option');
         opt.value = u;
-        opt.textContent = u;
+        opt.textContent = u === '' ? '' : _T(u);
         opt.selected = u === user.quotaUnit;
         quotaUnit.appendChild(opt);
       }

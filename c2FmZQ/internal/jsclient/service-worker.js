@@ -28,6 +28,7 @@ const MANIFEST = [
   'c2.png',
   'clear.png',
   'index.html',
+  'lang.js',
   'main.js',
   'store.js',
   'style.css',
