@@ -13,15 +13,15 @@ require (
 	github.com/mdp/qrterminal v1.0.1
 	github.com/minio/blake2b-simd v0.0.0-20160723061019-3f5f724cb5b1
 	github.com/pquerna/otp v1.3.0
-	github.com/prometheus/client_golang v1.12.2
+	github.com/prometheus/client_golang v1.13.0
 	github.com/rwcarlsen/goexif v0.0.0-20190401172101-9e8deecbddbd
 	github.com/tyler-smith/go-bip39 v1.1.0
-	github.com/urfave/cli/v2 v2.10.3
-	golang.org/x/crypto v0.0.0-20220622213112-05595931fe9d
-	golang.org/x/image v0.0.0-20220617043117-41969df76e82
-	golang.org/x/sys v0.0.0-20220708085239-5a0f0661e09d
-	golang.org/x/term v0.0.0-20220526004731-065cf7ba2467
-	golang.org/x/time v0.0.0-20220609170525-579cf78fd858
+	github.com/urfave/cli/v2 v2.14.0
+	golang.org/x/crypto v0.0.0-20220829220503-c86fa9a7ed90
+	golang.org/x/image v0.0.0-20220902085622-e7cb96979f69
+	golang.org/x/sys v0.0.0-20220829200755-d48e67d00261
+	golang.org/x/term v0.0.0-20220722155259-a9ba230a4035
+	golang.org/x/time v0.0.0-20220722155302-e5dcc9cfc0b9
 )
 
 require (
@@ -32,12 +32,12 @@ require (
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.1 // indirect
 	github.com/prometheus/client_model v0.2.0 // indirect
-	github.com/prometheus/common v0.35.0 // indirect
-	github.com/prometheus/procfs v0.7.3 // indirect
+	github.com/prometheus/common v0.37.0 // indirect
+	github.com/prometheus/procfs v0.8.0 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/xrash/smetrics v0.0.0-20201216005158-039620a65673 // indirect
-	golang.org/x/net v0.0.0-20220708220712-1185a9018129 // indirect
+	golang.org/x/net v0.0.0-20220826154423-83b083e8dc8b // indirect
 	golang.org/x/text v0.3.7 // indirect
-	google.golang.org/protobuf v1.28.0 // indirect
+	google.golang.org/protobuf v1.28.1 // indirect
 	rsc.io/qr v0.2.0 // indirect
 )
