@@ -231,16 +231,21 @@ a {
   border-bottom: 1px solid black;
   background-color: #aaa;
   display: grid;
-  grid-template-columns: 10fr 1fr;
+  grid-template-columns: 20fr 1fr 1fr;
   gap: 10px;
 }
 .popup-name {
   grid-column: 1;
   overflow: hidden;
 }
-.popup-close {
+.popup-info {
   cursor: pointer;
   grid-column: 2;
+  text-align: right;
+}
+.popup-close {
+  cursor: pointer;
+  grid-column: 3;
   text-align: right;
 }
 .popup-media {
@@ -257,6 +262,7 @@ a {
   align-content: stretch;
 }
 .popup-content {
+  overscroll-behavior: none;
 }
 .upload .popup-content {
   margin: 2em; 
@@ -512,4 +518,31 @@ input[type=checkbox] {
 .changed {
   background-color: lightgreen;
   box-shadow: 0 0 2px 2px lightgreen;
+}
+.image-popup {
+  display: grid;
+  align-items: start;
+  justify-items: center;
+}
+.image-popup > * {
+  grid-row: 1 / 2;
+  grid-column: 1 / 2;
+}
+.exif-data {
+  z-index: 10;
+  background-color: rgba(255, 255, 255, 0.8);
+  padding: 5px;
+  border: 1px solid grey;
+  max-width: clamp(50%, 80vw, 80%);
+  max-height: 80vh;
+  overflow-wrap: break-word;
+  overflow-y: scroll;
+  overscroll-behavior: none;
+}
+.exif-more-details {
+  cursor: pointer;
+  padding-top: 1em;
+}
+.exif-details {
+  white-space: pre;
 }

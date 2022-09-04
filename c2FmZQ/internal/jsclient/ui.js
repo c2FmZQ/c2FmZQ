@@ -1177,16 +1177,23 @@ class UI {
     const popupName = document.createElement('div');
     const popupClose = document.createElement('div');
     const popupContent = document.createElement('div');
+    const popupInfo = document.createElement('div');
+
+    popupContent.className = 'popup-content';
     popup.className = params.className || 'popup';
     popupBlur.className = 'blur';
     popupHeader.className = 'popup-header';
     popupName.className = 'popup-name';
     popupName.textContent = params.title || 'Title';
+    popupInfo.className = 'popup-info';
+    popupInfo.textContent = 'ⓘ';
     popupClose.className = 'popup-close';
     popupClose.textContent = '✖';
-    popupContent.className = 'popup-content';
 
     popupHeader.appendChild(popupName);
+    if (params.showInfo) {
+      popupHeader.appendChild(popupInfo);
+    }
     popupHeader.appendChild(popupClose);
     popup.appendChild(popupHeader);
     popup.appendChild(popupContent);
@@ -1233,17 +1240,35 @@ class UI {
     };
     g.appendChild(popupBlur);
     g.appendChild(popup);
-    return {popup: popup, content: popupContent, close: closePopup};
+    return {popup: popup, content: popupContent, close: closePopup, info: popupInfo};
   }
 
   setUpPopup_(f) {
-    const {content} = this.commonPopup_({title: f.fileName});
+    const {content, info} = this.commonPopup_({title: f.fileName, showInfo: true});
     if (f.isImage) {
+      content.classList.add('image-popup');
       const img = new Image();
       img.className = 'popup-media';
       img.alt = f.fileName;
       img.src = f.url;
       content.appendChild(img);
+      let exifData = undefined;
+      info.addEventListener('click', () => {
+        if (exifData === undefined) {
+          exifData = null;
+          const me = this;
+          EXIF.getData(img, function() {
+            exifData = EXIF.getAllTags(this);
+            const div = document.createElement('div');
+            div.className = 'exif-data';
+            me.formatExif_(div, exifData);
+            content.appendChild(div);
+          });
+        } else {
+          const e = content.querySelector('.exif-data');
+          if (e) e.classList.toggle('hidden');
+        }
+      });
     } else if (f.isVideo) {
       const video = document.createElement('video');
       video.className = 'popup-media';
@@ -1259,6 +1284,60 @@ class UI {
       content.classList.add('popup-download');
       content.appendChild(anchor);
     }
+  }
+
+  formatExif_(div, data) {
+    const flat = [];
+    for (let n of Object.keys(data).sort()) {
+      if (n === 'thumbnail') {
+        continue;
+      }
+      if (Array.isArray(data[n])) {
+        for (let i in data[n]) {
+          flat.push({key: `${n}[${i}]`, value: data[n][i]});
+        }
+      } else {
+          flat.push({key: n, value: data[n]});
+      }
+    }
+    if (flat.length === 0) {
+      div.textContent = '∅';
+      return;
+    }
+    const out = [];
+    for (let {key,value} of flat) {
+      if (value instanceof Number) {
+        out.push(`${key}: ${value} [${value.numerator} / ${value.denominator}]`);
+      } else {
+        out.push(`${key}: ${JSON.stringify(value)}`);
+      }
+    }
+    const makeModel = document.createElement('div');
+    if (data.Make) {
+      makeModel.textContent = `${data.Make} ${data.Model}`;
+    }
+    div.appendChild(makeModel);
+    const pos = document.createElement('div');
+    if (data.GPSLatitudeRef) {
+      const lat = `${data.GPSLatitudeRef} ${data.GPSLatitude[0].toFixed(0)}° ${data.GPSLatitude[1].toFixed(0)}' ${data.GPSLatitude[2].toFixed(3)}"`;
+      const lon = `${data.GPSLongitudeRef} ${data.GPSLongitude[0].toFixed(0)}° ${data.GPSLongitude[1].toFixed(0)}' ${data.GPSLongitude[2].toFixed(3)}"`;
+      pos.textContent = `${lat} ${lon}`;
+    }
+    div.appendChild(pos);
+    const more = document.createElement('div');
+    more.textContent = '➕';
+    more.className = 'exif-more-details';
+    let expanded = false;
+    more.addEventListener('click', () => {
+      details.classList.toggle('hidden');
+      expanded = !expanded;
+      more.textContent = expanded ? '➖' : '➕';
+    });
+    div.appendChild(more);
+    const details = document.createElement('div');
+    details.className = 'exif-details hidden';
+    details.textContent = out.join('\n');
+    div.appendChild(details);
   }
 
   showEdit_(f) {

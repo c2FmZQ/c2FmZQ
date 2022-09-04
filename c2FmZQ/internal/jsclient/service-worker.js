@@ -34,6 +34,7 @@ const MANIFEST = [
   'style.css',
   'ui.js',
   'version.js',
+  'thirdparty/browser-libs.js',
   'thirdparty/filerobot-image-editor.min.js',
   'thirdparty/libs.js',
 ];

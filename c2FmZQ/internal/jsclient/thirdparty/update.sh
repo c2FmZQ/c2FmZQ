@@ -2,9 +2,9 @@
 
 cd "$(dirname $0)"
 
-npm install bip39 secure-webstore sodium-plus
+npm install bip39 secure-webstore sodium-plus exif-js
 
-browserify browser.js \
+browserify worker.js \
   --exclude=./wordlists/japanese.json  \
   --exclude=./wordlists/spanish.json  \
   --exclude=./wordlists/italian.json \
@@ -14,3 +14,5 @@ browserify browser.js \
   --exclude=./wordlists/portuguese.json \
   --exclude=./wordlists/chinese_simplified.json \
   --exclude=./wordlists/chinese_traditional.json  > libs.js
+
+browserify browser.js > browser-libs.js
