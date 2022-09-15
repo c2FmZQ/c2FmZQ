@@ -9,7 +9,7 @@
   * [Scale and performance](#scale)
   * [How to run the server](#run-server)
   * [Experimental features](#experimental)
-    * [Web App](#webapp)
+    * [Progressive Web App (PWA)](#webapp)
     * [One-time passwords (OTP)](#totp)
     * [Decoy / duress passwords](#decoy)
 * [c2FmZQ Client](#c2FmZQ-client)
@@ -170,7 +170,7 @@ GLOBAL OPTIONS:
    --passphrase value               Use value as database passphrase. [$C2FMZQ_PASSPHRASE]
    --htdigest-file FILE             The name of the htdigest FILE to use for basic auth for some endpoints, e.g. /metrics [$C2FMZQ_HTDIGEST_FILE]
    --max-concurrent-requests value  The maximum number of concurrent requests. (default: 10)
-   --enable-webapp                  Enable WebApp. (default: false)
+   --enable-webapp                  Enable Progressive Web App. (default: false)
    --licenses                       Show the software licenses. (default: false)
 ```
 
@@ -211,15 +211,15 @@ GOOS=darwin GOARCH=arm64 go build -o c2FmZQ-server-darwin
 
 The following features are experimental and could change or disappear in the future.
 
-### <a name="webapp"></a>Web App
+### <a name="webapp"></a>Progressive Web App
 
-When the `--enable-webapp` flag is set on the server, it enables a Web Application
+When the `--enable-webapp` flag is set on the server, it enables a Progressive Web Application
 written entirely in HTML and javascript. All the cryptographic operations are performed
 in the browser using [Sodium-Plus](https://github.com/paragonie/sodium-plus)
 and [Secure webstore](https://github.com/AKASHAorg/secure-webstore), and the app
 implements the same protocol as the c2FmZQ client and the Stingle Photos app.
 
-Simply open `https://${DOMAIN}/${path-prefix}/` to access to Web App.
+Simply open `https://${DOMAIN}/${path-prefix}/` to access the PWA.
 
 Currently implemented:
 
@@ -232,7 +232,7 @@ Currently implemented:
   * Moving / copying files
   * Sharing
 * Browsing albums with photos and videos
-* Uploading files (note: files currently need to fit in memory)
+* Uploading files (note: browsers that support streaming uploads, e.g. Chrome 105+, can upload files of any size. With browsers that don't support streaming uploads, files need to fit in memory)
 * Photo editing, using [Filerobot Image Editor](https://scaleflex.github.io/filerobot-image-editor/)
 
 ### <a name="totp"></a>One-time passwords (OTP)

@@ -1661,6 +1661,7 @@ class c2FmZQClient {
       referrerPolicy: 'no-referrer',
       credentials: 'omit',
       body: body,
+      duplex: 'half',
     })
     .then(async resp => {
       if (!resp.ok) {
@@ -1677,7 +1678,6 @@ class c2FmZQClient {
 
   async testUploadStream_() {
     const msg = 'Hello World';
-    const body = new Blob([msg]).stream();
     return fetch(this.options_.pathPrefix + 'c2/config/echo', {
       method: 'POST',
       mode: 'same-origin',
@@ -1688,11 +1688,12 @@ class c2FmZQClient {
       referrerPolicy: 'no-referrer',
       credentials: 'omit',
       body: new Blob([`token=${this.vars_.token}&echo=${msg}`]).stream(),
+      duplex: 'half',
     })
     .then(resp => self.stream2blob(resp.body))
     .then(blob => blob.text())
     .then(body => {
-      console.log('SW testStreamingUpload got', body);
+      //console.log('SW testStreamingUpload got', body);
       try {
         const resp = JSON.parse(body);
         if (resp.status !== 'ok') {
@@ -1701,7 +1702,7 @@ class c2FmZQClient {
         if (resp.parts.echo !== msg) {
           throw new Error('incorrect response');
         }
-        return 'ok';
+        return true;
       } catch(e) {
         throw body;
       }

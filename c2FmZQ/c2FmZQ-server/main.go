@@ -196,7 +196,7 @@ func main() {
 			&cli.BoolFlag{
 				Name:        "enable-webapp",
 				Value:       false,
-				Usage:       "Enable WebApp.",
+				Usage:       "Enable Progressive Web App.",
 				Destination: &flagEnableWebApp,
 			},
 			&cli.BoolFlag{
