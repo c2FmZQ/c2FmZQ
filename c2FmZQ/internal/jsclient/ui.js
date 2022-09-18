@@ -378,13 +378,14 @@ class UI {
     this.contextMenu_(params);
   }
 
-  popupMessage(message, className) {
+  popupMessage(message, className, opt) {
     const div = document.createElement('div');
     div.className = className || 'error';
     const v = document.createElement('span');
     v.textContent = '✖';
     v.style = 'float: right;';
     const m = document.createElement('div');
+    m.className = 'popup-message';
     m.textContent = message;
     div.appendChild(v);
     div.appendChild(m);
@@ -404,8 +405,11 @@ class UI {
     } else {
       container.appendChild(div);
     }
+    m.remove = remove;
 
-    setTimeout(remove, 5000);
+    if (!opt || !opt.sticky) {
+      setTimeout(remove, 5000);
+    }
   }
 
   showError_(e) {

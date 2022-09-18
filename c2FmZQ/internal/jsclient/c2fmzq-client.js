@@ -1622,9 +1622,59 @@ class c2FmZQClient {
     console.log(this.streamingUploadWorks_ ? 'SW streaming upload is supported by browser' : 'SW streaming upload is NOT supported by browser');
 
     let p = this.uploadFile_(clientId, collection, files[0]);
+    files[0].uploadedBytes = 0;
     for (let i = 1; i < files.length; i++) {
-       p = p.then(() => this.uploadFile_(collection, files[i]));
+      p = p.then(() => this.uploadFile_(clientId, collection, files[i]));
+      files[i].uploadedBytes = 0;
     }
+
+    const st = {
+      files: files,
+    };
+    p = p.then(r => {
+      st.done = true;
+    })
+    .catch(err => {
+      st.err = err;
+    });
+
+    if (!this.uploadData_) {
+      this.uploadData_ = [];
+    }
+    this.uploadData_.push(st);
+
+    const notify = () => {
+      if (!this.uploadData_) return;
+      const state = {
+        numFiles: 0,
+        numBytes: 0,
+        numFilesDone: 0,
+        numBytesDone: 0,
+      };
+      let allDone = true;
+      this.uploadData_.forEach(b => {
+        if (!b.done && !b.err) allDone = false;
+        b.files.forEach(f => {
+          state.numFiles += 1;
+          state.numBytes += f.file.size;
+          if (f.done) {
+            state.numFilesDone += 1;
+            state.numBytesDone += f.file.size;
+          } else {
+            state.numBytesDone += f.uploadedBytes;
+          }
+        });
+      });
+      state.done = allDone;
+      sendUploadProgress(state);
+      if (allDone) {
+        this.uploadData_ = null;
+      } else {
+        self.setTimeout(notify, 500);
+      }
+    };
+    notify();
+
     return p;
   }
 
@@ -1672,6 +1722,7 @@ class c2FmZQClient {
         const body = await blob.text();
         throw body;
       }
+      file.done = true;
       return 'ok';
     });
   }
@@ -1841,7 +1892,6 @@ class UploadStream {
     this.file_ = file;
     this.token_ = token;
     this.filename_ = self.base64RawUrlEncode(self.crypto.getRandomValues(new Uint8Array(32))) + '.sp';
-
   }
 
   async start(controller) {
@@ -1918,11 +1968,13 @@ class UploadStream {
       while (q.buf.byteLength >= q.chunkSize) {
         let chunk = q.buf.slice(0, q.chunkSize);
         q.buf = q.buf.slice(q.chunkSize);
+        this.file_.uploadedBytes += chunk.byteLength;
         controller.enqueue(await this.encryptChunk_(q.n, chunk, q.key));
         q.n++;
       }
       if (eof) {
         if (q.buf.byteLength > 0) {
+          this.file_.uploadedBytes += q.buf.byteLength;
           controller.enqueue(await this.encryptChunk_(q.n, q.buf, q.key));
         }
         controller.enqueue(self.bytesFromBinary(`\r\n`));

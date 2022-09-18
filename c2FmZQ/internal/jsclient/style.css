@@ -61,6 +61,17 @@ a {
   min-width: 25vw;
   max-width: 75vw;
 }
+.upload-progress {
+  animation: slideIn 1s;
+  padding: 8px;
+  margin: 2px;
+  border: 2px solid black;
+  background-color: lightgray;
+  font-size: 125%;
+  cursor: pointer;
+  min-width: 25vw;
+  max-width: 75vw;
+}
 .collectionThumbdiv {
   margin: 5px;
   border: 1px solid black;

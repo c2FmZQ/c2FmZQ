@@ -117,6 +117,17 @@ class Main {
             delete this.rpcWait_[event.data.id];
           }
           break;
+        case 'upload-progress':
+          const progress = event.data.progress;
+          const msg = `${progress.numFilesDone}/${progress.numFiles} [${Math.floor(progress.numBytesDone / progress.numBytes * 100)}%]`
+          const e = document.querySelector('.upload-progress > .popup-message');
+          if (e) {
+            e.textContent = msg;
+            setTimeout(e.remove, 5000);
+          } else {
+            ui.popupMessage(msg, 'upload-progress', {sticky: !progress.done});
+          }
+          break;
         default:
           console.log('Received Message', event.data);
       }

@@ -210,6 +210,10 @@ function sendLoggedOut() {
   self.sendMessage('', {type: 'loggedout'});
 }
 
+function sendUploadProgress(p) {
+  self.sendMessage('', {type: 'upload-progress', progress: p});
+}
+
 async function sendMessage(id, m) {
   const clients = await self.clients.matchAll({type: 'window'});
   if (clients.length === 0) {
