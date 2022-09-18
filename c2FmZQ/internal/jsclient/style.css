@@ -69,8 +69,9 @@ a {
   background-color: lightgray;
   font-size: 125%;
   cursor: pointer;
-  min-width: 25vw;
-  max-width: 75vw;
+}
+.upload-progress-div {
+  white-space: nowrap;
 }
 .collectionThumbdiv {
   margin: 5px;

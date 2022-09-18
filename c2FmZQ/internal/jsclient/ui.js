@@ -386,7 +386,11 @@ class UI {
     v.style = 'float: right;';
     const m = document.createElement('div');
     m.className = 'popup-message';
-    m.textContent = message;
+    if (message instanceof Element) {
+      m.appendChild(message);
+    } else {
+      m.textContent = message;
+    }
     div.appendChild(v);
     div.appendChild(m);
 
@@ -410,6 +414,7 @@ class UI {
     if (!opt || !opt.sticky) {
       setTimeout(remove, 5000);
     }
+    return remove;
   }
 
   showError_(e) {
@@ -1049,7 +1054,6 @@ class UI {
     b.disabled = true;
     main.sendRPC('emptyTrash')
     .then(() => {
-      close();
       this.refresh_();
     })
     .catch(e => {
@@ -1736,6 +1740,34 @@ class UI {
     return _T('MiB', s);
   }
 
+  showUploadProgress(progress) {
+    const info = `${progress.numFilesDone}/${progress.numFiles} [${Math.floor(progress.numBytesDone / progress.numBytes * 100)}%]`;
+    const e = document.querySelector('#upload-progress-data');
+    if (e) {
+      e.textContent = info;
+      if (progress.done) {
+        document.querySelector('#upload-progress-cancel-button').textContent = _T('done');
+        setTimeout(e.remove, 5000);
+      }
+    } else {
+      const msg = document.createElement('div');
+      msg.className = 'upload-progress-div';
+      const span = document.createElement('span');
+      span.id = 'upload-progress-data';
+      span.textContent = info;
+      msg.appendChild(span);
+      const button = document.createElement('button');
+      button.id = 'upload-progress-cancel-button';
+      button.textContent = _T('cancel');
+      button.addEventListener('click', () => {
+        button.disabled = true;
+        main.sendRPC('cancelUpload');
+      });
+      msg.appendChild(button);
+      span.remove = this.popupMessage(msg, 'upload-progress', {sticky: !progress.done});
+    }
+  }
+
   async showUploadView_() {
     const collections = await main.sendRPC('getCollections');
 
@@ -1774,22 +1806,14 @@ class UI {
 
     let files = [];
     const processFiles = newFiles => {
+      let p = [];
       for (let i = 0; i < newFiles.length; i++) {
         const f = newFiles[i];
         const elem = document.createElement('div');
         elem.className = 'upload-item-div';
         const img = new Image();
+        img.src = 'clear.png';
         img.className = 'upload-thumbnail';
-        this.makeThumbnail_(f).then(([data,duration]) => {
-          img.src = data;
-          for (let i = 0; i < files.length; i++) {
-            if (files[i].elem === elem) {
-              files[i].thumbnail = data;
-              files[i].duration = duration;
-              break;
-            }
-          }
-        });
         elem.appendChild(img);
         const div = document.createElement('div');
         div.className = 'upload-item-attrs';
@@ -1801,6 +1825,7 @@ class UI {
         sizeSpan.textContent = _T('size:', this.formatSize_(f.size));
         div.appendChild(sizeSpan);
         const removeButton = document.createElement('button');
+        removeButton.disabled = true;
         removeButton.className = 'upload-item-remove-button';
         removeButton.textContent = _T('remove');
         removeButton.addEventListener('click', () => {
@@ -1808,10 +1833,17 @@ class UI {
           processFiles([]);
         });
         div.appendChild(removeButton);
-        files.push({
+        const ff = {
           file: f,
           elem: elem,
-        });
+        };
+        files.push(ff);
+        p.push(this.makeThumbnail_(f).then(([data,duration]) => {
+          removeButton.disabled = false;
+          img.src = data;
+          ff.thumbnail = data;
+          ff.duration = duration;
+        }));
       }
       const list = document.querySelector('#upload-file-list');
       while (list.firstChild) {
@@ -1821,6 +1853,7 @@ class UI {
         const uploadButton = document.createElement('button');
         uploadButton.className = 'upload-file-list-upload-button';
         uploadButton.textContent = _T('upload');
+        uploadButton.disabled = true;
         uploadButton.addEventListener('click', () => {
           let toUpload = [];
           for (let i = 0; i < files.length; i++) {
@@ -1846,6 +1879,9 @@ class UI {
           });
         });
         list.appendChild(uploadButton);
+        Promise.all(p).then(() => {
+          uploadButton.disabled = false;
+        });
       }
       for (let i = 0; i < files.length; i++) {
         const f = files[i];
@@ -1892,6 +1928,32 @@ class UI {
   }
 
   async makeThumbnail_(file) {
+    return new Promise((resolve, reject) => {
+      if (!this.thumbnailQueue_) {
+        this.thumbnailQueue_ = [];
+        this.thumbnailQueueNumWorkers_ = 0;
+      }
+      this.thumbnailQueue_.push({file, resolve, reject});
+      if (this.thumbnailQueueNumWorkers_ < 10) {
+        this.thumbnailQueueNumWorkers_ += 1;
+        this.processThumbnailQueue_();
+      }
+    });
+  }
+
+  async processThumbnailQueue_() {
+    try {
+      while (this.thumbnailQueue_.length > 0) {
+        const item = this.thumbnailQueue_.shift();
+        await this.makeThumbnailNow_(item.file).then(item.resolve, item.reject);
+      }
+    } catch (err) {
+      console.error('processThumbnailQueue_', err);
+    }
+    this.thumbnailQueueNumWorkers_ -= 1;
+  }
+
+  async makeThumbnailNow_(file) {
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext('2d');
     if (file.type.startsWith('image/')) {
@@ -1932,7 +1994,7 @@ class UI {
         video.src = URL.createObjectURL(file);
         video.addEventListener('loadeddata', () => {
           setTimeout(() => {
-            video.currentTime = Math.min(video.duration, 5);
+            video.currentTime = Math.floor(Math.min(video.duration/2, 5));
           }, 100);
           video.addEventListener('seeked', () => {
             if (video.videoWidth > video.videoHeight) {

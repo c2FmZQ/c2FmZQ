@@ -297,6 +297,7 @@ self.addEventListener('message', async event => {
         'createAccount',
         'recoverAccount',
         'upload',
+        'cancelUpload',
         'backupPhrase',
         'changeKeyBackup',
         'restoreSecretKey',

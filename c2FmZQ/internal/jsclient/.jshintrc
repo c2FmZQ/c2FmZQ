@@ -32,6 +32,7 @@
     "SecureStore": true,
     "self": true,
     "sendLoggedOut": true,
+    "sendUploadProgress": true,
     "setInterval": true,
     "setTimeout": true,
     "sodium": true,

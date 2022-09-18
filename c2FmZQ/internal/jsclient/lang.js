@@ -99,6 +99,8 @@ class Lang {
       'TB': 'TB',
       'gallery': 'gallery',
       'trash': 'trash',
+      'cancel': 'Cancel',
+      'done': 'Done',
       'upload:': 'Upload: $1',
       'collection:': 'Collection: $1',
       'shared-with': 'Shared with $1',

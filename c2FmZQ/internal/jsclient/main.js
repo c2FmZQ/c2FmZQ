@@ -118,15 +118,7 @@ class Main {
           }
           break;
         case 'upload-progress':
-          const progress = event.data.progress;
-          const msg = `${progress.numFilesDone}/${progress.numFiles} [${Math.floor(progress.numBytesDone / progress.numBytes * 100)}%]`
-          const e = document.querySelector('.upload-progress > .popup-message');
-          if (e) {
-            e.textContent = msg;
-            setTimeout(e.remove, 5000);
-          } else {
-            ui.popupMessage(msg, 'upload-progress', {sticky: !progress.done});
-          }
+          ui.showUploadProgress(event.data.progress);
           break;
         default:
           console.log('Received Message', event.data);
@@ -207,6 +199,7 @@ class Main {
       'createAccount',
       'recoverAccount',
       'upload',
+      'cancelUpload',
       'backupPhrase',
       'changeKeyBackup',
       'restoreSecretKey',

@@ -1607,10 +1607,19 @@ class c2FmZQClient {
     return p;
   }
 
+  async cancelUpload(clientId) {
+    this.cancelUpload_.cancel = true;
+  }
+
   async upload(clientId, collection, files) {
     if (files.length === 0) {
       return;
     }
+    if (this.cancelUpload_ === undefined) {
+      this.cancelUpload_ = { cancel: false };
+    }
+    this.cancelUpload_.cancel = false;
+
     if (this.streamingUploadWorks_ === undefined) {
       try {
         const ok = await this.testUploadStream_();
@@ -1621,27 +1630,35 @@ class c2FmZQClient {
     }
     console.log(this.streamingUploadWorks_ ? 'SW streaming upload is supported by browser' : 'SW streaming upload is NOT supported by browser');
 
-    let p = this.uploadFile_(clientId, collection, files[0]);
-    files[0].uploadedBytes = 0;
-    for (let i = 1; i < files.length; i++) {
-      p = p.then(() => this.uploadFile_(clientId, collection, files[i]));
+    for (let i = 0; i < files.length; i++) {
       files[i].uploadedBytes = 0;
+      files[i].tn = base64DecodeToBytes(files[i].thumbnail.split(',')[1]);
+      delete files[i].thumbnail;
     }
 
     const st = {
+      collection: collection,
       files: files,
     };
-    p = p.then(r => {
-      st.done = true;
+    if (this.uploadData_) {
+      this.uploadData_.push(st);
+      return Promise.resolve();
+    }
+    this.uploadData_ = [st];
+
+    const p = new Promise(async (resolve) => {
+      for (let b = 0; b < this.uploadData_.length; b++) {
+        let batch = this.uploadData_[b];
+        for (let i = 0; i < batch.files.length; i++) {
+          await this.uploadFile_(clientId, batch.collection, batch.files[i]);
+        }
+        batch.done = true;
+      }
+      return resolve();
     })
     .catch(err => {
       st.err = err;
     });
-
-    if (!this.uploadData_) {
-      this.uploadData_ = [];
-    }
-    this.uploadData_.push(st);
 
     const notify = () => {
       if (!this.uploadData_) return;
@@ -1657,9 +1674,11 @@ class c2FmZQClient {
         b.files.forEach(f => {
           state.numFiles += 1;
           state.numBytes += f.file.size;
+          state.numBytes += f.tn.byteLength;
           if (f.done) {
             state.numFilesDone += 1;
             state.numBytesDone += f.file.size;
+            state.numBytesDone += f.tn.byteLength;
           } else {
             state.numBytesDone += f.uploadedBytes;
           }
@@ -1688,15 +1707,18 @@ class c2FmZQClient {
       }
       pk = await sodiumPublicKey(this.db_.albums[collection].pk);
     }
-    const tn = base64DecodeToBytes(file.thumbnail.split(',')[1]);
-    const [hdr, hdrBin, hdrBase64] = await this.makeHeaders_(pk, tn, file);
+    const [hdr, hdrBin, hdrBase64] = await this.makeHeaders_(pk, file);
 
     const boundary = Array.from(self.crypto.getRandomValues(new Uint8Array(32))).map(v => ('0'+v.toString(16)).slice(-2)).join('');
-    const rs = new ReadableStream(new UploadStream(boundary, hdr, hdrBin, hdrBase64, collection, tn, file, this.vars_.token));
+    const rs = new ReadableStream(new UploadStream(boundary, hdr, hdrBin, hdrBase64, collection, file, this.vars_.token, this.cancelUpload_));
+
+    if (this.cancelUpload_.cancel) {
+      throw new Error('canceled');
+    }
 
     let body = rs;
     if (!this.streamingUploadWorks_) {
-      // Streaming upload not supported in chrome yet.
+      // Streaming upload is supported in chrome 105+.
       // https://bugs.chromium.org/p/chromium/issues/detail?id=688906
       body = await self.stream2blob(rs);
     }
@@ -1760,7 +1782,7 @@ class c2FmZQClient {
     });
   }
 
-  async makeHeaders_(pk, tn, file) {
+  async makeHeaders_(pk, file) {
     const fileId = self.crypto.getRandomValues(new Uint8Array(32));
     let fileType = 1;
     if (file.file.type.startsWith('image/')) fileType = 2;
@@ -1777,7 +1799,7 @@ class c2FmZQClient {
     }, {
       version: 1,
       chunkSize: 1 << 20,
-      dataSize: tn.length,
+      dataSize: file.tn.length,
       symmetricKey: self.crypto.getRandomValues(new Uint8Array(32)),
       fileType: fileType,
       fileName: file.name || file.file.name,
@@ -1881,16 +1903,16 @@ class Decrypter {
 }
 
 class UploadStream {
-  constructor(boundary, hdr, hdrBin, hdrBase64, collection, tn, file, token) {
+  constructor(boundary, hdr, hdrBin, hdrBase64, collection, file, token, cancel) {
     this.boundary_ = boundary;
     this.hdr_ = hdr;
     this.hdrBin_ = hdrBin;
     this.hdrBase64_ = hdrBase64;
     this.set_ = collection === 'gallery' ? 0 : 2;
     this.albumId_ = collection === 'gallery' ? '' : collection;
-    this.tn_ = tn;
     this.file_ = file;
     this.token_ = token;
+    this.cancel_ = cancel;
     this.filename_ = self.base64RawUrlEncode(self.crypto.getRandomValues(new Uint8Array(32))) + '.sp';
   }
 
@@ -1930,10 +1952,17 @@ class UploadStream {
         key: await sodiumKey(this.hdr_[1].symmetricKey),
         hdrBin: this.hdrBin_[1],
         chunkSize: this.hdr_[1].chunkSize,
-        reader: (new Blob([this.tn_])).stream().getReader(),
+        reader: (new Blob([this.file_.tn])).stream().getReader(),
         n: 0,
       },
     ];
+  }
+
+  checkCanceled() {
+    if (this.cancel_.cancel) {
+      this.cancel();
+    }
+    return this.cancel_.cancel;
   }
 
   async pull(controller) {
@@ -1942,7 +1971,9 @@ class UploadStream {
       controller.close();
       return;
     }
-    return new Promise(async resolve => {
+    if (this.checkCanceled()) return Promise.reject('canceled');
+
+    return new Promise(async (resolve, reject) => {
       const q = this.queue_[0];
       if (q.n === 0) {
         controller.enqueue(self.bytesFromBinary(`--${this.boundary_}\r\n` +
@@ -1955,6 +1986,7 @@ class UploadStream {
       }
       let eof = false;
       while (q.buf.byteLength < q.chunkSize) {
+        if (this.checkCanceled()) return reject('canceled');
         let {done, value} = await q.reader.read();
         if (done) {
           eof = true;
@@ -1966,6 +1998,7 @@ class UploadStream {
         q.buf = tmp;
       }
       while (q.buf.byteLength >= q.chunkSize) {
+        if (this.checkCanceled()) return reject('canceled');
         let chunk = q.buf.slice(0, q.chunkSize);
         q.buf = q.buf.slice(q.chunkSize);
         this.file_.uploadedBytes += chunk.byteLength;
@@ -1973,6 +2006,7 @@ class UploadStream {
         q.n++;
       }
       if (eof) {
+        if (this.checkCanceled()) return reject('canceled');
         if (q.buf.byteLength > 0) {
           this.file_.uploadedBytes += q.buf.byteLength;
           controller.enqueue(await this.encryptChunk_(q.n, q.buf, q.key));
