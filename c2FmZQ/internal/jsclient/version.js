@@ -18,7 +18,7 @@
 
 'use strict';
 
-const VERSION= 'v0.1.14a';
+const VERSION= 'v0.1.15';
 
 // Set DEVEL=true to reload source files and resources on page reload.
 const DEVEL = false;
