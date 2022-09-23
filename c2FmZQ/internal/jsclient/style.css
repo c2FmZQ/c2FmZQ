@@ -28,12 +28,12 @@ a {
   100% {opacity: 0;}
 }
 @keyframes slideIn {
-  0% {transform: translate(0%, 100%);}
-  100% {transform: translate(0%, 0%);}
+  0% {transform: translate(0%, 100%); opacity: 0.5;}
+  100% {transform: translate(0%, 0%); opacity: 1;}
 }
 @keyframes slideOut {
-  0% {transform: translate(0%, 0%);}
-  100% {transform: translate(0%, 100%);}
+  0% {transform: translate(0%, 0%); opacity: 1;}
+  100% {transform: translate(0%, 100%); opacity: 0.25;}
 }
 #popup-messages {
   position: fixed;
@@ -43,20 +43,20 @@ a {
 }
 .error {
   animation: slideIn 1s;
-  padding: 10px;
-  border: 5px double red;
+  padding: 8px;
+  border: 5px solid red;
   background-color: yellow;
-  font-size: 200%;
+  font-size: 125%;
   cursor: pointer;
   min-width: 25vw;
   max-width: 75vw;
 }
 .info {
   animation: slideIn 1s;
-  padding: 10px;
-  border: 5px double black;
-  background-color: white;
-  font-size: 200%;
+  padding: 8px;
+  border: 5px solid black;
+  background-color: lightgray;
+  font-size: 125%;
   cursor: pointer;
   min-width: 25vw;
   max-width: 75vw;
@@ -72,6 +72,11 @@ a {
 }
 .upload-progress-div {
   white-space: nowrap;
+  padding-right: 3em;
+}
+.thumbnail-progress-div {
+  white-space: nowrap;
+  padding-right: 3em;
 }
 .collectionThumbdiv {
   margin: 5px;

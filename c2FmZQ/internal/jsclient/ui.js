@@ -28,6 +28,7 @@ class UI {
     this.uiStarted_ = false;
     this.promptingForPassphrase_ = false;
     this.addingFiles_ = false;
+    this.popupZindex_ = 1000;
     this.galleryState_ = {
       collection: main.getHash('collection', 'gallery'),
       files: [],
@@ -381,6 +382,8 @@ class UI {
   popupMessage(message, className, opt) {
     const div = document.createElement('div');
     div.className = className || 'error';
+    div.style.position = 'relative';
+    div.style.zIndex = this.popupZindex_++;
     const v = document.createElement('span');
     v.textContent = '✖';
     v.style = 'float: right;';
@@ -404,11 +407,7 @@ class UI {
       });
     };
     div.addEventListener('click', remove);
-    if (container.firstChild) {
-      container.insertBefore(div, container.firstChild);
-    } else {
-      container.appendChild(div);
-    }
+    container.appendChild(div);
     m.remove = remove;
 
     if (!opt || !opt.sticky) {
@@ -965,19 +964,49 @@ class UI {
     if (moveData) {
       return this.moveFiles_(JSON.parse(moveData), collection);
     }
-    const toUpload = [];
-    for (let i = 0; i < files.length; i++) {
-      const [data, duration] = await this.makeThumbnail_(files[i]);
-      toUpload.push({
-        file: files[i],
-        thumbnail: data,
-        duration: duration,
-      });
+    return this.handleDropUpload_(collection, files);
+  }
+
+  async cancelDropUploads_() {
+    this.cancelQueuedDropUploads_ = true;
+    this.cancelQueuedThumbnailRequests_();
+  }
+
+  async handleDropUpload_(collection, files) {
+    const MAX = 10;
+    const up = [];
+    this.cancelQueuedDropUploads_ = false;
+    let abort = null;
+    this.popupMessage(_T('drop-received'), 'upload-progress');
+    for (let i = 0; i < files.length; i += MAX) {
+      const toUpload = [];
+      const tnp = [];
+      for (let n = 0; n < MAX && i+n < files.length; n++) {
+        const off = i+n;
+        tnp.push(this.makeThumbnail_(files[off]).then(([data, duration]) => {
+          toUpload.push({
+            file: files[off],
+            thumbnail: data,
+            duration: duration,
+          });
+        }));
+      }
+      up.push(Promise.all(tnp).then(() => {
+        if (this.cancelQueuedDropUploads_) {
+          abort = 'canceled';
+        }
+        if (abort) {
+          return Promise.reject(abort);
+        }
+        return main.sendRPC('upload', collection, toUpload)
+          .catch(err => {
+            abort = err;
+            this.cancelQueuedThumbnailRequests_();
+            return Promise.reject(abort);
+          });
+      }));
     }
-    if (toUpload.length === 0) {
-      return;
-    }
-    return main.sendRPC('upload', collection, toUpload)
+    return Promise.all(up)
       .then(() => {
         this.refresh_();
       })
@@ -1740,14 +1769,34 @@ class UI {
     return _T('MiB', s);
   }
 
+  showThumbnailProgress_() {
+    const sz = (this.thumbnailQueue_ ? this.thumbnailQueue_.length : 0 ) + (this.thumbnailQueueNumWorkers_ ? this.thumbnailQueueNumWorkers_ : 0);
+    const info = _T('thumbnail-progress', sz);
+    const e = document.querySelector('#thumbnail-progress-data');
+    if (e) {
+      e.textContent = info;
+      if (sz === 0) {
+        setTimeout(e.remove, 2000);
+      }
+    } else {
+      const msg = document.createElement('div');
+      msg.className = 'thumbnail-progress-div';
+      const span = document.createElement('span');
+      span.id = 'thumbnail-progress-data';
+      span.textContent = info;
+      msg.appendChild(span);
+      span.remove = this.popupMessage(msg, 'upload-progress', {sticky: sz > 0});
+    }
+  }
+
   showUploadProgress(progress) {
-    const info = `${progress.numFilesDone}/${progress.numFiles} [${Math.floor(progress.numBytesDone / progress.numBytes * 100)}%]`;
+    const info = _T('upload-progress', `${progress.numFilesDone}/${progress.numFiles} [${Math.floor(progress.numBytesDone / progress.numBytes * 100)}%]`);
     const e = document.querySelector('#upload-progress-data');
     if (e) {
       e.textContent = info;
-      if (progress.done) {
-        document.querySelector('#upload-progress-cancel-button').textContent = _T('done');
-        setTimeout(e.remove, 5000);
+      if (progress.done || progress.err) {
+        document.querySelector('#upload-progress-cancel-button').style.display = 'none';
+        setTimeout(e.remove, 2000);
       }
     } else {
       const msg = document.createElement('div');
@@ -1761,6 +1810,7 @@ class UI {
       button.textContent = _T('cancel');
       button.addEventListener('click', () => {
         button.disabled = true;
+        this.cancelDropUploads_();
         main.sendRPC('cancelUpload');
       });
       msg.appendChild(button);
@@ -1934,6 +1984,7 @@ class UI {
         this.thumbnailQueueNumWorkers_ = 0;
       }
       this.thumbnailQueue_.push({file, resolve, reject});
+      this.showThumbnailProgress_();
       if (this.thumbnailQueueNumWorkers_ < 10) {
         this.thumbnailQueueNumWorkers_ += 1;
         this.processThumbnailQueue_();
@@ -1941,16 +1992,25 @@ class UI {
     });
   }
 
+  async cancelQueuedThumbnailRequests_() {
+    while (this.thumbnailQueue_.length > 0) {
+      const item = this.thumbnailQueue_.shift();
+      item.reject('canceled');
+    }
+  }
+
   async processThumbnailQueue_() {
     try {
       while (this.thumbnailQueue_.length > 0) {
         const item = this.thumbnailQueue_.shift();
         await this.makeThumbnailNow_(item.file).then(item.resolve, item.reject);
+        this.showThumbnailProgress_();
       }
     } catch (err) {
       console.error('processThumbnailQueue_', err);
     }
     this.thumbnailQueueNumWorkers_ -= 1;
+    this.showThumbnailProgress_();
   }
 
   async makeThumbnailNow_(file) {

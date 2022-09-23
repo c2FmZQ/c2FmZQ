@@ -1609,6 +1609,9 @@ class c2FmZQClient {
 
   async cancelUpload(clientId) {
     this.cancelUpload_.cancel = true;
+    this.uploadData_.forEach(b => {
+      b.err = 'canceled';
+    });
   }
 
   async upload(clientId, collection, files) {
@@ -1617,6 +1620,9 @@ class c2FmZQClient {
     }
     if (this.cancelUpload_ === undefined) {
       this.cancelUpload_ = { cancel: false };
+    }
+    if (this.uploadData_?.length > 0 && this.cancelUpload_.cancel) {
+      return Promise.reject('canceled');
     }
     this.cancelUpload_.cancel = false;
 
@@ -1636,28 +1642,34 @@ class c2FmZQClient {
       delete files[i].thumbnail;
     }
 
-    const st = {
-      collection: collection,
-      files: files,
-    };
     if (this.uploadData_) {
-      this.uploadData_.push(st);
-      return Promise.resolve();
+      return new Promise((resolve, reject) => {
+        this.uploadData_.push({collection, files, resolve, reject});
+      });
     }
-    this.uploadData_ = [st];
+    this.uploadData_ = [];
 
-    const p = new Promise(async (resolve) => {
-      for (let b = 0; b < this.uploadData_.length; b++) {
+    const p = new Promise(async (resolve, reject) => {
+      this.uploadData_.push({collection, files, resolve, reject});
+
+      for (let b = 0; b < this.uploadData_?.length; b++) {
         let batch = this.uploadData_[b];
-        for (let i = 0; i < batch.files.length; i++) {
-          await this.uploadFile_(clientId, batch.collection, batch.files[i]);
+        for (let i = 0; i < batch.files.length && !batch.err; i++) {
+          try {
+            await this.uploadFile_(clientId, batch.collection, batch.files[i]);
+          } catch (err) {
+            const name = batch.files[i].name || batch.files[i].file.name;
+            console.log(`SW Upload of ${name} failed`, err);
+            batch.err = err;
+          }
+        }
+        if (batch.err) {
+          batch.reject(batch.err);
+        } else {
+          batch.resolve();
         }
         batch.done = true;
       }
-      return resolve();
-    })
-    .catch(err => {
-      st.err = err;
     });
 
     const notify = () => {
@@ -1746,6 +1758,12 @@ class c2FmZQClient {
       }
       file.done = true;
       return 'ok';
+    })
+    .catch(err => {
+      if (this.cancelUpload_.cancel) {
+        return Promise.reject('canceled');
+      }
+      return Promise.reject(err);
     });
   }
 
@@ -2020,7 +2038,9 @@ class UploadStream {
 
   cancel(/*reason*/) {
     for (let i = 0; i < this.queue_.length; i++) {
-      this.queue_[i].reader.close();
+      if (this.queue_[i]?.reader?.close) {
+        this.queue_[i].reader.close();
+      }
     }
     this.queue_ = [];
   }
