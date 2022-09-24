@@ -1874,9 +1874,12 @@ class UI {
         const sizeSpan = document.createElement('span');
         sizeSpan.textContent = _T('size:', this.formatSize_(f.size));
         div.appendChild(sizeSpan);
+        const errSpan = document.createElement('span');
+        errSpan.textContent = _T('status:', '...');
+        div.appendChild(errSpan);
         const removeButton = document.createElement('button');
-        removeButton.disabled = true;
         removeButton.className = 'upload-item-remove-button';
+        removeButton.disabled = true;
         removeButton.textContent = _T('remove');
         removeButton.addEventListener('click', () => {
           files = files.filter(f => f.elem !== elem);
@@ -1888,12 +1891,23 @@ class UI {
           elem: elem,
         };
         files.push(ff);
-        p.push(this.makeThumbnail_(f).then(([data,duration]) => {
-          removeButton.disabled = false;
-          img.src = data;
-          ff.thumbnail = data;
-          ff.duration = duration;
-        }));
+        p.push(this.makeThumbnail_(f)
+          .then(([data,duration]) => {
+            img.src = data;
+            ff.thumbnail = data;
+            ff.duration = duration;
+            errSpan.textContent = _T('status:', _T('ready'));
+          })
+          .catch(err => {
+            console.log('Thumbnail error', err);
+            errSpan.textContent = _T('status:', _T('error'));
+            ff.err = err;
+            return Promise.reject(err);
+          })
+          .finally(() => {
+            removeButton.disabled = false;
+          })
+        );
       }
       const list = document.querySelector('#upload-file-list');
       while (list.firstChild) {
@@ -1907,6 +1921,9 @@ class UI {
         uploadButton.addEventListener('click', () => {
           let toUpload = [];
           for (let i = 0; i < files.length; i++) {
+            if (files[i].err) {
+              continue;
+            }
             toUpload.push({
               file: files[i].file,
               thumbnail: files[i].thumbnail,
@@ -1929,7 +1946,7 @@ class UI {
           });
         });
         list.appendChild(uploadButton);
-        Promise.all(p).then(() => {
+        Promise.allSettled(p).then(() => {
           uploadButton.disabled = false;
         });
       }
@@ -2003,7 +2020,12 @@ class UI {
     try {
       while (this.thumbnailQueue_.length > 0) {
         const item = this.thumbnailQueue_.shift();
-        await this.makeThumbnailNow_(item.file).then(item.resolve, item.reject);
+        await this.makeThumbnailNow_(item.file)
+          .then(item.resolve)
+          .catch(err => {
+            console.log('Thumbnail error, trying generic image', err);
+            item.resolve(this.makeGenericThumbnail_(item.file));
+          });
         this.showThumbnailProgress_();
       }
     } catch (err) {
@@ -2017,7 +2039,7 @@ class UI {
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext('2d');
     if (file.type.startsWith('image/')) {
-      return new Promise(resolve => {
+      return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => {
           const img = new Image();
@@ -2043,8 +2065,14 @@ class UI {
             ctx.drawImage(img, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
             return resolve([canvas.toDataURL(file.type),0]);
           };
-          img.src = reader.result;
+          img.onerror = err => reject(err);
+          try {
+            img.src = reader.result;
+          } catch (err) {
+            reject(err);
+          }
         };
+        reader.onerror = err => reject(err);
         reader.readAsDataURL(file);
       });
     } else if (file.type.startsWith('video/')) {
@@ -2082,19 +2110,25 @@ class UI {
         });
       });
     } else {
-      canvas.width = 100;
-      canvas.height = 100;
-      ctx.font = '10px monospace';
-      let name = file.name;
-      let row = 1;
-      while (name !== '') {
-        const n = name.length > 12 ? name.substring(0, 12) : name;
-        name = name.slice(n.length);
-        ctx.fillText(n, 10, 10 * row);
-        row++;
-      }
-      return [canvas.toDataURL(file.type), 0];
+      return this.makeGenericThumbnail_(file);
     }
+  }
+
+  makeGenericThumbnail_(file) {
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext('2d');
+    canvas.width = 100;
+    canvas.height = 100;
+    ctx.font = '10px monospace';
+    let name = file.name;
+    let row = 1;
+    while (name !== '') {
+      const n = name.length > 12 ? name.substring(0, 12) : name;
+      name = name.slice(n.length);
+      ctx.fillText(n, 10, 10 * row);
+      row++;
+    }
+    return [canvas.toDataURL('image/png'), 0];
   }
 
   async showProfile_() {

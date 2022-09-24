@@ -44,7 +44,7 @@ a {
 .error {
   animation: slideIn 1s;
   padding: 8px;
-  border: 5px solid red;
+  border: 2px solid red;
   background-color: yellow;
   font-size: 125%;
   cursor: pointer;
@@ -54,7 +54,7 @@ a {
 .info {
   animation: slideIn 1s;
   padding: 8px;
-  border: 5px solid black;
+  border: 2px solid black;
   background-color: lightgray;
   font-size: 125%;
   cursor: pointer;
