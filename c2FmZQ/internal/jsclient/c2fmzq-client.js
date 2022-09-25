@@ -1639,6 +1639,7 @@ class c2FmZQClient {
     for (let i = 0; i < files.length; i++) {
       files[i].uploadedBytes = 0;
       files[i].tn = base64DecodeToBytes(files[i].thumbnail.split(',')[1]);
+      files[i].tnSize = files[i].tn.byteLength;
       delete files[i].thumbnail;
     }
 
@@ -1657,6 +1658,7 @@ class c2FmZQClient {
         for (let i = 0; i < batch.files.length && !batch.err; i++) {
           try {
             await this.uploadFile_(clientId, batch.collection, batch.files[i]);
+            delete batch.files[i].tn;
           } catch (err) {
             const name = batch.files[i].name || batch.files[i].file.name;
             console.log(`SW Upload of ${name} failed`, err);
@@ -1686,11 +1688,11 @@ class c2FmZQClient {
         b.files.forEach(f => {
           state.numFiles += 1;
           state.numBytes += f.file.size;
-          state.numBytes += f.tn.byteLength;
+          state.numBytes += f.tnSize;
           if (f.done) {
             state.numFilesDone += 1;
             state.numBytesDone += f.file.size;
-            state.numBytesDone += f.tn.byteLength;
+            state.numBytesDone += f.tnSize;
           } else {
             state.numBytesDone += f.uploadedBytes;
           }
@@ -1817,7 +1819,7 @@ class c2FmZQClient {
     }, {
       version: 1,
       chunkSize: 1 << 20,
-      dataSize: file.tn.length,
+      dataSize: file.tnSize,
       symmetricKey: self.crypto.getRandomValues(new Uint8Array(32)),
       fileType: fileType,
       fileName: file.name || file.file.name,

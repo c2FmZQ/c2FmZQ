@@ -111,7 +111,7 @@ class Lang {
       'name:': 'Name: $1',
       'size:': 'Size: $1',
       'remove': 'Remove',
-      'thumbnail-progress': 'Thumbnails: $1',
+      'thumbnail-progress': 'Preparing: $1',
       'status:': 'Status: $1',
       'upload-progress': 'Upload: $1',
       'upload-files': 'Upload files',

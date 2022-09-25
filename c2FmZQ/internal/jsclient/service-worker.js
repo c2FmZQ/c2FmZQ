@@ -280,6 +280,8 @@ self.addEventListener('resume', event => {
 self.addEventListener('message', async event => {
   const clientId = event.source.id;
   switch(event.data?.type) {
+    case 'nop':
+      break;
     case 'hello':
       console.log(`SW Received hello ${event.data.version}`);
       if (event.data.version !== VERSION) {

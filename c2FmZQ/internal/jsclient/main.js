@@ -119,6 +119,7 @@ class Main {
           break;
         case 'upload-progress':
           ui.showUploadProgress(event.data.progress);
+          navigator.serviceWorker.controller.postMessage({type: 'nop'});
           break;
         default:
           console.log('Received Message', event.data);

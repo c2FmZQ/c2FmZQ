@@ -188,6 +188,21 @@ class UI {
         this.switchView_({collection: c});
       }
     });
+    const html = document.querySelector('html');
+    html.addEventListener('dragenter', event => {
+      event.preventDefault();
+    });
+    html.addEventListener('dragover', event => {
+      event.preventDefault();
+    });
+    html.addEventListener('drop', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (this.accountEmail_) {
+        this.handleCollectionDropEvent_(this.galleryState_.collection, event);
+      }
+    });
+
     this.trashButton_.addEventListener('click', () => {
       this.switchView_({collection: 'trash'});
     });
@@ -197,6 +212,7 @@ class UI {
     });
     this.trashButton_.addEventListener('drop', event => {
       event.preventDefault();
+      event.stopPropagation();
       this.handleCollectionDropEvent_('trash', event);
     });
     this.loginButton_.addEventListener('click', this.login_.bind(this));
@@ -698,6 +714,7 @@ class UI {
         });
         div.addEventListener('drop', event => {
           event.preventDefault();
+          event.stopPropagation();
           this.handleCollectionDropEvent_(c.collection, event);
         });
       }
@@ -1975,6 +1992,7 @@ class UI {
 
     popup.addEventListener('drop', e => {
       e.preventDefault();
+      e.stopPropagation();
       let files = [];
       if (e.dataTransfer.items) {
         for (let i = 0; i < e.dataTransfer.items.length; i++) {
