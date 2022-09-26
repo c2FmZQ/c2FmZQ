@@ -265,7 +265,7 @@ class c2FmZQClient {
         this.vars_.sk = sk.getBuffer();
         return this.saveVars_();
       })
-      .then(() => this.login(clientId, email, password))
+      .then(() => this.login(clientId, args))
       .then(v => {
         if (!enableBackup) {
           self.sendMessage(clientId, {type: 'info', msg: 'Your secret key is NOT backed up. You will need a backup phrase next time you login.'});
@@ -306,7 +306,7 @@ class c2FmZQClient {
         if (resp.status !== 'ok') {
           throw resp.status;
         }
-        return this.login(clientId, email, password);
+        return this.login(clientId, args);
       })
       .then(v => {
         if (!enableBackup) {
