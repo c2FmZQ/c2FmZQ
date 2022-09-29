@@ -371,14 +371,17 @@ class UI {
         {
           text: _T('profile'),
           onclick: this.showProfile_.bind(this),
+          id: 'account-menu-profile',
         },
         {
           text: _T('key-backup'),
           onclick: this.showBackupPhrase_.bind(this),
+          id: 'account-menu-key-backup',
         },
         {
           text: _T('prefs'),
           onclick: this.showPreferences_.bind(this),
+          id: 'account-menu-prefs',
         },
       ],
     };
@@ -386,11 +389,13 @@ class UI {
       params.items.push({
         text: _T('admin-console'),
         onclick: this.showAdminConsole_.bind(this),
+        id: 'account-menu-admin',
       });
     }
     params.items.push({
       text: _T('logout'),
       onclick: this.logout_.bind(this),
+      id: 'account-menu-logout',
     });
     this.contextMenu_(params);
   }
@@ -1197,6 +1202,9 @@ class UI {
       const item = document.createElement('button');
       item.className = 'context-menu-item';
       item.textContent = params.items[i].text;
+      if (params.items[i].id) {
+        item.id = params.items[i].id;
+      }
       item.addEventListener('click', e => {
         closeMenu();
         if (params.items[i].onclick) {
