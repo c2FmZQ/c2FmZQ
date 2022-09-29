@@ -27,7 +27,7 @@ import (
 	"strings"
 )
 
-//go:embed *
+//go:embed embed
 var content embed.FS
 
 func Show() {
