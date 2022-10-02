@@ -29,6 +29,7 @@
     "Lang": true,
     "main": true,
     "ReadableStream": true,
+    "SAMEORIGIN": true,
     "SecureStore": true,
     "self": true,
     "sendLoggedOut": true,

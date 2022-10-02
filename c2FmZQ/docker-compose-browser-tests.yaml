@@ -18,7 +18,7 @@ services:
     #stdin_open: true
     user: "${USERID:-1000}"
     working_dir: "/home/user/src/c2FmZQ/c2FmZQ"
-    command: "go test -v -tags selenium ./internal/jsclient/..."
+    command: "go test -v -tags selenium ./internal/pwa/..."
     environment:
      - HOME=/home/user
      - GOPATH=/home/user/go

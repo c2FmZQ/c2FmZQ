@@ -161,6 +161,31 @@ class Main {
     });
   }
 
+  async calcServerFingerPrint(n) {
+    try { 
+      n = new URL(n).toString();
+    } catch (err) {
+      return Promise.resolve('');
+    }
+    const data = new TextEncoder().encode(n);
+    return window.crypto.subtle.digest('SHA-256', data)
+      .then(b => {
+        const a = new Uint8Array(b);
+        const map = 'BCDFHJMNPQRSTVWZbcdfhjmnpqrstvwz';
+        const h = [
+          (a[0]) & 0x1f,                  // bits 4, 3, 2, 1, 0
+          (a[1] << 3 | a[0] >> 5) & 0x1f, // bits 1, 0, 7, 6, 5
+          (a[1] >> 2) & 0x1f,             // bits 6, 5, 4, 3, 2
+          (a[2] << 1 | a[1] >> 7) & 0x1f, // bits 3, 2, 1, 0, 7
+          (a[3] << 4 | a[2] >> 4) & 0x1f, // bits 0, 7, 6, 5, 4
+          (a[3] >> 1) & 0x1f,             // bits 5, 4, 3, 2, 1
+          (a[4] << 2 | a[3] >> 6) & 0x1f, // bits 2, 1, 0, 7, 6
+          (a[4] >> 3) & 0x1f,             // bits 7, 6, 5, 4, 3
+        ].map(c => map.substr(c, 1));
+        return h.slice(0, 4).join('') + '-' + h.slice(4, 8).join('');
+      });
+  }
+
   setHash(key, value) {
     let obj = {};
     try {

@@ -75,6 +75,7 @@ class UI {
     this.backupKeysCheckboxLabel_ = document.querySelector('#backup-keys-checkbox-label');
     this.otpInputLabel_ = document.querySelector('#otp-input-label');
     this.otpInput_ = document.querySelector('#otp-input');
+    this.serverInput_ = document.querySelector('#server-input');
     this.loginButton_ = document.querySelector('#login-button');
     this.refreshButton_ = document.querySelector('#refresh-button');
     this.trashButton_ = document.querySelector('#trash-button');
@@ -90,6 +91,7 @@ class UI {
     document.querySelector('label[for=backup-phrase]').textContent = _T('form-backup-phrase');
     document.querySelector('label[for=backup-keys-checkbox]').textContent = _T('form-backup-keys?');
     document.querySelector('label[for=code]').textContent = _T('form-otp-code');
+    document.querySelector('label[for=server]').textContent = _T('form-server');
     document.querySelector('#login-button').textContent = _T('login');
 
     this.passphraseInput_.addEventListener('keyup', e => {
@@ -173,12 +175,34 @@ class UI {
     this.popupMessage(err);
   }
 
+  serverHash_(n) {
+    let e = document.querySelector('#server-fingerprint');
+    if (!e) {
+      e = document.createElement('div');
+      e.id = 'server-fingerprint';
+      document.querySelector('body').appendChild(e);
+    }
+    main.calcServerFingerPrint(n)
+    .then(fp => {
+      e.textContent = fp;
+    });
+  }
+
   startUI() {
     console.log('Start UI');
     if (this.uiStarted_) {
       return;
     }
     this.uiStarted_ = true;
+
+    if (SAMEORIGIN) {
+      this.serverHash_(window.location.href.replace(/^(.*\/)[^\/]*/, '$1'));
+    } else {
+      document.querySelector('label[for=server]').style.display = '';
+      this.serverInput_.style.display = '';
+      this.serverInput_.value = main.getHash('server') || '';
+      this.serverHash_(this.serverInput_.value);
+    }
 
     window.addEventListener('scroll', this.onScroll_.bind(this));
     window.addEventListener('resize', this.onScroll_.bind(this));
@@ -255,6 +279,12 @@ class UI {
       }
     });
 
+    this.serverInput_.addEventListener('keyup', () => {
+      this.serverHash_(this.serverInput_.value);
+    });
+    this.serverInput_.addEventListener('change', () => {
+      this.serverHash_(this.serverInput_.value);
+    });
     this.loggedInAccount_.addEventListener('click', this.showAccountMenu_.bind(this));
     this.loggedInAccount_.addEventListener('contextmenu', this.showAccountMenu_.bind(this));
 
@@ -492,6 +522,15 @@ class UI {
       this.popupMessage(_T('new-pass-doesnt-match'));
       return;
     }
+    if (!SAMEORIGIN) {
+      try {
+        this.serverInput_.value = new URL(this.serverInput_.value).toString();
+      } catch (err) {
+        return Promise.reject(err);
+      }
+      this.serverHash_(this.serverInput_.value);
+      main.setHash('server', this.serverInput_.value);
+    }
     let old = this.loginButton_.textContent;
     this.loginButton_.textContent = this.tabs_[this.selectedTab_].message;
     this.loginButton_.disabled = true;
@@ -505,12 +544,14 @@ class UI {
     this.backupPhraseInput_.disabled = true;
     this.backupKeysCheckbox_.disabled = true;
     this.otpInput_.disabled = true;
+    this.serverInput_.disabled = true;
     const args = {
       email: this.emailInput_.value,
       password: this.passwordInput_.value,
       enableBackup: this.backupKeysCheckbox_.checked,
       backupPhrase: this.backupPhraseInput_.value,
       otpCode: this.otpInput_.value,
+      server: SAMEORIGIN ? undefined : this.serverInput_.value,
     };
     return main.sendRPC(this.tabs_[this.selectedTab_].rpc, args)
     .then(({otpEnabled, isAdmin, needKey}) => {
@@ -557,6 +598,7 @@ class UI {
       this.backupPhraseInput_.disabled = false;
       this.backupKeysCheckbox_.disabled = false;
       this.otpInput_.disabled = false;
+      this.serverInput_.disabled = false;
     });
   }
 

@@ -18,7 +18,10 @@
 
 'use strict';
 
-const VERSION= 'v0.1.19';
+const VERSION = 'v0.1.20';
 
+// Indicates that the PWA is only allowed to connect to the server from which
+// it was loaded. Set to false to allow cross-origin connections.
+const SAMEORIGIN = true;
 // Set DEVEL=true to reload source files and resources on page reload.
 const DEVEL = false;

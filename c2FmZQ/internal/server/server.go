@@ -39,8 +39,8 @@ import (
 	"golang.org/x/time/rate"
 
 	"c2FmZQ/internal/database"
-	"c2FmZQ/internal/jsclient"
 	"c2FmZQ/internal/log"
+	"c2FmZQ/internal/pwa"
 	"c2FmZQ/internal/server/basicauth"
 	"c2FmZQ/internal/server/limit"
 	"c2FmZQ/internal/stingle"
@@ -156,7 +156,7 @@ func New(db *database.Database, addr, htdigest, pathPrefix string) *Server {
 		if p == "" {
 			p = "index.html"
 		}
-		b, err := jsclient.FS.ReadFile(p)
+		b, err := pwa.FS.ReadFile(p)
 		if err != nil {
 			http.NotFound(w, req)
 			return
@@ -329,10 +329,23 @@ func (s *Server) setDeadline(ctx context.Context, t time.Time) {
 // method wraps handlers to enforce a specific method.
 func (s *Server) method(method string, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
+		if req.Method == "OPTIONS" {
+			log.Infof("%s %s ...", req.Proto, req.Method)
+			w.Header().Set("Access-Control-Allow-Origin", req.Header.Get("Origin"))
+			w.Header().Set("Access-Control-Allow-Methods", method+",OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", req.Header.Get("Access-Control-Request-Headers"))
+			w.Header().Set("Access-Control-Max-Age", "86400")
+			w.WriteHeader(http.StatusNoContent)
+			return
+
+		}
 		if req.Method != method {
 			reqStatus.WithLabelValues(req.Method, req.URL.String(), "nok").Inc()
 			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 			return
+		}
+		if o := req.Header.Get("Origin"); o != "" {
+			w.Header().Set("Access-Control-Allow-Origin", o)
 		}
 		next(w, req)
 	}
@@ -445,16 +458,16 @@ func (s *Server) handleNotImplemented(req *http.Request) *stingle.Response {
 // streaming upload is supported by the browser.
 //
 // Arguments:
-//  - w: The http response writer.
-//  - req: The http request.
+//   - w: The http response writer.
+//   - req: The http request.
 //
 // Form arguments
-//  - token: The signed session token.
-//  - echo: An arbitrary string to be returned to the client.
+//   - token: The signed session token.
+//   - echo: An arbitrary string to be returned to the client.
 //
 // Returns:
-//  - stingle.Response("ok")
-//        Parts("echo", the arbitrary string)
+//   - stingle.Response("ok")
+//     Parts("echo", the arbitrary string)
 func (s *Server) handleEcho(w http.ResponseWriter, req *http.Request) {
 	log.Infof("%s %s %s", req.Proto, req.Method, req.RequestURI)
 	buf := make([]byte, 4096)

@@ -195,7 +195,7 @@ a {
 }
 #login-form {
   display: grid;
-  grid-auto-columns: 1fr 1fr;
+  grid-auto-columns: 1fr 2fr;
   grid-auto-rows: auto;
   padding: 10px;
   box-shadow: 5px 5px 5px black;
@@ -562,4 +562,15 @@ input[type=checkbox] {
 }
 .exif-details {
   white-space: pre;
+}
+#server-fingerprint {
+  z-index: 0;
+  position: fixed;
+  bottom: 0.25em;
+  width: 100%;
+  text-align: center;
+  font-family: monospace;
+  font-weight: 500;
+  font-size: 5vh;
+  opacity: 0.1;
 }

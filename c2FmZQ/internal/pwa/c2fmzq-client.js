@@ -63,6 +63,9 @@ class c2FmZQClient {
         this.vars_[v] = 0;
       }
     }
+    if (this.vars_.server === undefined) {
+      this.vars_.server = this.options_.pathPrefix;
+    }
   }
 
   /*
@@ -131,8 +134,11 @@ class c2FmZQClient {
    * - decode / decrypt the keybundle
    */
   async login(clientId, args) {
-    const {email, password, otpCode} = args;
+    const {email, password, otpCode, server} = args;
     console.log(`SW login ${email}`);
+    if (!SAMEORIGIN) {
+      this.vars_.server = server || this.vars_.server;
+    }
 
     return this.sendRequest_(clientId, 'v2/login/preLogin', {email: email})
       .then(async resp => {
@@ -235,8 +241,11 @@ class c2FmZQClient {
   }
 
   async createAccount(clientId, args) {
-    const {email, password, enableBackup} = args;
+    const {email, password, enableBackup, server} = args;
     console.log('SW createAccount', email, enableBackup);
+    if (!SAMEORIGIN) {
+      this.vars_.server = server || this.vars_.server;
+    }
     const kp = await sodium.crypto_box_keypair();
     const sk = await sodium.crypto_box_secretkey(kp);
     const pk = await sodium.crypto_box_publickey(kp);
@@ -275,8 +284,11 @@ class c2FmZQClient {
   }
 
   async recoverAccount(clientId, args) {
-    const {email, password, enableBackup, backupPhrase} = args;
+    const {email, password, enableBackup, backupPhrase, server} = args;
     console.log('SW recoverAccount', enableBackup);
+    if (!SAMEORIGIN) {
+      this.vars_.server = server || this.vars_.server;
+    }
     const sk = await sodiumSecretKey(await sodium.sodium_hex2bin(bip39.mnemonicToEntropy(backupPhrase)));
     const pk = await sodium.crypto_box_publickey_from_secretkey(sk);
     if (await this.checkKey_(clientId, email, pk, sk) !== true) {
@@ -1327,7 +1339,7 @@ class c2FmZQClient {
   /*
    */
   async sendRequest_(clientId, endpoint, data) {
-    //console.log('SW', this.options_.pathPrefix + endpoint);
+    //console.log('SW', this.vars_.server + endpoint);
     let enc = [];
     for (let n in data) {
       if (!data.hasOwnProperty(n)) {
@@ -1335,9 +1347,9 @@ class c2FmZQClient {
       }
       enc.push(encodeURIComponent(n) + '=' + encodeURIComponent(data[n]));
     }
-    return fetch(this.options_.pathPrefix + endpoint, {
+    return fetch(this.vars_.server + endpoint, {
       method: 'POST',
-      mode: 'same-origin',
+      mode: SAMEORIGIN ? 'same-origin' : 'cors',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
       },
@@ -1562,7 +1574,7 @@ class c2FmZQClient {
           headers: {
             range: `bytes=${startOffset}-`,
           },
-          mode: 'same-origin',
+          mode: SAMEORIGIN ? 'same-origin' : 'cors',
           credentials: 'omit',
           redirect: 'error',
           referrerPolicy: 'no-referrer',
@@ -1737,9 +1749,9 @@ class c2FmZQClient {
       body = await self.stream2blob(rs);
     }
 
-    return fetch(this.options_.pathPrefix + 'v2/sync/upload', {
+    return fetch(this.vars_.server + 'v2/sync/upload', {
       method: 'POST',
-      mode: 'same-origin',
+      mode: SAMEORIGIN ? 'same-origin' : 'cors',
       headers: {
         'Content-Type': 'multipart/form-data; boundary='+boundary,
       },
@@ -1771,9 +1783,9 @@ class c2FmZQClient {
 
   async testUploadStream_() {
     const msg = 'Hello World';
-    return fetch(this.options_.pathPrefix + 'c2/config/echo', {
+    return fetch(this.vars_.server + 'c2/config/echo', {
       method: 'POST',
-      mode: 'same-origin',
+      mode: SAMEORIGIN ? 'same-origin' : 'cors',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
       },

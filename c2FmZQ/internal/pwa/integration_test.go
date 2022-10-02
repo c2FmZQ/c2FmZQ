@@ -18,7 +18,7 @@
 //go:build selenium
 // +build selenium
 
-package jsclient_test
+package pwa_test
 
 import (
 	"fmt"
