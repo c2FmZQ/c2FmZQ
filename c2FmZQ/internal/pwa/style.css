@@ -183,8 +183,8 @@ a {
   transform: translate(-50%, -50%);
   padding: 10px;
   border: 1px solid red;
-  white-space: nowrap;
   box-shadow: 5px 5px 5px black;
+  max-width: 80vw;
 }
 #loggedout-div {
   position: fixed;
