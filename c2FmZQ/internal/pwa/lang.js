@@ -86,6 +86,7 @@ class Lang {
       'form-backup-phrase': 'Backup phrase:',
       'form-backup-keys?': 'Backup keys?',
       'form-server': 'Server:',
+      'server-placeholder': 'https://your-server-name/',
       'show': 'Show',
       'hide': 'Hide',
       'skip-passphrase-warning': 'Skipping the passphrase is less secure. Never used this option on a public or shared computer. Continue?',

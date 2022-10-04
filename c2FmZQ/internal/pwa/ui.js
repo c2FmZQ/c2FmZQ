@@ -75,7 +75,9 @@ class UI {
     this.backupKeysCheckboxLabel_ = document.querySelector('#backup-keys-checkbox-label');
     this.otpInputLabel_ = document.querySelector('#otp-input-label');
     this.otpInput_ = document.querySelector('#otp-input');
+    this.otpInput_.placeholder = _T('optional');
     this.serverInput_ = document.querySelector('#server-input');
+    this.serverInput_.placeholder = _T('server-placeholder');
     this.loginButton_ = document.querySelector('#login-button');
     this.refreshButton_ = document.querySelector('#refresh-button');
     this.trashButton_ = document.querySelector('#trash-button');
