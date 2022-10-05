@@ -219,7 +219,11 @@ in the browser using [Sodium-Plus](https://github.com/paragonie/sodium-plus)
 and [Secure webstore](https://github.com/AKASHAorg/secure-webstore), and the app
 implements the same protocol as the c2FmZQ client and the Stingle Photos app.
 
-Simply open `https://${DOMAIN}/${path-prefix}/` to access the PWA.
+There are multiple ways to access the PWA:
+
+* Open your server URL in a browser: `https://${DOMAIN}/${path-prefix}/`. This requires `--enable-webapp` to be set on the server. Or,
+* Open https://c2FmZQ.github.io/pwa/ and enter your server URL in the `Server` field. This works with or without `--enable-webapp`.
+* Clone https://github.com/c2FmZQ/c2FmZQ.github.io, and publish it on your own web site.
 
 Currently implemented:
 
