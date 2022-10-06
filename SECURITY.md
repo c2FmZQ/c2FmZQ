@@ -1,7 +1,10 @@
 # Security issues
 
-Please report security issues or concerns to [c2fmzq@proton.me](mailto:c2fmzq@proton.me?subject=SECURITY+ISSUE).
-Encrypt emails with the public key below, if possible.
+Please report security issues or concerns to
+[c2fmzq@proton.me](mailto:c2fmzq@proton.me?subject=SECURITY+ISSUE).
+Encrypt emails with either of the public keys below, if possible.
+
+For non-security issues, please use the github issue tracker.
 
 ```
 -----BEGIN PGP PUBLIC KEY BLOCK-----
@@ -18,6 +21,59 @@ kg67G5HW8DIwUGuygRy9eX5/AQC14KmoLyV0iq9FW/3blCxzt2VI6fNE7SBN
 er/BzCK4Bw==
 =8y5r
 -----END PGP PUBLIC KEY BLOCK-----
-```
+-----BEGIN PGP PUBLIC KEY BLOCK-----
 
-For non-security issues, please use the github issue tracker.
+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
+8w==
+=+QBz
+-----END PGP PUBLIC KEY BLOCK-----
+```
