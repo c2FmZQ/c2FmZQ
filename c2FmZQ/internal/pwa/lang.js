@@ -19,8 +19,8 @@
 /* jshint -W083 */
 'use strict';
 
-class Lang {
-  static init() {
+window.Lang = {
+  init: () => {
     for (let lang of navigator.languages) {
       if (Lang.dict[lang]) {
         Lang.current = lang;
@@ -30,40 +30,43 @@ class Lang {
     if (saved && Lang.dict[saved] !== undefined) {
       Lang.current = saved;
     }
-  }
-  static current = 'en-US';
+  },
 
-  static languages() {
+  current: 'en-US',
+
+  languages: () => {
     let out = {};
     Object.keys(Lang.dict).forEach(x => {
       out[x] = Lang.dict[x].LANG;
     });
     return out;
-  }
+  },
 
-  static text(key, ...args) {
-    let v = Lang.dict[Lang.current][key];
-    if (v) return Lang.sub(v, args);
+  text: (key, ...args) => {
+    if (Lang.dict[Lang.current]) {
+      let v = Lang.dict[Lang.current][key];
+      if (v) return Lang.sub(v, args);
+    }
     const lang = Lang.current.split('-')[0];
     if (Lang.dict[lang]) {
       let v = Lang.dict[lang][key];
       if (v) return Lang.sub(v, args);
     }
     console.log('Missing lang key', Lang.current, key);
-    v = Lang.dict.en[key];
+    let v = Lang.dict.en[key];
     if (v) return Lang.sub(v, args);
     console.log('Missing lang key', 'en', key);
     return `::${key}:${args.join(' ')}::`;
-  }
+  },
 
-  static sub(s, args) {
+  sub: (s, args) => {
     for (let i = 0; i < args.length; i++) {
       s = s.replace(`$${i+1}`, args[i]);
     }
     return s;
-  }
+  },
 
-  static dict = {
+  dict: {
     'en': {
       'LANG': 'English',
       'login': 'Login',
@@ -212,8 +215,7 @@ class Lang {
 //    'fr': {
 //      'LANG': 'Français',
 //    },
-  };
-}
+  },
+};
 
 Lang.init();
-
