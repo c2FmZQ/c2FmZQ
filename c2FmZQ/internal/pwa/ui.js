@@ -1554,16 +1554,20 @@ class UI {
 
     const onChange = () => {
       const name = content.querySelector('#collection-properties-name');
-      name.value = name.value.replace(/^ *([^ ]*) */g, '$1');
+      if (name && name.value) {
+        name.value = name.value.replace(/^ *([^ ]*) */g, '$1');
+      }
 
       const shared = content.querySelector('#collection-properties-shared');
-      content.querySelectorAll('.sharing-setting').forEach(elem => {
-        if (shared.checked) {
-          elem.style.display = '';
-        } else {
-          elem.style.display = 'none';
-        }
-      });
+      if (shared) {
+        content.querySelectorAll('.sharing-setting').forEach(elem => {
+          if (shared.checked) {
+            elem.style.display = '';
+          } else {
+            elem.style.display = 'none';
+          }
+        });
+      }
 
       const any = Object.keys(getChanges()).length > 0;
       const elem = content.querySelector('#collection-properties-apply-button');
@@ -1733,7 +1737,7 @@ class UI {
         membersDiv.removeChild(membersDiv.firstChild);
       }
       UI.sortBy(members, 'email');
-      if (c.isOwner || c.canAdd) {
+      if (c.isOwner || c.canShare) {
         const list = document.createElement('datalist');
         list.id = 'collection-properties-members-contacts';
         for (let i = 0; i < contacts.length; i++) {

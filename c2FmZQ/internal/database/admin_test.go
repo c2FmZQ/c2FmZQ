@@ -13,7 +13,7 @@ func TestTag(t *testing.T) {
 	db := database.New(dir, nil)
 	database.CurrentTimeForTesting = 10000
 
-	id, err := db.AddUser(database.User{Email: "1@", NeedApproval: false, Admin: false})
+	id, err := db.AddUser(database.User{Email: "1@", NeedApproval: false, Admin: true})
 	if err != nil {
 		t.Fatalf("db.AddUser: %v", err)
 	}
@@ -29,7 +29,7 @@ func TestTag(t *testing.T) {
 	if err != nil {
 		t.Fatalf("db.UserByID: %v", err)
 	}
-	user.Admin = true
+	user.Admin = false
 	if err := db.UpdateUser(user); err != nil {
 		t.Fatalf("db.UpdateUser: %v", err)
 	}

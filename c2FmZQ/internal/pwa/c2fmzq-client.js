@@ -803,6 +803,9 @@ class c2FmZQClient {
     for (let k of keys) {
       const file = k.substring(prefix.length);
       const f = await this.getFile_(collection, file);
+      if (!f) {
+        continue;
+      }
       const obj = {
         'collection': collection,
         'file': f.file,
@@ -1474,6 +1477,9 @@ class c2FmZQClient {
         isThumb: params.get('isThumb'),
       };
       const file = await this.getFile_(f.collection, f.file);
+      if (!file) {
+        return resolve(new Response('Not found', {'status': 404, 'statusText': 'Not found'}));
+      }
       let startOffset = file.headers[0].headerSize;
       let chunkNum = 0;
       let chunkOffset = 0;
@@ -1503,6 +1509,8 @@ class c2FmZQClient {
           ctype = 'image/gif'; break;
         case '.webp':
           ctype = 'image/webp'; break;
+        case '.avif':
+          ctype = 'image/avif'; break;
         case '.mp4':
           ctype = 'video/mp4'; break;
         case '.avi':
@@ -1610,10 +1618,7 @@ class c2FmZQClient {
         }));
       })
       .catch(e => {
-        console.log('SW Error', e);
-        const url = new URL(event.request.url);
-        self.sendMessage('', {type: 'error', msg: url.pathname + '\n' + e.message});
-        reject(e);
+        resolve(new Response('', {'status': 502, 'statusText': 'network error'}));
       });
     });
     return p;
@@ -1782,36 +1787,22 @@ class c2FmZQClient {
   }
 
   async testUploadStream_() {
-    const msg = 'Hello World';
-    return fetch(this.vars_.server + 'c2/config/echo', {
-      method: 'POST',
-      mode: SAMEORIGIN ? 'same-origin' : 'cors',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      redirect: 'error',
-      referrerPolicy: 'no-referrer',
-      credentials: 'omit',
-      body: new Blob([`token=${this.vars_.token}&echo=${msg}`]).stream(),
-      duplex: 'half',
-    })
-    .then(resp => self.stream2blob(resp.body))
-    .then(blob => blob.text())
-    .then(body => {
-      //console.log('SW testStreamingUpload got', body);
-      try {
-        const resp = JSON.parse(body);
-        if (resp.status !== 'ok') {
-          throw body;
-        }
-        if (resp.parts.echo !== msg) {
-          throw new Error('incorrect response');
-        }
-        return true;
-      } catch(e) {
-        throw body;
-      }
-    });
+    // https://developer.chrome.com/articles/fetch-streaming-requests/#feature-detection
+    const supportsRequestStreams = (() => {
+      let duplexAccessed = false;
+
+      const hasContentType = new Request('', {
+        body: new ReadableStream(),
+        method: 'POST',
+        get duplex() {
+          duplexAccessed = true;
+          return 'half';
+        },
+      }).headers.has('Content-Type');
+
+      return duplexAccessed && !hasContentType;
+    })();
+    return supportsRequestStreams;
   }
 
   async makeHeaders_(pk, file) {

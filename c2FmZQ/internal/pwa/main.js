@@ -19,6 +19,7 @@
 'use strict';
 
 /* jshint -W060 */
+/* jshint -W126 */
 if (!('serviceWorker' in navigator)) {
   document.open();
   document.write('service workers are not supported');

@@ -46,6 +46,7 @@ const (
 type userList struct {
 	UserID int64  `json:"userId"`
 	Email  string `json:"email"`
+	Admin  bool   `json:"admin,omitempty"`
 }
 
 // Encapsulates all the information about a user account.
@@ -170,7 +171,11 @@ func (d *Database) AddUser(u User) (userID int64, retErr error) {
 			break
 		}
 	}
-	ul = append(ul, userList{UserID: uid, Email: u.Email})
+	if len(ul) == 0 {
+		// First user is an admin.
+		u.Admin = true
+	}
+	ul = append(ul, userList{UserID: uid, Email: u.Email, Admin: u.Admin})
 
 	u.UserID = uid
 	hf := make([]byte, 16)

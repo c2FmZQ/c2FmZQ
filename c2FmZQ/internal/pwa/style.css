@@ -243,6 +243,8 @@ a {
   z-index: 100;
   box-shadow: 5px 5px 5px black;
   max-width: 90vw;
+  max-height: 90vh;
+  overflow-y: scroll;
 }
 .popup-header {
   border-bottom: 1px solid black;
@@ -468,6 +470,7 @@ input[type=checkbox] {
   grid-template-columns: 1fr 9fr;
   align-items: start;
   row-gap: 0.5em;
+  min-width: 75vw;
 }
 .photo-editor-popup {
   width: 90vw;

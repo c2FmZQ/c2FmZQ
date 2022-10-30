@@ -54,12 +54,12 @@ type AdminUser struct {
 
 // AdminData returns the data to display on the admin console.
 func (d *Database) AdminData(changes *AdminData) (data *AdminData, retErr error) {
+	var ul []userList
 	var quotas Quotas
-	files := []string{d.filePath(quotaFile)}
-	objects := []interface{}{&quotas}
+	files := []string{d.filePath(userListFile), d.filePath(quotaFile)}
+	objects := []interface{}{&ul, &quotas}
 	users := make(map[int64]*User)
 
-	var ul []userList
 	if err := d.storage.ReadDataFile(d.filePath(userListFile), &ul); err != nil {
 		return nil, err
 	}
@@ -72,6 +72,7 @@ func (d *Database) AdminData(changes *AdminData) (data *AdminData, retErr error)
 		objects = append(objects, &user)
 		users[u.UserID] = &user
 	}
+	ul = nil
 
 	commit, err := d.storage.OpenManyForUpdate(files, objects)
 	if err != nil {
@@ -138,6 +139,11 @@ func (d *Database) AdminData(changes *AdminData) (data *AdminData, retErr error)
 		}
 		if user.Admin != nil {
 			users[user.UserID].Admin = *user.Admin
+			for i := range ul {
+				if ul[i].UserID == user.UserID {
+					ul[i].Admin = *user.Admin
+				}
+			}
 		}
 		if user.Quota != nil {
 			if *user.Quota < 0 {
