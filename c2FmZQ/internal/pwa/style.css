@@ -245,6 +245,7 @@ a {
   max-width: 90vw;
   max-height: 90vh;
   overflow-y: scroll;
+  overscroll-behavior: none;
 }
 .popup-header {
   border-bottom: 1px solid black;
@@ -404,6 +405,7 @@ a {
 #backup-phrase-content {
   padding: 2em;
   overflow-y: scroll;
+  min-width: 75vw;
   max-width: 90vw;
   max-height: 90vh;
 }
@@ -472,6 +474,15 @@ input[type=checkbox] {
   row-gap: 0.5em;
   min-width: 75vw;
 }
+#preferences-notifications-choices {
+  display: grid;
+  grid-template-columns: 1fr 9fr;
+  align-items: start;
+  row-gap: 0.5em;
+}
+#preferences-notifications-checkbox {
+  justify-self: center;
+}
 .photo-editor-popup {
   width: 90vw;
   height: 90vh;
@@ -504,6 +515,10 @@ input[type=checkbox] {
 }
 .admin-console-popup .popup-content {
   padding: 1em;
+  display: flex;
+  flex-flow: column;
+  align-items: flex-start;
+  height: 90%;
 }
 #admin-console-save-button {
   margin-bottom: 1em;
@@ -520,11 +535,12 @@ input[type=checkbox] {
   display: grid;
   grid-template-columns: 2fr 1fr 1fr 1fr 2fr;
   overflow-y: scroll;
+  overflow-x: scroll;
   justify-content: start;
   align-items: stretch;
   border: 1px solid black;
-  max-height: 50vh;
   overscroll-behavior: none;
+  flex: 0 1 auto;
 }
 #admin-console-table>div:nth-child(-n+5) {
   font-weight: bold;

@@ -17,13 +17,14 @@
  */
 
 /* jshint -W083 */
+/* jshint -W126 */
 'use strict';
 
 let _T;
 
-class UI {
-  static SHOW_ITEMS_INCREMENT = 10;
+const SHOW_ITEMS_INCREMENT = 10;
 
+class UI {
   constructor() {
     this.uiStarted_ = false;
     this.promptingForPassphrase_ = false;
@@ -33,8 +34,9 @@ class UI {
       collection: main.getHash('collection', 'gallery'),
       files: [],
       lastDate: '',
-      shown: UI.SHOW_ITEMS_INCREMENT,
+      shown: SHOW_ITEMS_INCREMENT,
     };
+    this.enableNotifications = window.Notification?.permission === 'granted';
 
     _T = Lang.text;
 
@@ -211,7 +213,7 @@ class UI {
     window.addEventListener('hashchange', () => {
       const c = main.getHash('collection');
       if (c && this.galleryState_.collection !== c) {
-        this.switchView_({collection: c});
+        this.switchView({collection: c});
       }
     });
     const html = document.querySelector('html');
@@ -230,7 +232,7 @@ class UI {
     });
 
     this.trashButton_.addEventListener('click', () => {
-      this.switchView_({collection: 'trash'});
+      this.switchView({collection: 'trash'});
     });
     this.trashButton_.addEventListener('dragover', event => {
       event.dataTransfer.dropEffect = 'move';
@@ -554,6 +556,7 @@ class UI {
       backupPhrase: this.backupPhraseInput_.value,
       otpCode: this.otpInput_.value,
       server: SAMEORIGIN ? undefined : this.serverInput_.value,
+      enableNotifications: this.enableNotifications,
     };
     return main.sendRPC(this.tabs_[this.selectedTab_].rpc, args)
     .then(({otpEnabled, isAdmin, needKey}) => {
@@ -627,7 +630,7 @@ class UI {
     if (distanceToBottom < 200 && !this.addingFiles_) {
       this.addingFiles_ = true;
       window.requestAnimationFrame(() => {
-        this.showMoreFiles_(UI.SHOW_ITEMS_INCREMENT)
+        this.showMoreFiles_(SHOW_ITEMS_INCREMENT)
         .then(() => {
           this.addingFiles_ = false;
         });
@@ -635,10 +638,10 @@ class UI {
     }
   }
 
-  switchView_(c) {
+  switchView(c) {
     if (this.galleryState_.collection !== c.collection) {
       this.galleryState_.collection = c.collection;
-      this.galleryState_.shown = UI.SHOW_ITEMS_INCREMENT;
+      this.galleryState_.shown = SHOW_ITEMS_INCREMENT;
       main.setHash('collection', c.collection);
       this.refreshGallery_(true);
     } else {
@@ -695,7 +698,7 @@ class UI {
       if (this.galleryState_.collection !== c.collection) {
         params.items.push({
           text: _T('open'),
-          onclick: () => this.switchView_({collection: c.collection}),
+          onclick: () => this.switchView({collection: c.collection}),
         });
         if ((this.galleryState_.collection !== 'trash' || c.collection === 'gallery') && this.galleryState_.content.files.some(f => f.selected)) {
           const f = this.galleryState_.content.files.find(f => f.selected);
@@ -772,7 +775,7 @@ class UI {
         showContextMenu(event, c);
       });
       div.addEventListener('click', () => {
-        this.switchView_(c);
+        this.switchView(c);
       });
       if (this.galleryState_.collection === c.collection) {
         collectionName = c.name;
@@ -839,7 +842,7 @@ class UI {
     }
 
     this.galleryState_.lastDate = '';
-    const n = Math.max(this.galleryState_.shown, UI.SHOW_ITEMS_INCREMENT);
+    const n = Math.max(this.galleryState_.shown, SHOW_ITEMS_INCREMENT);
     this.galleryState_.shown = 0;
     this.showMoreFiles_(n);
     if (scrollTo) {
@@ -1189,7 +1192,7 @@ class UI {
     main.sendRPC('deleteCollection', collection)
     .then(() => {
       if (this.galleryState_.collection === collection) {
-        this.switchView_({collection: 'gallery'});
+        this.switchView({collection: 'gallery'});
       }
       this.refresh_();
     })
@@ -1358,7 +1361,7 @@ class UI {
       img.alt = f.fileName;
       img.src = f.url;
       content.appendChild(img);
-      let exifData = undefined;
+      let exifData;
       info.addEventListener('click', () => {
         if (exifData === undefined) {
           exifData = null;
@@ -1400,7 +1403,9 @@ class UI {
       }
       if (Array.isArray(data[n])) {
         for (let i in data[n]) {
-          flat.push({key: `${n}[${i}]`, value: data[n][i]});
+          if (data[n].hasOwnProperty(i)) {
+            flat.push({key: `${n}[${i}]`, value: data[n][i]});
+          }
         }
       } else {
           flat.push({key: n, value: data[n]});
@@ -2110,7 +2115,7 @@ class UI {
   }
 
   async makeThumbnailNow_(file) {
-    const canvas = document.createElement("canvas");
+    const canvas = document.createElement("canvas", {willReadFrequently: true});
     const ctx = canvas.getContext('2d');
     if (file.type.startsWith('image/')) {
       return new Promise((resolve, reject) => {
@@ -2189,7 +2194,7 @@ class UI {
   }
 
   makeGenericThumbnail_(file) {
-    const canvas = document.createElement("canvas");
+    const canvas = document.createElement("canvas", {willReadFrequently: true});
     const ctx = canvas.getContext('2d');
     canvas.width = 100;
     canvas.height = 100;
@@ -2603,6 +2608,49 @@ class UI {
       opts.appendChild(label);
     });
     content.appendChild(opts);
+
+
+    navigator.serviceWorker.ready
+    .then(registration => {
+      if (!registration.pushManager || !registration.pushManager.getSubscription) {
+        return;
+      }
+      const notif = document.createElement('div');
+      notif.id = 'preferences-notifications-text';
+      notif.innerHTML = _T('choose-notifications-pref');
+      content.appendChild(notif);
+      const notifopt = document.createElement('div');
+      notifopt.id = 'preferences-notifications-choices';
+      const input = document.createElement('input');
+      input.type = 'checkbox';
+      input.id = 'preferences-notifications-checkbox';
+      input.name = 'preferences-notifications-checkbox';
+      registration.pushManager.getSubscription()
+      .then(sub => {
+        input.checked = sub !== null;
+      });
+      input.addEventListener('change', async () => {
+        if (window.Notification && window.Notification.permission !== 'granted' && input.checked) {
+          const p = await window.Notification.requestPermission();
+          input.checked = p === 'granted';
+        }
+        main.sendRPC('enableNotifications', input.checked)
+        .then(v => {
+          input.checked = v;
+          this.enableNotifications = v;
+        })
+        .catch(() => {
+          input.checked = false;
+          this.enableNotifications = false;
+        });
+      });
+      const label = document.createElement('label');
+      label.htmlFor = `preferences-notifications-checkbox`;
+      label.innerHTML = _T('opt-enable-notifications');
+      notifopt.appendChild(input);
+      notifopt.appendChild(label);
+      content.appendChild(notifopt);
+    });
   }
 
   async showAdminConsole_() {

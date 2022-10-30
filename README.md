@@ -261,6 +261,7 @@ Currently implemented:
 * Browsing albums with photos and videos
 * Uploading files (note: browsers that support streaming uploads, e.g. Chrome 105+, can upload files of any size. With browsers that don't support streaming uploads, files need to fit in memory)
 * Photo editing, using [Filerobot Image Editor](https://scaleflex.github.io/filerobot-image-editor/)
+* Optional push notifications when new content or new members are added to shared albums.
 
 ### <a name="totp"></a>One-time passwords (OTP)
 

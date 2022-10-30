@@ -351,6 +351,7 @@ func (d *Database) ShareAlbum(user User, sharing *stingle.Album, sharingKeys map
 			log.Errorf("addAlbumRef(%d, %q, %q) failed: %v", id, fs.Album.AlbumID, albumRef.File, err)
 		}
 	}
+	newMemberIDs := make([]string, 0, len(sharingKeys))
 	for k, v := range sharingKeys {
 		id, err := strconv.ParseInt(k, 10, 64)
 		if err != nil {
@@ -362,9 +363,12 @@ func (d *Database) ShareAlbum(user User, sharing *stingle.Album, sharingKeys map
 			continue
 		}
 		fs.Album.SharingKeys[id] = v
+		newMemberIDs = append(newMemberIDs, strconv.FormatInt(id, 10))
 	}
+	sort.Strings(newMemberIDs)
 	fs.Album.DateModified = nowInMS()
 	d.addCrossContacts(d.lookupContacts(fs.Album.Members))
+	d.notifyAlbum(user.UserID, fs.Album, notification{Type: notifyNewMember, Target: fs.Album.AlbumID, Data: map[string][]string{"members": newMemberIDs}})
 	return nil
 }
 

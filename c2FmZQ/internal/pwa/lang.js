@@ -24,11 +24,14 @@ window.Lang = {
     for (let lang of navigator.languages) {
       if (Lang.dict[lang]) {
         Lang.current = lang;
+        break;
       }
     }
-    const saved = localStorage.getItem('lang');
-    if (saved && Lang.dict[saved] !== undefined) {
-      Lang.current = saved;
+    if (window.localStorage) {
+      const saved = window.localStorage.getItem('lang');
+      if (saved && Lang.dict[saved] !== undefined) {
+        Lang.current = saved;
+      }
     }
   },
 
@@ -109,6 +112,7 @@ window.Lang = {
       'ready': 'Ready',
       'drop-received': 'Processing new files',
       'upload:': 'Upload: $1',
+      'collection': 'collection',
       'collection:': 'Collection: $1',
       'shared-with': 'Shared with $1',
       'empty': 'Empty',
@@ -150,11 +154,13 @@ window.Lang = {
       'opt-keep-backup': 'Keep a backup on the server (RECOMMENDED)',
       'opt-dont-keep-backup': 'Do NOT keep a backup on the server',
       'prefs': 'Preferences',
-      'choose-cache-pref': '<h1>Choose your cache preference:</h1>',
+      'choose-cache-pref': '<h1>Cache:</h1>',
       'opt-encrypted': 'Store thumbnails in a local encrypted database. Thumbnails are stored securely on the local system, along with the App\'s metadata. The other files, e.g. photos and videos, are not cached. This option might lead to quota issues. The cache is cleared on logout or when another option is selected. (DEFAULT)',
       'opt-no-store': 'Disable caching. All files, including thumbnails, are fetched and decrypted each time they are accessed. This is the slowest option.',
       'opt-private': 'Use the default browser cache. Decrypted files are stored in the browser\'s cache. This is the fastest option, but also the most likely the leak information.',
       'cache-pref': 'Cache preference',
+      'choose-notifications-pref': '<h1>Notifications:</h1>',
+      'opt-enable-notifications': 'Enable push notifications for important events like when friends add content to shared collections.',
       'saved': 'saved',
       'admin-console': 'Admin console',
       'save-changes': 'Save changes',
@@ -213,6 +219,14 @@ window.Lang = {
       'data-updated': 'Data updated',
       'network-error': 'offline?',
       'filter': 'filter',
+      'notification-encrypted-title': 'Notifications ($1)',
+      'notification-encrypted-body': 'New encrypted notifications waiting.',
+      'new-user-title': 'New user: $1',
+      'new-content-body': 'New files added.',
+      'new-collection-body': 'Shared with you.',
+      'new-members-body': 'New members joined.',
+      'push-notifications-title': 'Push notifications',
+      'push-notifications-body': 'Push notifications are enabled.',
     },
 //    'fr': {
 //      'LANG': 'Français',

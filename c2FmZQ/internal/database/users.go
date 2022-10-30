@@ -88,6 +88,8 @@ type User struct {
 	OTPKey string `json:"otpKey,omitempty"`
 	// Decoy accounts that the user can access with different passwords.
 	Decoys []*Decoy `json:"decoys,omitempty"`
+	// PushConfig contains the user's Push API configuration.
+	PushConfig *PushConfig `json:"pushConfig,omitempty"`
 }
 
 // A decoy account's information.
@@ -96,6 +98,22 @@ type Decoy struct {
 	UserID int64 `json:"userId"`
 	// The encrypted password.
 	Password string `json:"password"`
+}
+
+// PushConfig represents a Push API configuration.
+type PushConfig struct {
+	// ApplicationServerPrivateKey is the base64-encoded ECDSA private key.
+	ApplicationServerPrivateKey string `json:"applicationServerPrivateKey"`
+	// ApplicationServerPublicKey is the base64-encoded ECDSA public key.
+	ApplicationServerPublicKey string `json:"applicationServerPublicKey"`
+	// Endpoints is a set of push endpoints.
+	Endpoints map[string]*EndpointData `json:"endpoints,omitempty"`
+}
+
+type EndpointData struct {
+	Auth       string `json:"auth"`
+	P256dh     string `json:"p256dh"`
+	RetryAfter int64  `json:"retryAfter,omitempty"`
 }
 
 // A user's contact list information.
@@ -212,6 +230,7 @@ func (d *Database) AddUser(u User) (userID int64, retErr error) {
 	if err := d.storage.CreateEmptyFile(d.filePath(u.home(contactListFile)), ContactList{}); err != nil {
 		return 0, err
 	}
+	d.notifyAdmins(notification{Type: notifyNewUserRegistration, Target: u.Email})
 	return u.UserID, commit(true, nil)
 }
 

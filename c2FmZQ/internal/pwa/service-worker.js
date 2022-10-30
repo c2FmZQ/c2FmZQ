@@ -26,6 +26,7 @@ console.log(`SW Version ${VERSION}`, DEVEL ? 'DEVEL' : '');
 const MANIFEST = [
   'c2fmzq-client.js',
   'c2.png',
+  'c2-bg.png',
   'clear.png',
   'index.html',
   'lang.js',
@@ -40,11 +41,17 @@ const MANIFEST = [
 ];
 
 self.importScripts('thirdparty/libs.js');
+self.importScripts('lang.js');
 self.importScripts('store.js');
 self.importScripts('c2fmzq-client.js');
 
 self.store = new Store();
 self.initp = null;
+self._T = Lang.text;
+
+self.notifs = new Store('notifications');
+self.notifs.passphrase = 'notifications';
+
 async function initApp(storeKey) {
   const p = new Promise(async (resolve, reject) => {
     if (self.store.passphrase || !storeKey) {
@@ -70,6 +77,8 @@ async function initApp(storeKey) {
     console.log('SW app ready');
     sendHello();
     await self.store.release();
+    setTimeout(self.checkNotifications.bind(self), 500);
+    setTimeout(self.checkPushsubscriptionchanges.bind(self), 500);
     return resolve();
   })
   .finally(() => {
@@ -88,6 +97,61 @@ function fixme() {
   setInterval(() => {
     self.sendMessage('', {type: 'fixme'});
   }, 5000);
+}
+
+function checkNotifications() {
+  if (self.checkingNotifications) {
+    setTimeout(self.checkNotifications.bind(self), 500);
+    return;
+  }
+  self.checkingNotifications = true;
+  self.notifs.keys()
+  .then(keys => keys.filter(k => k.startsWith("notifs/")))
+  .then(keys => {
+    if (keys.length === 0) {
+      return;
+    }
+    if (!self.app) {
+      self.showNotif(_T('notification-encrypted-title', keys.length), {
+        tag: 'encrypted',
+        body: _T('notification-encrypted-body'),
+        requireInteraction: true,
+      });
+      return;
+    }
+    self.registration.getNotifications({tag:'encrypted'}).then(nn => nn.forEach(n => n.close()));
+    keys.forEach(k => {
+      self.notifs.get(k)
+        .then(v => self.app.onpush(v))
+        .finally(() => self.notifs.del(k));
+    });
+  })
+  .finally(() => {
+    self.checkingNotifications = false;
+  });
+}
+
+function checkPushsubscriptionchanges() {
+  if (self.checkingPushsubscriptionchanges) {
+    setTimeout(self.checkPushsubscriptionchanges.bind(self), 500);
+    return;
+  }
+  self.checkingPushsubscriptionchanges = true;
+  self.notifs.keys()
+  .then(keys => keys.filter(k => k.startsWith("pushsubscriptionchange/")))
+  .then(keys => {
+    if (keys.length === 0 || !self.app) {
+      return;
+    }
+    keys.forEach(k => {
+      self.notifs.get(k)
+        .then(v => self.app.enableNotifications('', true))
+        .then(() => self.notifs.del(k));
+    });
+  })
+  .finally(() => {
+    self.checkingPushsubscriptionchanges = false;
+  });
 }
 
 function bytesFromString(s) {
@@ -128,6 +192,10 @@ function base64StdEncode(v) {
 
 function base64DecodeToBinary(s) {
   return String.fromCharCode(...base64DecodeToBytes(s));
+}
+
+function base64DecodeToString(s) {
+  return self.bytesToString(base64DecodeToBytes(s));
 }
 
 function base64DecodeToBytes(v) {
@@ -231,6 +299,68 @@ async function sendMessage(id, m) {
   }
 }
 
+async function showNotif(title, options) {
+  options.badge = './c2.png';
+  return self.registration.showNotification(title, options);
+}
+
+self.addEventListener('push', event => {
+  const data = event.data ? event.data.text() : null;
+  event.waitUntil(
+    self.notifs.set('notifs/' + new Date().getTime(), data)
+    .then(() => self.checkNotifications())
+  );
+});
+
+self.addEventListener('pushsubscriptionchange', event => {
+  console.log('SW pushsubscriptionchange', event);
+  event.waitUntil(
+    self.notifs.set('pushsubscriptionchange/' + new Date().getTime(), event.oldSubscription.options)
+    .then(() => self.checkPushsubscriptionchanges())
+  );
+});
+
+self.addEventListener('notificationclick', event => {
+  const tag = event.notification.tag;
+  let jumpTo;
+  if (tag.startsWith('new-content:') || tag.startsWith('new-member:') || tag.startsWith('new-collection:')) {
+    jumpTo = tag.substring(tag.indexOf(':')+1);
+  }
+  event.notification.close();
+  event.waitUntil(
+    self.clients.matchAll({type: "window"})
+    .then(list => {
+      let url = self.registration.scope;
+      if (jumpTo) {
+        url += '#' + btoa(JSON.stringify({collection: jumpTo}));
+      }
+      let client;
+      for (const c of list) {
+        if (c.url.startsWith(self.registration.scope) && c.focus) {
+          client = c;
+          break;
+        }
+      }
+      if (!client) {
+        return self.clients.openWindow(url);
+      }
+      return client.focus()
+        .catch(err => console.log('SW focus:', err))
+        .then(() => new Promise((resolve) => setTimeout(resolve, 500)))
+        .then(() => {
+          if (jumpTo) {
+            return client.navigate(url).catch(err => console.log('SW navigate:', err));
+          }
+        })
+        .then(() => {
+          if (jumpTo) {
+            return self.sendMessage(client.id, {type: 'jumpto', collection: jumpTo});
+          }
+        });
+    })
+  );
+});
+
 self.addEventListener('install', event => {
   if (DEVEL) {
     console.log(`SW install ${VERSION} DEVEL`);
@@ -287,6 +417,7 @@ self.addEventListener('message', async event => {
       if (event.data.version !== VERSION) {
         console.log(`SW Version mismatch: ${event.data.version} != ${VERSION}`);
       }
+      Lang.current = event.data.lang || 'en-US';
       initApp(event.data.storeKey);
       break;
     case 'rpc':

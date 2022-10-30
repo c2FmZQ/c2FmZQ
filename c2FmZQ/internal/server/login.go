@@ -45,18 +45,18 @@ const (
 // handleCreateAccount handles the /v2/register/createAccount endpoint.
 //
 // Argument:
-//  - req: The http request.
+//   - req: The http request.
 //
 // The form arguments:
-//  - email:     The email address to use for the account.
-//  - password:  The hashed password.
-//  - salt:      The salt used to hash the password.
-//  - keyBundle: A binary representation of the public and (optionally) encrypted
-//               secret keys of the user.
-//  - isBackup:  Whether the user's secret key is included in the keyBundle.
+//   - email:     The email address to use for the account.
+//   - password:  The hashed password.
+//   - salt:      The salt used to hash the password.
+//   - keyBundle: A binary representation of the public and (optionally) encrypted
+//     secret keys of the user.
+//   - isBackup:  Whether the user's secret key is included in the keyBundle.
 //
 // Returns:
-//  - stingle.Response(ok)
+//   - stingle.Response(ok)
 func (s *Server) handleCreateAccount(req *http.Request) *stingle.Response {
 	defer time.Sleep(time.Duration(time.Now().UnixNano()%200) * time.Millisecond)
 	pk, _, err := stingle.DecodeKeyBundle(req.PostFormValue("keyBundle"))
@@ -97,13 +97,13 @@ func (s *Server) handleCreateAccount(req *http.Request) *stingle.Response {
 // handlePreLogin handles the /v2/login/preLogin endpoint.
 //
 // Arguments:
-//  - req: The http request.
+//   - req: The http request.
 //
 // The form arguments:
-//  - email: The email address of the account.
+//   - email: The email address of the account.
 //
 // Returns:
-//  - stingle.Response(ok)
+//   - stingle.Response(ok)
 //     Part(salt, The salt used to hash the password)
 func (s *Server) handlePreLogin(req *http.Request) *stingle.Response {
 	defer time.Sleep(time.Duration(time.Now().UnixNano()%200) * time.Millisecond)
@@ -126,21 +126,21 @@ func (s *Server) handlePreLogin(req *http.Request) *stingle.Response {
 // handleLogin handles the /v2/login/login endpoint.
 //
 // Argument:
-//  - req: The http request.
+//   - req: The http request.
 //
 // The form arguments:
-//  - email: The email address of the account.
-//  - password: The hashed password.
-//  - _code: The OTP code.
+//   - email: The email address of the account.
+//   - password: The hashed password.
+//   - _code: The OTP code.
 //
 // Returns:
-//  - stingle.Response(ok)
-//      Part(userId, The numeric ID of the account)
-//      Part(keyBundle, The encoded keys of the user)
-//      Part(serverPublicKey, The server's public key that is associated with this account)
-//      Part(token, The session token signed by the server)
-//      Part(isKeyBackedUp, Whether the user's secret key is in keyBundle)
-//      Part(homeFolder, A "Home folder" used on the app's device)
+//   - stingle.Response(ok)
+//     Part(userId, The numeric ID of the account)
+//     Part(keyBundle, The encoded keys of the user)
+//     Part(serverPublicKey, The server's public key that is associated with this account)
+//     Part(token, The session token signed by the server)
+//     Part(isKeyBackedUp, Whether the user's secret key is in keyBundle)
+//     Part(homeFolder, A "Home folder" used on the app's device)
 func (s *Server) handleLogin(req *http.Request) *stingle.Response {
 	email, passcode := parseOTP(req.PostFormValue("email"))
 	if code := req.PostFormValue("_code"); code != "" {
@@ -246,11 +246,11 @@ func (s *Server) decoyLogin(user database.User, hash string) *database.User {
 // handleLogout handles the /v2/login/logout endpoint.
 //
 // Arguments:
-//  - user: The authenticated user.
-//  - req: The http request.
+//   - user: The authenticated user.
+//   - req: The http request.
 //
 // Returns:
-//  - StringleResponse(ok)
+//   - StringleResponse(ok)
 func (s *Server) handleLogout(user database.User, req *http.Request) *stingle.Response {
 	delete(user.ValidTokens, token.Hash(req.PostFormValue("token")))
 	if err := s.db.UpdateUser(user); err != nil {
@@ -263,18 +263,18 @@ func (s *Server) handleLogout(user database.User, req *http.Request) *stingle.Re
 // handleChangePass handles the /v2/login/changePass endpoint.
 //
 // Arguments:
-//  - user: The authenticated user.
-//  - req: The http request.
+//   - user: The authenticated user.
+//   - req: The http request.
 //
 // Form arguments:
-//  - params - Encrypted parameters:
-//     - newPassword: The new hashed password.
-//     - newSalt: The salt used to hash the new password.
-//     - keyBundle: The new keyBundle.
+//   - params - Encrypted parameters:
+//   - newPassword: The new hashed password.
+//   - newSalt: The salt used to hash the new password.
+//   - keyBundle: The new keyBundle.
 //
 // Returns:
-//  - stingle.Response(ok)
-//      Part(token, A new signed session token)
+//   - stingle.Response(ok)
+//     Part(token, A new signed session token)
 func (s *Server) handleChangePass(user database.User, req *http.Request) *stingle.Response {
 	if user.LoginDisabled {
 		// Changing the password of a decoy account doesn't work.
@@ -330,11 +330,11 @@ func (s *Server) handleChangePass(user database.User, req *http.Request) *stingl
 // public key is used to encrypt the "params" arguments.
 //
 // Arguments:
-//  - user: The authenticated user.
-//  - req: The http request.
+//   - user: The authenticated user.
+//   - req: The http request.
 //
 // Returns:
-//  - stingle.Response(ok)
+//   - stingle.Response(ok)
 //     Part(serverPK, server's public key)
 func (s *Server) handleGetServerPK(user database.User, req *http.Request) *stingle.Response {
 	return stingle.ResponseOK().AddPart("serverPK", user.ServerPublicKeyForExport())
@@ -346,16 +346,16 @@ func (s *Server) handleGetServerPK(user database.User, req *http.Request) *sting
 // correct.
 //
 // Argument:
-//  - req: The http request.
+//   - req: The http request.
 //
 // Form arguments:
-//  - email: The email address of the account.
+//   - email: The email address of the account.
 //
 // Returns:
-//  - stingle.Response(ok)
-//      Part(challenge, A message that can only be read with the right secret key)
-//      Part(isKeyBackedUp, Whether the encrypted secret of the user in on the server)
-//      Part(serverPK, The public key of the server associated with this account)
+//   - stingle.Response(ok)
+//     Part(challenge, A message that can only be read with the right secret key)
+//     Part(isKeyBackedUp, Whether the encrypted secret of the user in on the server)
+//     Part(serverPK, The public key of the server associated with this account)
 func (s *Server) handleCheckKey(req *http.Request) *stingle.Response {
 	defer time.Sleep(time.Duration(time.Now().UnixNano()%200) * time.Millisecond)
 	email := req.PostFormValue("email")
@@ -393,18 +393,18 @@ func (s *Server) handleCheckKey(req *http.Request) *stingle.Response {
 // Form arguments:
 //
 // Argument:
-//  - req: The http request.
+//   - req: The http request.
 //
 // Form arguments:
-//  - email: The email address of the account.
-//  - params - Encrypted parameters:
-//     - newPassword: The new hashed password.
-//     - newSalt: The salt used to hash the new password.
-//     - keyBundle: The new keyBundle.
+//   - email: The email address of the account.
+//   - params - Encrypted parameters:
+//   - newPassword: The new hashed password.
+//   - newSalt: The salt used to hash the new password.
+//   - keyBundle: The new keyBundle.
 //
 // Returns:
-//  - stingle.Response(ok)
-//      Part(result, OK)
+//   - stingle.Response(ok)
+//     Part(result, OK)
 func (s *Server) handleRecoverAccount(req *http.Request) *stingle.Response {
 	defer time.Sleep(time.Duration(time.Now().UnixNano()%200) * time.Millisecond)
 	email := req.PostFormValue("email")
@@ -457,16 +457,16 @@ func (s *Server) handleRecoverAccount(req *http.Request) *stingle.Response {
 // to delete the user's account, but it is not currently implemented.
 //
 // Arguments:
-//  - user: The authenticated user.
-//  - req: The http request.
+//   - user: The authenticated user.
+//   - req: The http request.
 //
 // Form arguments:
-//  - token: The signed session token.
-//  - params: Encrypted parameters:
-//     - password: The user's hashed password.
+//   - token: The signed session token.
+//   - params: Encrypted parameters:
+//   - password: The user's hashed password.
 //
 // Returns:
-//  - stingle.Response(ok)
+//   - stingle.Response(ok)
 func (s *Server) handleDeleteUser(user database.User, req *http.Request) *stingle.Response {
 	params, err := s.decodeParams(req.PostFormValue("params"), user)
 	if err != nil {
@@ -492,16 +492,16 @@ func (s *Server) handleDeleteUser(user database.User, req *http.Request) *stingl
 // handleChangeEmail handles the /v2/login/changeEmail endpoint.
 //
 // Arguments:
-//  - user: The authenticated user.
-//  - req: The http request.
+//   - user: The authenticated user.
+//   - req: The http request.
 //
 // Form arguments:
-//  - token: The signed session token.
-//  - params: Encrypted parameters:
-//     - newEmail: The new email address.
+//   - token: The signed session token.
+//   - params: Encrypted parameters:
+//   - newEmail: The new email address.
 //
 // Returns:
-//  - stingle.Response(ok)
+//   - stingle.Response(ok)
 func (s *Server) handleChangeEmail(user database.User, req *http.Request) *stingle.Response {
 	if user.LoginDisabled {
 		// Changing the email of a decoy account doesn't work.
@@ -527,16 +527,16 @@ func (s *Server) handleChangeEmail(user database.User, req *http.Request) *sting
 // when the user changes the "Backup my keys" setting.
 //
 // Arguments:
-//  - user: The authenticated user.
-//  - req: The http request.
+//   - user: The authenticated user.
+//   - req: The http request.
 //
 // Form arguments:
-//  - token: The signed session token.
-//  - params: Encrypted parameters:
-//     - keyBundle: The new keyBundle.
+//   - token: The signed session token.
+//   - params: Encrypted parameters:
+//   - keyBundle: The new keyBundle.
 //
 // Returns:
-//  - stingle.Response(ok)
+//   - stingle.Response(ok)
 func (s *Server) handleReuploadKeys(user database.User, req *http.Request) *stingle.Response {
 	params, err := s.decodeParams(req.PostFormValue("params"), user)
 	if err != nil {

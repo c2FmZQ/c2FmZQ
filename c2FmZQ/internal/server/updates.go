@@ -29,23 +29,24 @@ import (
 // handleGetUpdates handles the /v2/sync/getUpdates endpoint. This is the
 // mechanism by which the user learns about changes in files, albums, etc.
 // Form arguments:
-//  - token  - The signed session token.
-//  - filesST - The timestamp of the last seen changes to the Gallery.
-//  - trashST - The timestamp of the last seen changes to the Trash.
-//  - albumsST - The timestamp of the last seen to albums.
-//  - albumFilesST - The timestamp of the last seen changes to any album
-//                   files.
-//  - cntST - The timestamp of the last seen changes to contacts.
-//  - delST - The timestamp of the last seen delete events.
+//   - token  - The signed session token.
+//   - filesST - The timestamp of the last seen changes to the Gallery.
+//   - trashST - The timestamp of the last seen changes to the Trash.
+//   - albumsST - The timestamp of the last seen to albums.
+//   - albumFilesST - The timestamp of the last seen changes to any album
+//     files.
+//   - cntST - The timestamp of the last seen changes to contacts.
+//   - delST - The timestamp of the last seen delete events.
+//
 // Returns:
-//  - files: unseen changes in Gallery
-//  - trash: unseen changes in Trash
-//  - albums: unseen changes in albums
-//  - albumFiles: unseen changes in album files
-//  - contacts: unseen changes in contacts
-//  - deletes: unseen deletions (files, albums, contacts, etc)
-//  - spacedUsed: the number of megabytes of storage used.
-//  - spaceQuota: the user's quota in megabytes.
+//   - files: unseen changes in Gallery
+//   - trash: unseen changes in Trash
+//   - albums: unseen changes in albums
+//   - albumFiles: unseen changes in album files
+//   - contacts: unseen changes in contacts
+//   - deletes: unseen deletions (files, albums, contacts, etc)
+//   - spacedUsed: the number of megabytes of storage used.
+//   - spaceQuota: the user's quota in megabytes.
 func (s *Server) handleGetUpdates(user database.User, req *http.Request) *stingle.Response {
 	fileST := parseInt(req.PostFormValue("filesST"), 0)
 	trashST := parseInt(req.PostFormValue("trashST"), 0)
@@ -95,6 +96,7 @@ func (s *Server) handleGetUpdates(user database.User, req *http.Request) *stingl
 	if err != nil {
 		log.Errorf("Quota() failed: %v", err)
 	}
+
 	r := stingle.ResponseOK().
 		AddPart("files", files).
 		AddPart("trash", trash).

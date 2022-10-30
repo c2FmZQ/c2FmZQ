@@ -26,12 +26,13 @@ let DEBUG = false;
  * close them as soon as they are no longer used.
  */
 class Store {
-  constructor() {
+  constructor(name) {
     if (DEBUG) console.log(`SW Store constructor`);
     this.refs = 0;
     this.store = null;
     this.storep = null;
     this.passphrase = null;
+    this.name = name || 'c2FmZQ';
   }
 
   async open(storeKey) {
@@ -54,7 +55,7 @@ class Store {
           this.storep = null;
           return reject(false);
         }
-        store = new SecureStore.Store('c2FmZQ', key);
+        store = new SecureStore.Store(this.name, key);
         if (DEBUG) console.log(`SW store init`);
         await store.init();
         this.passphrase = key;

@@ -141,6 +141,10 @@ func (d *Database) addFileToFileSet(user User, file FileSpec, name, set, albumID
 	d.storage.CreateEmptyFile(d.blobRef(file.StoreThumb), BlobSpec{})
 	d.incRefCount(file.StoreFile, 1)
 	d.incRefCount(file.StoreThumb, 1)
+
+	if a := fileSet.Album; a != nil {
+		d.notifyAlbum(user.UserID, a, notification{Type: notifyNewContent, Target: a.AlbumID})
+	}
 	return nil
 }
 
@@ -479,6 +483,10 @@ func (d *Database) MoveFile(user User, p MoveFileParams) (retErr error) {
 	}
 	pruneDeleteEvents(&fsFrom.Deletes, &fsFrom.DeleteHorizon)
 	pruneDeleteEvents(&fsTo.Deletes, &fsTo.DeleteHorizon)
+
+	if a := fsTo.Album; a != nil {
+		d.notifyAlbum(user.UserID, a, notification{Type: notifyNewContent, Target: a.AlbumID})
+	}
 	return nil
 }
 

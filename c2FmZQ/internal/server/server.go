@@ -201,6 +201,7 @@ func New(db *database.Database, addr, htdigest, pathPrefix string) *Server {
 	s.mux.HandleFunc(pathPrefix+"/c2/config/echo", s.method("POST", s.handleEcho))
 	s.mux.HandleFunc(pathPrefix+"/c2/config/generateOTP", s.auth(s.handleGenerateOTP))
 	s.mux.HandleFunc(pathPrefix+"/c2/config/setOTP", s.auth(s.handleSetOTP))
+	s.mux.HandleFunc(pathPrefix+"/c2/config/push", s.auth(s.handlePush))
 	s.mux.HandleFunc(pathPrefix+"/c2/admin/users", s.auth(s.handleAdminUsers))
 
 	return s

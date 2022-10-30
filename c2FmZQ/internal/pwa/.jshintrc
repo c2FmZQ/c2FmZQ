@@ -15,6 +15,7 @@
   "unused": false,
   "varstmt": true,
   "globals": {
+    "_T": true,
     "base64": true,
     "base64DecodeToBinary": true,
     "base64DecodeToBytes": true,

@@ -170,6 +170,13 @@ func main() {
 						Action:    editFileset,
 					},
 					&cli.Command{
+						Name:      "push-services",
+						Aliases:   []string{"ps"},
+						Usage:     "Edit push services.",
+						ArgsUsage: " ",
+						Action:    editPushServices,
+					},
+					&cli.Command{
 						Name:      "quotas",
 						Aliases:   []string{"quota"},
 						Usage:     "Edit quotas.",
@@ -759,6 +766,14 @@ func editFileset(c *cli.Context) error {
 		return nil
 	}
 	return db.EditFileset(c.Args().Get(0))
+}
+
+func editPushServices(c *cli.Context) error {
+	db, err := initDB(c)
+	if err != nil {
+		return err
+	}
+	return db.EditPushServiceConfiguration()
 }
 
 func changeUserOTPKey(c *cli.Context) error {

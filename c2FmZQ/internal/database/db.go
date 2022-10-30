@@ -43,6 +43,7 @@ import (
 	"c2FmZQ/internal/log"
 	"c2FmZQ/internal/secure"
 	"c2FmZQ/internal/stingle"
+	"c2FmZQ/internal/webpush"
 )
 
 var (
@@ -102,11 +103,20 @@ func New(dir string, passphrase []byte) *Database {
 	// Fail silently if it already exists.
 	db.storage.CreateEmptyFile(db.filePath(userListFile), []userList{})
 	db.CreateEmptyQuotaFile()
+	db.createEmptyPushServiceConfigurationFile()
 
 	db.fileSetCacheSize = 20
 	db.fileSetCache, _ = simplelru.NewLRU(db.fileSetCacheSize, nil)
 	db.albumRefCacheSize = 20
 	db.albumRefCache, _ = simplelru.NewLRU(db.albumRefCacheSize, nil)
+
+	if err := db.readPushServiceConfigurationFile(); err != nil {
+		log.Fatalf("pushServices: %v", err)
+	}
+	if db.pushServices.Enable {
+		db.notifyChan = make(chan notifyItem, 100)
+		db.startNotifyWorkers()
+	}
 	return db
 }
 
@@ -124,12 +134,16 @@ type Database struct {
 	albumRefCache      *simplelru.LRU
 	albumRefCacheSize  int
 	albumRefCacheMutex sync.Mutex
+
+	notifyChan   chan notifyItem
+	pushServices webpush.PushServiceConfiguration
 }
 
 func (d *Database) Wipe() {
 	if d.masterKey != nil {
 		d.masterKey.Wipe()
 	}
+	close(d.notifyChan)
 }
 
 // Dir returns the directory where the database stores its data.

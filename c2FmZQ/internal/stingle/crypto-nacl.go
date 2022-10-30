@@ -15,6 +15,7 @@
 // You should have received a copy of the GNU General Public License along with
 // c2FmZQ. If not, see <https://www.gnu.org/licenses/>.
 
+//go:build !sodium
 // +build !sodium
 
 package stingle
@@ -129,6 +130,9 @@ func DecryptMessage(msg string, pk PublicKey, sk *SecretKey) ([]byte, error) {
 	b, err := base64.StdEncoding.DecodeString(msg)
 	if err != nil {
 		return nil, err
+	}
+	if len(b) < 24 {
+		return nil, errors.New("message is too short")
 	}
 	nonce := new([24]byte)
 	copy((*nonce)[:], b[:24])

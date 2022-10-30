@@ -174,12 +174,76 @@ class c2FmZQClient {
         this.vars_.password = await this.passwordForValidation_(this.vars_.passwordSalt, password);
 
         await this.saveVars_();
+        this.enableNotifications(clientId, args.enableNotifications);
         return {
           account: email,
           otpEnabled: this.vars_.otpEnabled,
           isAdmin: this.vars_.isAdmin,
           needKey: this.vars_.sk === undefined,
         };
+      });
+  }
+
+  async enableNotifications(clientId, onoff) {
+    if (!self.registration.pushManager || !self.registration.pushManager.getSubscription) {
+      return;
+    }
+    if (!onoff) {
+      return self.registration.pushManager.getSubscription()
+        .then(async sub => {
+          if (sub === null) {
+            return;
+          }
+          console.log('SW disable push notifications');
+          const ep = sub.endpoint;
+          sub.unsubscribe();
+          return this.sendRequest_(clientId, 'c2/config/push', {
+            token: this.vars_.token,
+            params: await this.makeParams_({endpoint: ep}),
+          })
+          .then(() => false)
+          .catch(() => false);
+        });
+    }
+    const options = {
+      'userVisibleOnly': true,
+    };
+    return self.registration.pushManager.getSubscription()
+      .then(async sub => {
+        if (sub !== null) {
+          return sub;
+        }
+        return this.sendRequest_(clientId, 'c2/config/push', {token: this.vars_.token})
+          .then(resp => {
+            if (resp.status !== 'ok') {
+              throw resp.status;
+            }
+            options.applicationServerKey = resp.parts.applicationServerKey;
+            return self.registration.pushManager.permissionState(options);
+          })
+          .then(state => {
+            if (state !== 'granted') {
+              throw 'permission state: ' + state;
+            }
+            console.log('SW enable push notifications');
+            return self.registration.pushManager.subscribe(options);
+          });
+      })
+      .then(async sub => {
+        return this.sendRequest_(clientId, 'c2/config/push', {
+          token: this.vars_.token,
+          params: await this.makeParams_({
+            endpoint: sub.endpoint,
+            auth: self.base64RawUrlEncode(new Uint8Array(sub.getKey('auth'))),
+            p256dh: self.base64RawUrlEncode(new Uint8Array(sub.getKey('p256dh'))),
+          }),
+        });
+      })
+      .then(resp => {
+        if (resp.status !== 'ok') {
+          throw resp.status;
+        }
+        return true;
       });
   }
 
@@ -433,10 +497,9 @@ class c2FmZQClient {
    */
   async logout(clientId) {
     console.log('SW logout');
-    return this.sendRequest_(clientId, 'v2/login/logout', {'token': this.vars_.token})
-      .then(() => {
-        console.log('SW logged out');
-      })
+    return this.enableNotifications(clientId, false)
+      .then(() => this.sendRequest_(clientId, 'v2/login/logout', {'token': this.vars_.token}))
+      .then(() => console.log('SW logged out'))
       .catch(console.error)
       .finally(async () => {
         this.vars_ = {};
@@ -451,6 +514,10 @@ class c2FmZQClient {
    * Send a getUpdates request, and process the response.
    */
   async getUpdates(clientId) {
+    if (this.gettingUpdates_) {
+      return;
+    }
+    this.gettingUpdates_ = true;
     const data = {
       'token': this.vars_.token,
       'filesST': this.vars_.galleryTimeStamp,
@@ -631,6 +698,9 @@ class c2FmZQClient {
           Promise.all(Object.keys(changed).map(collection => this.indexCollection_(collection))),
         ];
         return Promise.all(p);
+      })
+      .finally(() => {
+        this.gettingUpdates_ = false;
       });
   }
 
@@ -1339,6 +1409,57 @@ class c2FmZQClient {
     .then(j => JSON.parse(j));
   }
 
+  async onpush(data) {
+    if (!data) {
+      return;
+    }
+    const enc = self.base64DecodeToBinary(data);
+    const m = await sodium.crypto_box_seal_open(enc, await sodiumPublicKey(this.vars_.pk), await sodiumSecretKey(this.vars_.sk));
+    const js = JSON.parse(self.bytesToString(m));
+    console.log('SW onpush:', js);
+    let album;
+    switch (js.type) {
+      case 1: // New user registration
+        await self.showNotif(_T('new-user-title', js.target), {
+          tag: `new-user:${js.target}:${js.id}`,
+        });
+        break;
+      case 2: // New content in album
+        await this.getUpdates('');
+        album = this.db_.albums[js.target];
+        if (album) {
+          const name = await this.decryptString_(album.encName);
+          await self.showNotif(name, {
+            tag: `new-content:${js.target}`,
+            body: _T('new-content-body'),
+          });
+        }
+        break;
+      case 3: // New member in album
+        await this.getUpdates('');
+        album = this.db_.albums[js.target];
+        const name = album ? await this.decryptString_(album.encName) : _T('collection');
+        const members = js.data.members;
+        if (members && members.includes(this.vars_.userId)) {
+          await self.showNotif(name, {
+            tag: `new-collection:${js.target}`,
+            body: _T('new-collection-body'),
+          });
+        } else if (members && members.length) {
+          await self.showNotif(name, {
+            tag: `new-member:${js.target}`,
+            body: _T('new-members-body'),
+          });
+        }
+        break;
+      case 4: // Test notification
+          await self.showNotif(_T('push-notifications-title'), {
+            tag: `test-notification:${js.id}`,
+            body: _T('push-notifications-body'),
+          });
+    }
+  }
+
   /*
    */
   async sendRequest_(clientId, endpoint, data) {
@@ -1362,7 +1483,7 @@ class c2FmZQClient {
     })
     .catch(err => {
       if (err instanceof TypeError) {
-        throw new Error('Offline?');
+        throw new Error(_T('network-error'));
       }
       throw err;
     })
@@ -1419,7 +1540,7 @@ class c2FmZQClient {
         const func = params.get('func');
         let args = [];
         try {
-          args = JSON.parse(base64DecodeToBinary(params.get('args')));
+          args = JSON.parse(self.base64DecodeToString(params.get('args')));
         } catch (e) {
           console.log('SW invalid args', params.get('args'));
         }
@@ -1447,6 +1568,7 @@ class c2FmZQClient {
           'deleteCollection',
           'setCachePreference',
           'cachePreference',
+          'enableNotifications',
           'ping',
         ];
         if (allowedMethods.includes(func)) {
@@ -1624,6 +1746,7 @@ class c2FmZQClient {
         }));
       })
       .catch(e => {
+        console.log('SW Error', e);
         resolve(new Response('', {'status': 502, 'statusText': 'network error'}));
       });
     });

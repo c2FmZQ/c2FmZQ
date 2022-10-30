@@ -122,6 +122,12 @@ class Main {
           ui.showUploadProgress(event.data.progress);
           navigator.serviceWorker.controller.postMessage({type: 'nop'});
           break;
+        case 'jumpto':
+          console.log('Received jumpto', event.data.collection);
+          this.sendRPC('getUpdates').finally(() => {
+            ui.switchView({collection: event.data.collection});
+          });
+          break;
         default:
           console.log('Received Message', event.data);
       }
@@ -138,7 +144,7 @@ class Main {
     const bits = await window.crypto.subtle.deriveBits(
       {'name': 'PBKDF2', salt: this.salt_, 'iterations': 200000, 'hash': 'SHA-256'}, km, 256);
     const a = new Uint8Array(bits);
-    const k = btoa(String.fromCharCode(...a));
+    const k = base64.fromByteArray(a);
     this.storeKey_ = k;
     this.sendHello_();
   }
@@ -217,6 +223,7 @@ class Main {
       type: 'hello',
       storeKey: this.storeKey_,
       version: VERSION,
+      lang: Lang.current,
     });
   }
 
@@ -278,7 +285,7 @@ class Main {
           setTimeout(send, 100);
           return;
         }
-        fetch('jsapi?func='+f+'&args='+btoa(JSON.stringify(args)))
+        fetch('jsapi?func='+f+'&args='+base64.fromByteArray(new TextEncoder().encode(JSON.stringify(args))))
         .then(resp => {
           if (!resp.ok) {
             reject(''+resp.status+' '+resp.statusText);
