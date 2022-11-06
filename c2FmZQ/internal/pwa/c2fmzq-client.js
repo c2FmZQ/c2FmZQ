@@ -1360,6 +1360,12 @@ class c2FmZQClient {
       referrerPolicy: 'no-referrer',
       body: enc.join('&'),
     })
+    .catch(err => {
+      if (err instanceof TypeError) {
+        throw new Error(_T('network-error'));
+      }
+      throw err;
+    })
     .then(resp => {
       if (!resp.ok) {
         throw new Error(`${resp.status} ${resp.statusText}`);

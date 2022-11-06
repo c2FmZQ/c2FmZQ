@@ -211,6 +211,7 @@ window.Lang = {
       'default-cover': 'Default cover',
       'no-cover': 'No cover',
       'data-updated': 'Data updated',
+      'network-error': 'offline?',
     },
 //    'fr': {
 //      'LANG': 'Français',
