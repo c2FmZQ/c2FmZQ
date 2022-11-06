@@ -1362,7 +1362,7 @@ class c2FmZQClient {
     })
     .catch(err => {
       if (err instanceof TypeError) {
-        throw new Error(_T('network-error'));
+        throw new Error('Offline?');
       }
       throw err;
     })
