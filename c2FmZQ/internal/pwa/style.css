@@ -498,11 +498,19 @@ input[type=checkbox] {
 }
 .admin-console-popup {
   max-width: 95vw;
-  max-height: 90vh;
+  height: 75vh;
   overflow-y: scroll;
+  overscroll-behavior: none;
 }
 .admin-console-popup .popup-content {
   padding: 1em;
+}
+#admin-console-save-button {
+  margin-bottom: 1em;
+}
+#admin-console-filter {
+  margin-top: 1em;
+  margin-bottom: 0.5em;
 }
 #admin-console-default-quota-value {
   width: 5em;
@@ -515,9 +523,13 @@ input[type=checkbox] {
   justify-content: start;
   align-items: stretch;
   border: 1px solid black;
+  max-height: 50vh;
+  overscroll-behavior: none;
 }
 #admin-console-table>div:nth-child(-n+5) {
   font-weight: bold;
+  position: sticky;
+  top: 0;
 }
 #admin-console-table>div:nth-child(10n+1),#admin-console-table>div:nth-child(10n+2),#admin-console-table>div:nth-child(10n+3),#admin-console-table>div:nth-child(10n+4),#admin-console-table>div:nth-child(10n+5) {
   background-color: #eee;

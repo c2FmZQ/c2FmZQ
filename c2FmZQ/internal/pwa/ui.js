@@ -2650,6 +2650,7 @@ class UI {
       saveButton.disabled = changes() === null;
     };
     const saveButton = document.createElement('button');
+    saveButton.id = 'admin-console-save-button';
     saveButton.textContent = _T('save-changes');
     saveButton.disabled = true;
     saveButton.addEventListener('click', () => {
@@ -2715,16 +2716,22 @@ class UI {
     defQuotaDiv.appendChild(defQuotaUnit);
     content.appendChild(defQuotaDiv);
 
-    const table = document.createElement('div');
-    table.id = 'admin-console-table';
-    content.appendChild(table);
+    const filter = document.createElement('input');
+    filter.id = 'admin-console-filter';
+    filter.type = 'search';
+    filter.placeholder = _T('filter');
+    filter.addEventListener('keyup', () => {
+      showUsers();
+    });
+    content.appendChild(filter);
 
-    table.innerHTML = `<div>${_T('email')}</div><div>${_T('locked')}</div><div>${_T('approved')}</div><div>${_T('admin')}</div><div>${_T('quota')}</div>`;
-
+    const view = {};
     for (let user of data.users) {
+      view[user.email] = [];
+
       const email = document.createElement('div');
       email.textContent = user.email;
-      table.appendChild(email);
+      view[user.email].push(email);
 
       const lockedDiv = document.createElement('div');
       const locked = document.createElement('input');
@@ -2742,7 +2749,7 @@ class UI {
         onchange();
       });
       lockedDiv.appendChild(locked);
-      table.appendChild(lockedDiv);
+      view[user.email].push(lockedDiv);
 
       const approvedDiv = document.createElement('div');
       const approved = document.createElement('input');
@@ -2760,7 +2767,7 @@ class UI {
         onchange();
       });
       approvedDiv.appendChild(approved);
-      table.appendChild(approvedDiv);
+      view[user.email].push(approvedDiv);
 
       const adminDiv = document.createElement('div');
       const admin = document.createElement('input');
@@ -2778,7 +2785,7 @@ class UI {
         onchange();
       });
       adminDiv.appendChild(admin);
-      table.appendChild(adminDiv);
+      view[user.email].push(adminDiv);
 
       const quotaDiv = document.createElement('div');
       quotaDiv.className = 'quota-cell';
@@ -2818,7 +2825,24 @@ class UI {
         onchange();
       });
       quotaDiv.appendChild(quotaUnit);
-      table.appendChild(quotaDiv);
+      view[user.email].push(quotaDiv);
     }
+
+    const table = document.createElement('div');
+    table.id = 'admin-console-table';
+    content.appendChild(table);
+
+    const showUsers = () => {
+      while (table.firstChild) {
+        table.removeChild(table.firstChild);
+      }
+      table.innerHTML = `<div>${_T('email')}</div><div>${_T('locked')}</div><div>${_T('approved')}</div><div>${_T('admin')}</div><div>${_T('quota')}</div>`;
+      for (let user of data.users) {
+        if (filter.value === '' || user.email.includes(filter.value) || Object.keys(user).filter(k => k.startsWith('_')).length > 0) {
+          view[user.email].forEach(e => table.appendChild(e));
+        }
+      }
+    };
+    showUsers();
   }
 }
