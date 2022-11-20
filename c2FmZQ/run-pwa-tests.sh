@@ -7,7 +7,7 @@ export GOCACHE=$(go env GOCACHE)
 export GOPATH=$(go env GOPATH)
 export USERID=$(id -u)
 export SRCDIR=$(realpath ..)
-
+export TESTS="$1"
 docker-compose -f docker-compose-browser-tests.yaml up \
   --abort-on-container-exit \
   --exit-code-from=devtest

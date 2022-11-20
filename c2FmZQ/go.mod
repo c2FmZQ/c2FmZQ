@@ -1,11 +1,13 @@
 module c2FmZQ
 
-go 1.20
+go 1.19
 
 require (
 	bazil.org/fuse v0.0.0-20200524192727-fb710f7dfd05
 	github.com/NYTimes/gziphandler v1.1.1
+	github.com/aead/ecdh v0.2.0
 	github.com/disintegration/imaging v1.6.2
+	github.com/fxamacker/cbor/v2 v2.4.0
 	github.com/go-test/deep v1.0.7
 	github.com/hashicorp/golang-lru v0.5.4
 	github.com/jamesruan/sodium v1.0.14
@@ -37,6 +39,7 @@ require (
 	github.com/prometheus/common v0.37.0 // indirect
 	github.com/prometheus/procfs v0.8.0 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
+	github.com/x448/float16 v0.8.4 // indirect
 	github.com/xrash/smetrics v0.0.0-20201216005158-039620a65673 // indirect
 	golang.org/x/net v0.1.0 // indirect
 	golang.org/x/text v0.4.0 // indirect

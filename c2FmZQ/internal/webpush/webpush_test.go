@@ -15,6 +15,9 @@
 // You should have received a copy of the GNU General Public License along with
 // c2FmZQ. If not, see <https://www.gnu.org/licenses/>.
 
+//go:build go1.20
+// +build go1.20
+
 package webpush
 
 import (
@@ -60,7 +63,6 @@ func TestMatchService(t *testing.T) {
 
 func TestMakeRequest(t *testing.T) {
 	cfg := DefaultPushServiceConfiguration()
-	cfg.Google.Regexp = "^https://"
 	cfg.Init(nil)
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
@@ -83,7 +85,7 @@ func TestMakeRequest(t *testing.T) {
 	}
 
 	params := Params{
-		Endpoint:                    "https://foo/",
+		Endpoint:                    "https://fcm.googleapis.com/foo",
 		ApplicationServerPrivateKey: base64.RawURLEncoding.EncodeToString(aspk),
 		ApplicationServerPublicKey:  base64.RawURLEncoding.EncodeToString(elliptic.Marshal(key.PublicKey.Curve, key.PublicKey.X, key.PublicKey.Y)),
 		Auth:                        base64.RawURLEncoding.EncodeToString(authBytes),
@@ -122,7 +124,7 @@ func TestMakeRequest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("curve.NewPublicKey: %v", err)
 	}
-	sharedSecret, err := curve.ECDH(clientKey, pubKey)
+	sharedSecret, err := clientKey.ECDH(pubKey)
 	if err != nil {
 		t.Fatalf("shareSecret: %v", err)
 	}

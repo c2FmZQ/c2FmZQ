@@ -23,7 +23,6 @@ import (
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
-	"crypto/ecdh"
 	"crypto/ecdsa"
 	"crypto/hmac"
 	"crypto/rand"
@@ -40,6 +39,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"strconv"
 	"sync"
 	"time"
 
@@ -56,6 +56,11 @@ const (
 	mozilla pushServiceID = 2
 	windows pushServiceID = 3
 	apple   pushServiceID = 4
+
+	googleRegexp  = `^https://fcm\.googleapis\.com/.*`
+	mozillaRegexp = `^https://updates\.push\.services\.mozilla\.com/.*`
+	windowsRegexp = `^https://[^/]*\.notify\.windows\.com/.*`
+	appleRegexp   = `^https://[^/]*\.push\.apple\.com/.*`
 )
 
 // DefaultPushServiceConfiguration creates a default PushServiceConfiguration.
@@ -66,20 +71,16 @@ func DefaultPushServiceConfiguration() *PushServiceConfiguration {
 	c.JWTSubject = "https://..."
 
 	c.Google.Enable = true
-	c.Google.Regexp = `^https://fcm\.googleapis\.com/.*`
-	c.Google.RateLimit = 10.0
+	c.Google.RateLimit = 1.0
 
 	c.Mozilla.Enable = true
-	c.Mozilla.Regexp = `^https://updates\.push\.services\.mozilla\.com/.*`
-	c.Mozilla.RateLimit = 10.0
+	c.Mozilla.RateLimit = 1.0
 
 	c.Windows.Enable = false
-	c.Windows.Regexp = `^https://[^/]*\.notify\.windows\.com/.*`
-	c.Windows.RateLimit = 10.0
+	c.Windows.RateLimit = 1.0
 
 	c.Apple.Enable = true
-	c.Apple.Regexp = `^https://[^/]*\.push\.apple\.com/.*`
-	c.Apple.RateLimit = 10.0
+	c.Apple.RateLimit = 1.0
 
 	if err := c.Init(nil); err != nil {
 		panic(err)
@@ -100,7 +101,6 @@ type PushServiceConfiguration struct {
 	// Google contains the options for Google's FCM service.
 	Google struct {
 		Enable    bool    `json:"enable"`
-		Regexp    string  `json:"regexp"`
 		RateLimit float64 `json:"rate_limit"`
 
 		re *regexp.Regexp
@@ -110,7 +110,6 @@ type PushServiceConfiguration struct {
 	// Mozilla contains the options for Mozilla's push service.
 	Mozilla struct {
 		Enable    bool    `json:"enable"`
-		Regexp    string  `json:"regexp"`
 		RateLimit float64 `json:"rate_limit"`
 
 		re *regexp.Regexp
@@ -120,7 +119,6 @@ type PushServiceConfiguration struct {
 	// Windows contains the options for Azure's WNS push service.
 	Windows struct {
 		Enable          bool    `json:"enable"`
-		Regexp          string  `json:"regexp"`
 		RateLimit       float64 `json:"rate_limit"`
 		PackageSID      string  `json:"packageSid"`
 		SecretKey       string  `json:"secretKey"`
@@ -135,7 +133,6 @@ type PushServiceConfiguration struct {
 	// Apple contains the options for Apple's push service.
 	Apple struct {
 		Enable    bool    `json:"enable"`
-		Regexp    string  `json:"regexp"`
 		RateLimit float64 `json:"rate_limit"`
 
 		re *regexp.Regexp
@@ -158,8 +155,6 @@ type jwtCacheEntry struct {
 // Init initialized PushServiceConfiguration's internal fields.
 func (c *PushServiceConfiguration) Init(saveFunc func(*PushServiceConfiguration) error) error {
 	c.save = saveFunc
-	transport := http.DefaultTransport.(*http.Transport).Clone()
-	transport.ForceAttemptHTTP2 = false
 	c.client = &http.Client{}
 	c.client11 = &http.Client{
 		Transport: &http.Transport{
@@ -169,35 +164,19 @@ func (c *PushServiceConfiguration) Init(saveFunc func(*PushServiceConfiguration)
 	c.jwtCache = make(map[string]jwtCacheEntry)
 
 	if c.Google.Enable {
-		re, err := regexp.Compile(c.Google.Regexp)
-		if err != nil {
-			return err
-		}
-		c.Google.re = re
+		c.Google.re = regexp.MustCompile(googleRegexp)
 		c.Google.rl = rate.NewLimiter(rate.Limit(c.Google.RateLimit), int(math.Ceil(c.Google.RateLimit)))
 	}
 	if c.Mozilla.Enable {
-		re, err := regexp.Compile(c.Mozilla.Regexp)
-		if err != nil {
-			return err
-		}
-		c.Mozilla.re = re
+		c.Mozilla.re = regexp.MustCompile(mozillaRegexp)
 		c.Mozilla.rl = rate.NewLimiter(rate.Limit(c.Mozilla.RateLimit), int(math.Ceil(c.Mozilla.RateLimit)))
 	}
 	if c.Windows.Enable {
-		re, err := regexp.Compile(c.Windows.Regexp)
-		if err != nil {
-			return err
-		}
-		c.Windows.re = re
+		c.Windows.re = regexp.MustCompile(windowsRegexp)
 		c.Windows.rl = rate.NewLimiter(rate.Limit(c.Windows.RateLimit), int(math.Ceil(c.Windows.RateLimit)))
 	}
 	if c.Apple.Enable {
-		re, err := regexp.Compile(c.Apple.Regexp)
-		if err != nil {
-			return err
-		}
-		c.Apple.re = re
+		c.Apple.re = regexp.MustCompile(appleRegexp)
 		c.Apple.rl = rate.NewLimiter(rate.Limit(c.Apple.RateLimit), int(math.Ceil(c.Apple.RateLimit)))
 	}
 	return nil
@@ -235,6 +214,10 @@ type Params struct {
 	P256dh string
 	// The payload to attach to the notification.
 	Payload []byte
+	// The notification's TTL.
+	TTL int
+	// The notification's urgency.
+	Urgency string
 }
 
 // Send sends a push notification.
@@ -289,8 +272,16 @@ func (c *PushServiceConfiguration) makeRequest(ctx context.Context, params Param
 	}
 	req.Header.Set("Encryption", "salt="+salt)
 	req.Header.Set("Crypto-Key", "p256ecdsa="+params.ApplicationServerPublicKey+";dh="+localKey)
-	req.Header.Set("TTL", "86400")
-	req.Header.Set("Urgency", "normal")
+	if ttl := int64(params.TTL); ttl > 0 {
+		req.Header.Set("TTL", strconv.FormatInt(ttl, 10))
+	} else {
+		req.Header.Set("TTL", "86400")
+	}
+	if u := params.Urgency; u != "" {
+		req.Header.Set("Urgency", u)
+	} else {
+		req.Header.Set("Urgency", "normal")
+	}
 	req.Header.Set("Content-Type", "application/octet-stream")
 	req.Header.Set("Content-Encoding", "aesgcm")
 
@@ -410,17 +401,7 @@ func (c *PushServiceConfiguration) encryptPayload(params Params) (encryptedPaylo
 	if err != nil {
 		return nil, "", "", err
 	}
-
-	curve := ecdh.P256()
-	peerKey, err := curve.NewPublicKey(peerKeyBytes)
-	if err != nil {
-		return nil, "", "", err
-	}
-	localKey, err := curve.GenerateKey(rand.Reader)
-	if err != nil {
-		return nil, "", "", err
-	}
-	sharedSecret, err := curve.ECDH(localKey, peerKey)
+	sharedSecret, localKeyPubBytes, err := ecdhSharedSecret(peerKeyBytes)
 	if err != nil {
 		return nil, "", "", err
 	}
@@ -429,9 +410,9 @@ func (c *PushServiceConfiguration) encryptPayload(params Params) (encryptedPaylo
 		return nil, "", "", err
 	}
 	prk := hkdf(authBytes, sharedSecret, []byte("Content-Encoding: auth\x00"), 32)
-	cekInfo := createInfo("aesgcm", peerKeyBytes, localKey.PublicKey().Bytes())
+	cekInfo := createInfo("aesgcm", peerKeyBytes, localKeyPubBytes)
 	cek := hkdf(salt, prk, cekInfo, 16)
-	nonceInfo := createInfo("nonce", peerKeyBytes, localKey.PublicKey().Bytes())
+	nonceInfo := createInfo("nonce", peerKeyBytes, localKeyPubBytes)
 	nonce := hkdf(salt, prk, nonceInfo, 12)
 
 	paddingLen := uint16(16 - len(params.Payload)%16)
@@ -453,7 +434,7 @@ func (c *PushServiceConfiguration) encryptPayload(params Params) (encryptedPaylo
 		return nil, "", "", fmt.Errorf("message too large: %d", sz)
 	}
 
-	return encPayload, base64.RawURLEncoding.EncodeToString(salt), base64.RawURLEncoding.EncodeToString(localKey.PublicKey().Bytes()), nil
+	return encPayload, base64.RawURLEncoding.EncodeToString(salt), base64.RawURLEncoding.EncodeToString(localKeyPubBytes), nil
 }
 
 func hkdf(salt, ikm, info []byte, length int) []byte {

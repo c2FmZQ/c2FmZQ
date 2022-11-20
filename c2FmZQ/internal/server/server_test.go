@@ -20,6 +20,7 @@ package server_test
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -28,13 +29,17 @@ import (
 	"net/http"
 	"net/url"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/pquerna/otp/totp"
 
 	"c2FmZQ/internal/database"
 	"c2FmZQ/internal/log"
 	"c2FmZQ/internal/server"
 	"c2FmZQ/internal/stingle"
+	"c2FmZQ/internal/webauthn"
 )
 
 // startServer starts a server listening on a unix socket. Returns the unix socket
@@ -63,9 +68,14 @@ func startServer(t *testing.T) (string, func()) {
 // newClient returns a new test client that uses sock to connect to the server.
 func newClient(sock string) *client {
 	sk := stingle.MakeSecretKeyForTest()
+	auth, err := webauthn.NewFakeAuthenticator()
+	if err != nil {
+		panic(err)
+	}
 	return &client{
-		sock:      sock,
-		secretKey: sk,
+		sock:          sock,
+		secretKey:     sk,
+		authenticator: auth,
 	}
 }
 
@@ -81,6 +91,8 @@ type client struct {
 	serverPublicKey stingle.PublicKey
 	keyBundle       string
 	token           string
+	otpKey          string
+	authenticator   *webauthn.FakeAuthenticator
 }
 
 func (c *client) encodeParams(params map[string]string) string {
@@ -108,7 +120,15 @@ func (c *client) sendRequest(uri string, form url.Values) (*stingle.Response, er
 
 	log.Debugf("SEND POST %s", uri)
 	log.Debugf(" %v", form)
-	resp, err := hc.PostForm("http://unix"+uri, form)
+
+	req, err := http.NewRequest("POST", "http://unix"+uri, strings.NewReader(form.Encode()))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Add("X-c2FmZQ-capabilities", "mfa")
+	req.Header.Add("Content-type", "application/x-www-form-urlencoded")
+
+	resp, err := hc.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -121,6 +141,55 @@ func (c *client) sendRequest(uri string, form url.Values) (*stingle.Response, er
 	var sr stingle.Response
 	if err := dec.Decode(&sr); err != nil {
 		return nil, err
+	}
+	if sr.Status == "nok" && !form.Has("mfa") && sr.Part("mfa") != "" {
+		if c.otpKey != "" {
+			code, err := totp.GenerateCode(c.otpKey, time.Now())
+			if err != nil {
+				return nil, err
+			}
+			mfa := struct {
+				OTP string `json:"otp"`
+			}{code}
+			jsMFA, err := json.Marshal(mfa)
+			if err != nil {
+				return nil, err
+			}
+			form.Add("mfa", string(jsMFA))
+			return c.sendRequest(uri, form)
+		}
+		b, err := json.Marshal(sr.Part("mfa"))
+		if err != nil {
+			return nil, err
+		}
+		var opts struct {
+			Options webauthn.AssertionOptions `json:"webauthn"`
+		}
+		if err := json.Unmarshal(b, &opts); err != nil {
+			return nil, err
+		}
+		id, clientDataJSON, authData, signature, err := c.authenticator.Get(&opts.Options)
+		if err != nil {
+			return nil, err
+		}
+		var mfa struct {
+			WebAuthn struct {
+				ID                string `json:"id"`
+				ClientDataJSON    string `json:"clientDataJSON"`
+				AuthenticatorData string `json:"authenticatorData"`
+				Signature         string `json:"signature"`
+			} `json:"webauthn"`
+		}
+		mfa.WebAuthn.ID = id
+		mfa.WebAuthn.ClientDataJSON = base64.RawURLEncoding.EncodeToString(clientDataJSON)
+		mfa.WebAuthn.AuthenticatorData = base64.RawURLEncoding.EncodeToString(authData)
+		mfa.WebAuthn.Signature = base64.RawURLEncoding.EncodeToString(signature)
+		jsMFA, err := json.Marshal(mfa)
+		if err != nil {
+			return nil, err
+		}
+		form.Add("mfa", string(jsMFA))
+		return c.sendRequest(uri, form)
 	}
 	return &sr, nil
 }

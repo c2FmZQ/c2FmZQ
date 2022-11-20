@@ -55,42 +55,39 @@ func (s *Server) handlePush(user database.User, req *http.Request) *stingle.Resp
 			AddError("Account is not approved yet")
 	}
 
-	var changed bool
-	if pc := user.PushConfig; pc == nil {
-		pc, err := database.NewPushConfig()
-		if err != nil {
-			log.Errorf("NewPushConfig: %v", err)
-			return stingle.ResponseNOK()
-		}
-		user.PushConfig = pc
-		changed = true
-	}
-	if ep != "" {
-		_, exists := user.PushConfig.Endpoints[ep]
-		if exists && auth == "" {
-			delete(user.PushConfig.Endpoints, ep)
-			changed = true
-		}
-		if auth != "" && p256dh != "" {
-			if user.PushConfig.Endpoints == nil {
-				user.PushConfig.Endpoints = make(map[string]*database.EndpointData)
+	if err := s.db.MutateUser(user.UserID, func(u *database.User) error {
+		if pc := u.PushConfig; pc == nil {
+			pc, err := database.NewPushConfig()
+			if err != nil {
+				log.Errorf("NewPushConfig: %v", err)
+				return err
 			}
-			user.PushConfig.Endpoints[ep] = &database.EndpointData{
-				Auth:   auth,
-				P256dh: p256dh,
-			}
-			if err := s.db.TestPushEndpoint(user, ep); err != nil {
-				log.Errorf("TestPushEndpoint: %v", err)
-				return stingle.ResponseNOK()
-			}
-			changed = true
+			u.PushConfig = pc
 		}
-	}
-	if changed {
-		if err := s.db.UpdateUser(user); err != nil {
-			log.Errorf("UpdateUser: %v", err)
-			return stingle.ResponseNOK()
+		if ep != "" {
+			_, exists := u.PushConfig.Endpoints[ep]
+			if exists && auth == "" {
+				delete(u.PushConfig.Endpoints, ep)
+			}
+			if auth != "" && p256dh != "" {
+				if u.PushConfig.Endpoints == nil {
+					u.PushConfig.Endpoints = make(map[string]*database.EndpointData)
+				}
+				u.PushConfig.Endpoints[ep] = &database.EndpointData{
+					Auth:   auth,
+					P256dh: p256dh,
+				}
+				if err := s.db.TestPushEndpoint(*u, ep); err != nil {
+					log.Errorf("TestPushEndpoint: %v", err)
+					return err
+				}
+			}
 		}
+		user = *u
+		return nil
+	}); err != nil {
+		log.Errorf("MutateUser: %v", err)
+		return stingle.ResponseNOK()
 	}
 	return stingle.ResponseOK().
 		AddPart("applicationServerKey", user.PushConfig.ApplicationServerPublicKey)

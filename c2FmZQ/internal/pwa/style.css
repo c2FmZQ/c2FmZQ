@@ -10,6 +10,9 @@ body {
 body.waiting, body.waiting a:hover, body.waiting * {
   cursor: wait !important;
 }
+body.noscroll {
+  overflow: hidden;
+}
 h1 {
   overflow-wrap: break-word;
 }
@@ -168,7 +171,7 @@ a {
 }
 #gallery {
   position: relative;
-  top: 160px;
+  top: 200px;
 }
 #messages {
   position: fixed;
@@ -231,6 +234,63 @@ a {
   0% {opacity: 0; top: -75%;}
   100% {opacity: 1; top: 0;}
 }
+.prompt-div {
+  animation: fadeIn 0.25s;
+  position: fixed;
+  left: 50%;
+  top: 40%;
+  transform: translate(-50%, -50%);
+  border: 7px double black;
+  padding: 1em;
+  background-color: white;
+  z-index: 200;
+  box-shadow: 5px 5px 5px black;
+  max-width: 90vw;
+  max-height: 90vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  font-size: 150%;
+}
+.prompt-input {
+  padding: 0.5em;
+}
+.prompt-button-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: 0.5em;
+  margin-top: 2em;
+}
+.prompt-confirm-button {
+  font-weight: bold;
+  padding: 0.5em;
+  border-radius: 8px;
+  border: 2px solid black;
+}
+.prompt-confirm-button:hover {
+  border: 2px solid gray;
+}
+.prompt-cancel-button {
+  font-weight: bold;
+  padding: 0.5em;
+  border-radius: 8px;
+  border: 2px solid black;
+}
+.prompt-cancel-button:hover {
+  border: 2px solid gray;
+}
+.prompt-bg {
+  animation: fadeIn 0.25s;
+  background-color: rgba(224, 224, 224, 0.75);
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  right: 0;
+  z-index: 199;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
 .popup {
   animation: fadeIn 0.25s;
   position: fixed;
@@ -244,8 +304,7 @@ a {
   box-shadow: 5px 5px 5px black;
   max-width: 90vw;
   max-height: 90vh;
-  overflow-y: scroll;
-  overscroll-behavior: none;
+  overflow-y: auto;
 }
 .popup-header {
   border-bottom: 1px solid black;
@@ -282,12 +341,10 @@ a {
   align-content: stretch;
 }
 .popup-content {
-  overscroll-behavior: none;
 }
 .upload .popup-content {
   margin: 2em; 
-  overflow-y: scroll;
-  overscroll-behavior: none;
+  overflow-y: auto;
 }
 .context-menu {
   animation: fadeIn 0.25s;
@@ -378,7 +435,7 @@ a {
   grid-template-columns: 1fr 2fr;
   gap: 20px;
   align-items: start;
-  overflow-y: scroll;
+  overflow-y: auto;
 }
 #collection-properties-name-label {
   grid-row: 1 / 2;
@@ -404,7 +461,7 @@ a {
 }
 #backup-phrase-content {
   padding: 2em;
-  overflow-y: scroll;
+  overflow-y: auto;
   min-width: 75vw;
   max-width: 90vw;
   max-height: 90vh;
@@ -450,12 +507,16 @@ input[type=checkbox] {
   transform: translate(0, 2px);
   font-weight: bold;
 }
+.profile-popup {
+  min-width: 60vw;
+}
 #profile-content {
   margin: 0.5em;
 }
 #profile-form {
   display: grid;
   grid-template-columns: 1fr 2fr;
+  column-gap: 10px;
 }
 #profile-form > * {
   margin: 0.5em;
@@ -463,9 +524,37 @@ input[type=checkbox] {
 #profile-form-button {
   grid-column: 1 / 3;
 }
+#profile-form-security-key-list {
+  display: grid;
+  grid-template-columns: 1fr max-content max-content;
+  align-items: center;
+  justify-items: start;
+  column-gap: 0.5em;
+}
+.profile-form-security-key-list-header {
+  font-weight: bold;
+}
+#profile-form-security-key-list > input {
+  width: calc(100% - 0.5em);
+}
+#profile-form-security-key-list > div {
+  white-space: nowrap;
+}
+#profile-form-security-key-list > button {
+}
+.highlight {
+  box-shadow: 0 0 3px 3px yellow;
+}
+.deleted-key {
+  color: lightgrey;
+  text-decoration: line-through;
+}
+button.deleted-key {
+  background-color: red;
+}
 #preferences-content {
   margin: 2em;
-  overflow-y: scroll;
+  overflow-y: auto;
 }
 #preferences-cache-choices {
   display: grid;
@@ -510,8 +599,7 @@ input[type=checkbox] {
 .admin-console-popup {
   max-width: 95vw;
   height: 75vh;
-  overflow-y: scroll;
-  overscroll-behavior: none;
+  overflow-y: auto;
 }
 .admin-console-popup .popup-content {
   padding: 1em;
@@ -534,12 +622,11 @@ input[type=checkbox] {
 #admin-console-table {
   display: grid;
   grid-template-columns: 2fr 1fr 1fr 1fr 2fr;
-  overflow-y: scroll;
+  overflow-y: auto;
   overflow-x: scroll;
   justify-content: start;
   align-items: stretch;
   border: 1px solid black;
-  overscroll-behavior: none;
   flex: 0 1 auto;
 }
 #admin-console-table>div:nth-child(-n+5) {
@@ -584,8 +671,7 @@ input[type=checkbox] {
   max-width: clamp(50%, 80vw, 80%);
   max-height: 80vh;
   overflow-wrap: break-word;
-  overflow-y: scroll;
-  overscroll-behavior: none;
+  overflow-y: auto;
 }
 .exif-more-details {
   cursor: pointer;

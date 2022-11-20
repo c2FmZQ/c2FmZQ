@@ -48,6 +48,8 @@ const (
 	notifyNewMember = 3
 	// A test for the endpoint.
 	notifyTest = 4
+	// Request MFA from another device.
+	notifyMFA = 5
 )
 
 // notification encapsulates the content to be sent with a push notification.
@@ -62,6 +64,7 @@ type notification struct {
 type notifyItem struct {
 	uid int64
 	n   *notification
+	ttl int
 }
 
 func makeID() (int64, error) {
@@ -93,7 +96,7 @@ func (db *Database) startNotifyWorkers() {
 				log.Errorf("db.UserByID(%d): %v", q.uid, err)
 				continue
 			}
-			if err := db.sendNotification(u, q.n); err != nil {
+			if err := db.sendNotification(u, q.ttl, q.n); err != nil {
 				log.Errorf("sendNotification: %v", err)
 				continue
 			}
@@ -143,6 +146,8 @@ func (db *Database) TestPushEndpoint(user User, ep string) error {
 		Auth:                        pc.Endpoints[ep].Auth,
 		P256dh:                      pc.Endpoints[ep].P256dh,
 		Payload:                     payload,
+		TTL:                         300,
+		Urgency:                     "normal",
 	})
 	if err != nil {
 		return err
@@ -150,6 +155,27 @@ func (db *Database) TestPushEndpoint(user User, ep string) error {
 	if sc := resp.StatusCode; sc < 200 || sc >= 300 {
 		return errors.New(resp.Status)
 	}
+	return nil
+}
+
+func (db *Database) RequestMFA(user User, session string) error {
+	if db.notifyChan == nil || !db.pushServices.Enable {
+		return errors.New("push notifications disabled")
+	}
+	db.enqueueNotification(notifyItem{
+		uid: user.UserID,
+		n: &notification{
+			Type: notifyMFA,
+			Data: struct {
+				Session string `json:"session"`
+				Expires int64  `json:"expires"`
+			}{
+				Session: session,
+				Expires: time.Now().Add(time.Minute).UnixMilli(),
+			},
+		},
+		ttl: 60,
+	})
 	return nil
 }
 
@@ -181,7 +207,7 @@ func (db *Database) notifyAlbum(originator int64, album *AlbumSpec, n notificati
 	for id := range album.Members {
 		uids[id] = true
 	}
-	//delete(uids, originator)
+	delete(uids, originator)
 
 	for id := range uids {
 		db.enqueueNotification(notifyItem{uid: id, n: &n})
@@ -207,7 +233,7 @@ func NewPushConfig() (*PushConfig, error) {
 }
 
 // sendNotification sends a push notification to user's subscribed devices.
-func (db *Database) sendNotification(user User, msg interface{}) error {
+func (db *Database) sendNotification(user User, ttl int, msg interface{}) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	if !db.pushServices.Enable {
@@ -224,7 +250,6 @@ func (db *Database) sendNotification(user User, msg interface{}) error {
 		return err
 	}
 	payload := []byte(user.PublicKey.SealBoxBase64(b))
-	var changed bool
 	for ep := range pc.Endpoints {
 		if r := pc.Endpoints[ep].RetryAfter; r > time.Now().Unix() {
 			continue
@@ -236,6 +261,7 @@ func (db *Database) sendNotification(user User, msg interface{}) error {
 			Auth:                        pc.Endpoints[ep].Auth,
 			P256dh:                      pc.Endpoints[ep].P256dh,
 			Payload:                     payload,
+			TTL:                         ttl,
 		})
 		if err != nil {
 			log.Infof("Send push request: %v", err)
@@ -246,19 +272,23 @@ func (db *Database) sendNotification(user User, msg interface{}) error {
 		resp.Body.Close()
 		log.Infof("PUSH RESPONSE %s %s", resp.Status, strings.TrimSpace(string(body[:n])))
 
-		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
-			// TODO: parse retry-after
-			// retryAfter := resp.Header.Get("Retry-After")
-			pc.Endpoints[ep].RetryAfter = time.Now().Add(5 * time.Minute).Unix()
-			changed = true
-		} else if resp.StatusCode >= 400 && resp.StatusCode < 500 {
-			delete(pc.Endpoints, ep)
-			changed = true
-		}
-	}
-	if changed {
-		if err := db.UpdateUser(user); err != nil {
-			return err
+		if resp.StatusCode >= 400 {
+			if err := db.MutateUser(user.UserID, func(user *User) error {
+				pc := user.PushConfig
+				if pc == nil || pc.Endpoints[ep] == nil {
+					return nil
+				}
+				if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
+					// TODO: parse retry-after
+					// retryAfter := resp.Header.Get("Retry-After")
+					pc.Endpoints[ep].RetryAfter = time.Now().Add(5 * time.Minute).Unix()
+				} else if resp.StatusCode >= 400 && resp.StatusCode < 500 {
+					delete(pc.Endpoints, ep)
+				}
+				return nil
+			}); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -268,7 +298,7 @@ func (db *Database) sendNotification(user User, msg interface{}) error {
 // PushServiceConfiguration file.
 func (d *Database) createEmptyPushServiceConfigurationFile() error {
 	cfg := webpush.DefaultPushServiceConfiguration()
-	return d.storage.CreateEmptyFile(d.filePath(pushServiceConfigFile), &cfg)
+	return d.storage.CreateEmptyFile(d.filePath(pushServiceConfigFile), cfg)
 }
 
 // readPushServiceConfigurationFile reads the push service configuration.

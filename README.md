@@ -10,7 +10,7 @@
   * [How to run the server](#run-server)
   * [Experimental features](#experimental)
     * [Progressive Web App (PWA)](#webapp)
-    * [One-time passwords (OTP)](#totp)
+    * [Multi-Factor Authentication](#mfa)
     * [Decoy / duress passwords](#decoy)
 * [c2FmZQ Client](#c2FmZQ-client)
   * [Mount as fuse filesystem](#fuse)
@@ -245,7 +245,7 @@ implements the same protocol as the c2FmZQ client and the Stingle Photos app.
 There are multiple ways to access the PWA:
 
 * Open your server URL in a browser: `https://${DOMAIN}/${path-prefix}/`. This requires `--enable-webapp` to be set on the server. Or,
-* Open https://c2FmZQ.github.io/pwa/ and enter your server URL in the `Server` field. This works with or without `--enable-webapp`.
+* Open https://c2fmzq.org/pwa/ and enter your server URL in the `Server` field. This works with or without `--enable-webapp`.
 * Clone https://github.com/c2FmZQ/c2FmZQ.github.io, and publish it on your own web site.
 
 Currently implemented:
@@ -261,27 +261,36 @@ Currently implemented:
 * Browsing albums with photos and videos
 * Uploading files (note: browsers that support streaming uploads, e.g. Chrome 105+, can upload files of any size. With browsers that don't support streaming uploads, files need to fit in memory)
 * Photo editing, using [Filerobot Image Editor](https://scaleflex.github.io/filerobot-image-editor/)
-* Optional push notifications when new content or new members are added to shared albums.
+* Optional push notification when new content or new members are added to shared albums.
 
-### <a name="totp"></a>One-time passwords (OTP)
+Push notification is disabled by default. To enable it, use the `inspect edit ps`
+command, and set the top-level `enable` option to `true` and set `jwtSubject` to a
+valid `mailto:` or `https://` URL \([rfc8292](https://www.rfc-editor.org/rfc/rfc8292#section-2.1)).
+Some push services require a valid email address or web site address.
 
-[One-time passwords](https://en.wikipedia.org/wiki/Time-based_One-Time_Password) are
-extra numeric passcodes that change every 30 seconds. They are a form of second factor
-authentication (2FA).
-
-To enable, use the `inspect otp` command.
-
+Enabling push notification for the Microsoft Edge browser on Windows requires [extra effort](https://learn.microsoft.com/en-us/windows/apps/design/shell/tiles-and-notifications/windows-push-notification-services--wns--overview).
 ```
-docker exec -it c2fmzq-server inspect otp
+go run ./c2FmZQ-server/inspect edit ps
+```
+or,
+```
+sudo docker exec -it c2fmzq-server inspect edit ps
 ```
 
-Use the `--set` flag to enable otp, or `--clear` to disable it.
+### <a name="mfa"></a>Multi-Factor Authentication
 
-The `inspect otp` command will display a QR code on the screen. Scan it with an
-authenticator app like [Google Authenticator](https://play.google.com/store/apps/details?id=com.google.android.apps.authenticator2)
+[WebAuthn](https://webauthn.guide/) and [One-time passwords](https://en.wikipedia.org/wiki/Time-based_One-Time_Password) can
+be used as an extra layer of protection for sensitive operations, e.g. login, password changes, account recovery, etc.
+A strong password is still required though.
+
+Security keys (e.g. yubikey) and OTP keys can be added from the `Profile` window on the progressive web app.
+
+When push notifications are enabled, the progressive web app can also be used to authenticate other clients that
+don't have native support for MFA, e.g. the android app. In that case, a notification will appear in the
+progressive web app to ask the user to approve or deny the operation.
+
+To use OTP, the user needs an authenticator app like [Google Authenticator](https://play.google.com/store/apps/details?id=com.google.android.apps.authenticator2)
 or [Authy](https://play.google.com/store/apps/details?id=com.authy.authy).
-
-Then, login with *passcode*%email instead of just email.
 
 ---
 

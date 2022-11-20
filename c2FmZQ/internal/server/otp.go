@@ -20,6 +20,7 @@ package server
 import (
 	"bytes"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"image/png"
 	"net/http"
@@ -31,19 +32,19 @@ import (
 	"c2FmZQ/internal/stingle"
 )
 
-// handleGenerateOTP handles the /c2/config/generateOTP endpoint.
+// handleGenerateOTP handles the /v2x/config/generateOTP endpoint.
 //
 // Arguments:
-//  - user: The authenticated user.
-//  - req: The http request.
+//   - user: The authenticated user.
+//   - req: The http request.
 //
 // Form arguments:
-//  - token: The signed session token.
+//   - token: The signed session token.
 //
 // Returns:
-//  - stingle.Response(ok)
-//       Parts("key", OTP key)
-//       Parts("img", base64-encoded QR code image)
+//   - stingle.Response(ok)
+//     Parts("key", OTP key)
+//     Parts("img", base64-encoded QR code image)
 func (s *Server) handleGenerateOTP(user database.User, req *http.Request) *stingle.Response {
 	key, err := totp.Generate(totp.GenerateOpts{
 		Issuer:      req.Host,
@@ -69,20 +70,20 @@ func (s *Server) handleGenerateOTP(user database.User, req *http.Request) *sting
 		AddPart("img", fmt.Sprintf("data:image/png;base64,%s", base64.StdEncoding.EncodeToString(buf.Bytes())))
 }
 
-// handleSetOTP handles the /c2/config/setOTP endpoint.
+// handleSetOTP handles the /v2x/config/setOTP endpoint.
 //
 // Arguments:
-//  - user: The authenticated user.
-//  - req: The http request.
+//   - user: The authenticated user.
+//   - req: The http request.
 //
 // Form arguments:
-//  - token: The signed session token.
-//  - params: Encrypted parameters:
-//     - key: The OTP key
-//     - code: The current OTP code
+//   - token: The signed session token.
+//   - params: Encrypted parameters:
+//   - key: The OTP key
+//   - code: The current OTP code
 //
 // Returns:
-//  - stingle.Response(ok)
+//   - stingle.Response(ok)
 func (s *Server) handleSetOTP(user database.User, req *http.Request) *stingle.Response {
 	params, err := s.decodeParams(req.PostFormValue("params"), user)
 	if err != nil {
@@ -96,13 +97,18 @@ func (s *Server) handleSetOTP(user database.User, req *http.Request) *stingle.Re
 		return stingle.ResponseNOK().
 			AddError("code is invalid")
 	}
-	user.OTPKey = key
-	if err := s.db.UpdateUser(user); err != nil {
-		log.Errorf("UpdateUser: %v", err)
+	if err := s.db.MutateUser(user.UserID, func(user *database.User) error {
+		user.OTPKey = key
+		if user.RequireMFA && !mfaAvailableForUser(*user) {
+			return errors.New("no MFA method left")
+		}
+		return nil
+	}); err != nil {
+		log.Errorf("MutateUser: %v", err)
 		return stingle.ResponseNOK()
 	}
 	resp := stingle.ResponseOK()
-	if user.OTPKey == "" {
+	if key == "" {
 		resp.AddInfo("OTP disabled")
 	} else {
 		resp.AddInfo("OTP enabled")

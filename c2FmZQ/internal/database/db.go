@@ -143,7 +143,10 @@ func (d *Database) Wipe() {
 	if d.masterKey != nil {
 		d.masterKey.Wipe()
 	}
-	close(d.notifyChan)
+	if d.notifyChan != nil {
+		close(d.notifyChan)
+		d.notifyChan = nil
+	}
 }
 
 // Dir returns the directory where the database stores its data.

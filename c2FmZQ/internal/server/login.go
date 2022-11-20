@@ -37,9 +37,8 @@ import (
 )
 
 const (
-	// Login tokens are good for 10 years.
-	// Note: logout invalidates all tokens.
-	tokenDuration = 10 * 365 * 24 * time.Hour
+	// Login tokens are good for 180 days.
+	tokenDuration = 180 * 24 * time.Hour
 )
 
 // handleCreateAccount handles the /v2/register/createAccount endpoint.
@@ -131,7 +130,6 @@ func (s *Server) handlePreLogin(req *http.Request) *stingle.Response {
 // The form arguments:
 //   - email: The email address of the account.
 //   - password: The hashed password.
-//   - _code: The OTP code.
 //
 // Returns:
 //   - stingle.Response(ok)
@@ -142,10 +140,7 @@ func (s *Server) handlePreLogin(req *http.Request) *stingle.Response {
 //     Part(isKeyBackedUp, Whether the user's secret key is in keyBundle)
 //     Part(homeFolder, A "Home folder" used on the app's device)
 func (s *Server) handleLogin(req *http.Request) *stingle.Response {
-	email, passcode := parseOTP(req.PostFormValue("email"))
-	if code := req.PostFormValue("_code"); code != "" {
-		passcode = code
-	}
+	email, _ := parseOTP(req.PostFormValue("email"))
 	pass := req.PostFormValue("password")
 	u, err := s.db.User(email)
 	if err != nil {
@@ -154,21 +149,28 @@ func (s *Server) handleLogin(req *http.Request) *stingle.Response {
 	if u.LoginDisabled {
 		return stingle.ResponseNOK().AddError("Invalid credentials")
 	}
+	var mfaFailed bool
+	if u.RequireMFA {
+		resp, redirect := s.requireMFA(&u, req, time.Duration(0))
+		if resp != nil && redirect {
+			return resp
+		}
+		mfaFailed = resp != nil
+	}
 	hashed, err := base64.StdEncoding.DecodeString(u.HashedPassword)
 	if err != nil {
 		log.Errorf("base64.StdEncoding.DecodeString: %v", err)
 		return stingle.ResponseNOK().AddError("Invalid credentials")
 	}
-	pwCh, otpCh := make(chan bool), make(chan bool)
+	pwCh := make(chan bool)
 	decoyCh := make(chan *database.User)
 	go func() { pwCh <- bcrypt.CompareHashAndPassword(hashed, []byte(pass)) == nil }()
-	go func() { otpCh <- validateOTP(u.OTPKey, passcode) }()
 	go func() { decoyCh <- s.decoyLogin(u, pass) }()
-	pwOK, otpOK := <-pwCh, <-otpCh
+	pwOK := <-pwCh
 	decoyUser := <-decoyCh
 
-	log.Debugf("UserID:%d pwOK:%v otpOK:%v", u.UserID, pwOK, otpOK)
-	if !pwOK || !otpOK {
+	log.Debugf("UserID:%d pwOK:%v", u.UserID, pwOK)
+	if !pwOK || mfaFailed {
 		if decoyUser == nil {
 			return stingle.ResponseNOK().AddError("Invalid credentials")
 		}
@@ -180,9 +182,11 @@ func (s *Server) handleLogin(req *http.Request) *stingle.Response {
 	}
 	defer tk.Wipe()
 	tok := token.Mint(tk, token.Token{Scope: "session", Subject: u.UserID}, tokenDuration)
-	u.ValidTokens[token.Hash(tok)] = true
-	if err := s.db.UpdateUser(u); err != nil {
-		log.Errorf("UpdateUser: %v", err)
+	if err := s.db.MutateUser(u.UserID, func(u *database.User) error {
+		u.ValidTokens[token.Hash(tok)] = true
+		return nil
+	}); err != nil {
+		log.Errorf("MutateUser: %v", err)
 		return stingle.ResponseNOK()
 	}
 	resp := stingle.ResponseOK().
@@ -192,6 +196,9 @@ func (s *Server) handleLogin(req *http.Request) *stingle.Response {
 		AddPart("userId", fmt.Sprintf("%d", u.UserID)).
 		AddPart("isKeyBackedUp", u.IsBackup).
 		AddPart("homeFolder", u.HomeFolder)
+	if u.RequireMFA {
+		resp.AddPart("_mfaEnabled", "1")
+	}
 	if u.OTPKey != "" {
 		resp.AddPart("_otpEnabled", "1")
 	}
@@ -252,9 +259,11 @@ func (s *Server) decoyLogin(user database.User, hash string) *database.User {
 // Returns:
 //   - StringleResponse(ok)
 func (s *Server) handleLogout(user database.User, req *http.Request) *stingle.Response {
-	delete(user.ValidTokens, token.Hash(req.PostFormValue("token")))
-	if err := s.db.UpdateUser(user); err != nil {
-		log.Errorf("UpdateUser: %v", err)
+	if err := s.db.MutateUser(user.UserID, func(user *database.User) error {
+		delete(user.ValidTokens, token.Hash(req.PostFormValue("token")))
+		return nil
+	}); err != nil {
+		log.Errorf("MutateUser: %v", err)
 		return stingle.ResponseNOK()
 	}
 	return stingle.ResponseOK().AddPart("logout", "1")
@@ -285,45 +294,51 @@ func (s *Server) handleChangePass(user database.User, req *http.Request) *stingl
 		log.Errorf("decodeParams: %v", err)
 		return stingle.ResponseNOK()
 	}
-	hashed, err := bcrypt.GenerateFromPassword([]byte(params["newPassword"]), 12)
-	if err != nil {
-		log.Errorf("bcrypt.GenerateFromPassword: %v", err)
-		return stingle.ResponseNOK()
-	}
-	user.HashedPassword = base64.StdEncoding.EncodeToString(hashed)
-	user.Salt = params["newSalt"]
-	user.KeyBundle = params["keyBundle"]
-	etk, err := s.db.NewEncryptedTokenKey()
-	if err != nil {
-		log.Errorf("NewEncryptedTokenKey: %v", err)
-		return stingle.ResponseNOK()
-	}
-	user.TokenKey = etk
-	pk, hasSK, err := stingle.DecodeKeyBundle(user.KeyBundle)
-	if err != nil {
-		log.Errorf("DecodeKeyBundle: %v", err)
-		return stingle.ResponseNOK()
-	}
-	user.PublicKey = pk
-	if hasSK {
-		user.IsBackup = "1"
-	} else {
-		user.IsBackup = "0"
-	}
-	tk, err := s.db.DecryptTokenKey(user.TokenKey)
-	if err != nil {
-		log.Errorf("DecryptTokenKey: %v", err)
-		return stingle.ResponseNOK()
-	}
-	defer tk.Wipe()
-	tok := token.Mint(tk, token.Token{Scope: "session", Subject: user.UserID}, tokenDuration)
-	user.ValidTokens = map[string]bool{token.Hash(tok): true}
-	if err := s.db.UpdateUser(user); err != nil {
-		log.Errorf("UpdateUser: %v", err)
+
+	var tok string
+	if err := s.db.MutateUser(user.UserID, func(user *database.User) error {
+		hashed, err := bcrypt.GenerateFromPassword([]byte(params["newPassword"]), 12)
+		if err != nil {
+			log.Errorf("bcrypt.GenerateFromPassword: %v", err)
+			return err
+		}
+		user.HashedPassword = base64.StdEncoding.EncodeToString(hashed)
+		user.Salt = params["newSalt"]
+		user.KeyBundle = params["keyBundle"]
+		etk, err := s.db.NewEncryptedTokenKey()
+		if err != nil {
+			log.Errorf("NewEncryptedTokenKey: %v", err)
+			return err
+		}
+		user.TokenKey = etk
+		pk, hasSK, err := stingle.DecodeKeyBundle(user.KeyBundle)
+		if err != nil {
+			log.Errorf("DecodeKeyBundle: %v", err)
+			return err
+		}
+		user.PublicKey = pk
+		if hasSK {
+			user.IsBackup = "1"
+		} else {
+			user.IsBackup = "0"
+		}
+		tk, err := s.db.DecryptTokenKey(user.TokenKey)
+		if err != nil {
+			log.Errorf("DecryptTokenKey: %v", err)
+			return err
+		}
+		defer tk.Wipe()
+		tok = token.Mint(tk, token.Token{Scope: "session", Subject: user.UserID}, tokenDuration)
+		user.ValidTokens = map[string]bool{token.Hash(tok): true}
+		return nil
+	}); err != nil {
+		log.Errorf("MutateUser: %v", err)
 		return stingle.ResponseNOK()
 	}
 	return stingle.ResponseOK().
-		AddPart("token", tok)
+		AddPart("token", tok).
+		AddInfo("Password updated")
+
 }
 
 // handleGetServerPK handles the /v2/keys/getServerPK endpoint. The server's
@@ -372,6 +387,12 @@ func (s *Server) handleCheckKey(req *http.Request) *stingle.Response {
 		pk = u.PublicKey
 		serverPK = u.ServerPublicKey
 		isBackup = u.IsBackup
+		if u.RequireMFA {
+			resp, _ := s.requireMFA(&u, req, time.Duration(0))
+			if resp != nil {
+				return resp
+			}
+		}
 	} else {
 		isBackup = "1"
 		pk = stingle.PublicKeyFromBytes(rnd[:32])
@@ -415,39 +436,47 @@ func (s *Server) handleRecoverAccount(req *http.Request) *stingle.Response {
 	if user.LoginDisabled {
 		return stingle.ResponseNOK()
 	}
+	if user.RequireMFA {
+		resp, _ := s.requireMFA(&user, req, time.Duration(0))
+		if resp != nil {
+			return resp
+		}
+	}
 	params, err := s.decodeParams(req.PostFormValue("params"), user)
 	if err != nil {
 		log.Errorf("decodeParams: %v", err)
 		return stingle.ResponseNOK()
 	}
-	hashed, err := bcrypt.GenerateFromPassword([]byte(params["newPassword"]), 12)
-	if err != nil {
-		log.Errorf("bcrypt.GenerateFromPassword: %v", err)
-		return stingle.ResponseNOK()
-	}
-	user.HashedPassword = base64.StdEncoding.EncodeToString(hashed)
-	user.Salt = params["newSalt"]
-	user.KeyBundle = params["keyBundle"]
-	etk, err := s.db.NewEncryptedTokenKey()
-	if err != nil {
-		log.Errorf("s.db.NewEncryptedTokenKey: %v", err)
-		return stingle.ResponseNOK()
-	}
-	user.TokenKey = etk
-	pk, hasSK, err := stingle.DecodeKeyBundle(user.KeyBundle)
-	if err != nil {
-		log.Errorf("DecodeKeyBundle: %v", err)
-		return stingle.ResponseNOK()
-	}
-	user.PublicKey = pk
-	if hasSK {
-		user.IsBackup = "1"
-	} else {
-		user.IsBackup = "0"
-	}
 
-	if err := s.db.UpdateUser(user); err != nil {
-		log.Errorf("UpdateUser: %v", err)
+	if err := s.db.MutateUser(user.UserID, func(user *database.User) error {
+		hashed, err := bcrypt.GenerateFromPassword([]byte(params["newPassword"]), 12)
+		if err != nil {
+			log.Errorf("bcrypt.GenerateFromPassword: %v", err)
+			return err
+		}
+		user.HashedPassword = base64.StdEncoding.EncodeToString(hashed)
+		user.Salt = params["newSalt"]
+		user.KeyBundle = params["keyBundle"]
+		etk, err := s.db.NewEncryptedTokenKey()
+		if err != nil {
+			log.Errorf("s.db.NewEncryptedTokenKey: %v", err)
+			return err
+		}
+		user.TokenKey = etk
+		pk, hasSK, err := stingle.DecodeKeyBundle(user.KeyBundle)
+		if err != nil {
+			log.Errorf("DecodeKeyBundle: %v", err)
+			return err
+		}
+		user.PublicKey = pk
+		if hasSK {
+			user.IsBackup = "1"
+		} else {
+			user.IsBackup = "0"
+		}
+		return nil
+	}); err != nil {
+		log.Errorf("MutateUser: %v", err)
 		return stingle.ResponseNOK()
 	}
 	return stingle.ResponseOK().AddPart("result", "OK")
@@ -520,7 +549,9 @@ func (s *Server) handleChangeEmail(user database.User, req *http.Request) *sting
 		log.Errorf("RenameUser: %v", err)
 		return stingle.ResponseNOK()
 	}
-	return stingle.ResponseOK().AddPart("email", newEmail)
+	return stingle.ResponseOK().
+		AddPart("email", newEmail).
+		AddInfo("Email updated")
 }
 
 // handleReuploadKeys handles the /v2/keys/reuploadKeys endpoint. It is used
@@ -543,21 +574,22 @@ func (s *Server) handleReuploadKeys(user database.User, req *http.Request) *stin
 		log.Errorf("decodeParams: %v", err)
 		return stingle.ResponseNOK()
 	}
-	user.KeyBundle = params["keyBundle"]
-	pk, hasSK, err := stingle.DecodeKeyBundle(user.KeyBundle)
-	if err != nil {
-		log.Errorf("DecodeKeyBundle: %v", err)
-		return stingle.ResponseNOK()
-	}
-	user.PublicKey = pk
-	if hasSK {
-		user.IsBackup = "1"
-	} else {
-		user.IsBackup = "0"
-	}
-
-	if err := s.db.UpdateUser(user); err != nil {
-		log.Errorf("UpdateUser: %v", err)
+	if err := s.db.MutateUser(user.UserID, func(user *database.User) error {
+		user.KeyBundle = params["keyBundle"]
+		pk, hasSK, err := stingle.DecodeKeyBundle(user.KeyBundle)
+		if err != nil {
+			log.Errorf("DecodeKeyBundle: %v", err)
+			return stingle.ResponseNOK()
+		}
+		user.PublicKey = pk
+		if hasSK {
+			user.IsBackup = "1"
+		} else {
+			user.IsBackup = "0"
+		}
+		return nil
+	}); err != nil {
+		log.Errorf("MutateUser: %v", err)
 		return stingle.ResponseNOK()
 	}
 	return stingle.ResponseOK()

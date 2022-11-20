@@ -52,6 +52,9 @@ self._T = Lang.text;
 self.notifs = new Store('notifications');
 self.notifs.passphrase = 'notifications';
 
+self.rpcId_ = Math.floor(Math.random() * 1000000000);
+self.rpcWait_ = {};
+
 async function initApp(storeKey) {
   const p = new Promise(async (resolve, reject) => {
     if (self.store.passphrase || !storeKey) {
@@ -304,6 +307,19 @@ async function showNotif(title, options) {
   return self.registration.showNotification(title, options);
 }
 
+async function sendRPC(clientId, f, ...args) {
+  const id = self.rpcId_++;
+  return new Promise((resolve, reject) => {
+    self.rpcWait_[id] = {resolve, reject};
+    return sendMessage(clientId, {
+      type: 'rpc',
+      id: id,
+      func: f,
+      args: args,
+    });
+  });
+}
+
 self.addEventListener('push', event => {
   const data = event.data ? event.data.text() : null;
   event.waitUntil(
@@ -330,6 +346,17 @@ self.addEventListener('notificationclick', event => {
   event.waitUntil(
     self.clients.matchAll({type: "window"})
     .then(list => {
+      if (tag.startsWith('remote-mfa:')) {
+        if (event.action && event.action === 'deny') {
+          console.log('SW Remove MFA denied');
+          return;
+        }
+        if (!self.app) {
+          throw new Error('app is not ready');
+        }
+        return self.app.approveRemoteMFA(tag.substring(tag.indexOf(':')+1));
+      }
+
       let url = self.registration.scope;
       if (jumpTo) {
         url += '#' + btoa(JSON.stringify({collection: jumpTo}));
@@ -418,6 +445,7 @@ self.addEventListener('message', async event => {
         console.log(`SW Version mismatch: ${event.data.version} != ${VERSION}`);
       }
       Lang.current = event.data.lang || 'en-US';
+      self.capabilities = event.data.capabilities;
       initApp(event.data.storeKey);
       break;
     case 'rpc':
@@ -437,7 +465,10 @@ self.addEventListener('message', async event => {
         'updateProfile',
         'deleteAccount',
         'generateOTP',
+        'addSecurityKey',
+        'listSecurityKeys',
         'adminUsers',
+        'mfaCheck',
       ];
       if (!methods.includes(event.data.func)) {
         console.log('SW RPC method not allowed', event.data.func);
@@ -453,6 +484,16 @@ self.addEventListener('message', async event => {
         self.sendMessage(clientId, {type: 'rpc-result', id: event.data.id, func: event.data.func, reject: e});
       })
       .finally(() => store.release());
+      break;
+    case 'rpc-result':
+      if (event.data.id in self.rpcWait_) {
+        if (event.data.reject !== undefined) {
+          self.rpcWait_[event.data.id].reject(event.data.reject);
+        } else {
+          self.rpcWait_[event.data.id].resolve(event.data.resolve);
+        }
+        delete self.rpcWait_[event.data.id];
+      }
       break;
     default:
       console.log('SW Received unexpected message', event.data);

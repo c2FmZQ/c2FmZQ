@@ -45,12 +45,17 @@ class Main {
     this.rpcWait_ = {};
     this.fixing_ = false;
 
-    const salt = localStorage.getItem('salt');
-    if (!salt) {
+    try {
+      const salt = window.localStorage.getItem('salt');
+      if (salt) {
+        this.salt_ = this.base64DecodeToBytes(salt);
+      }
+    } catch (err) {
+      this.salt_ = null;
+    }
+    if (this.salt_ === null) {
       this.salt_ = window.crypto.getRandomValues(new Uint8Array(16));
-      localStorage.setItem('salt', this.salt_.join(','));
-    } else {
-      this.salt_ = new Uint8Array(salt.split(',').map(v => parseInt(v)));
+      window.localStorage.setItem('salt', this.base64RawUrlEncode(this.salt_));
     }
     navigator.serviceWorker.oncontrollerchange = () => {
       console.log('Controller Change');
@@ -128,6 +133,20 @@ class Main {
             ui.switchView({collection: event.data.collection});
           });
           break;
+        case 'rpc':
+          console.log('Received rpc', event.data.func);
+          if (!['getMFA'].includes(event.data.func)) {
+            navigator.serviceWorker.controller.postMessage({id: event.data.id, type: 'rpc-result', reject: 'method not allowed'});
+            break;
+          }
+          this[event.data.func](...event.data.args)
+          .then(result => {
+            navigator.serviceWorker.controller.postMessage({id: event.data.id, type: 'rpc-result', resolve: result});
+          })
+          .catch(err => {
+            navigator.serviceWorker.controller.postMessage({id: event.data.id, type: 'rpc-result', reject: err});
+          });
+          break;
         default:
           console.log('Received Message', event.data);
       }
@@ -178,6 +197,7 @@ class Main {
     return window.crypto.subtle.digest('SHA-256', data)
       .then(b => {
         const a = new Uint8Array(b);
+        this.serverHashValue_ = a;
         const map = 'BCDFHJMNPQRSTVWZbcdfhjmnpqrstvwz';
         const h = [
           (a[0]) & 0x1f,                  // bits 4, 3, 2, 1, 0
@@ -190,6 +210,100 @@ class Main {
           (a[4] >> 3) & 0x1f,             // bits 7, 6, 5, 4, 3
         ].map(c => map.substr(c, 1));
         return h.slice(0, 4).join('') + '-' + h.slice(4, 8).join('');
+      });
+  }
+
+  checkKeyId_(keyId) {
+    const b64 = this.base64RawUrlEncode(keyId);
+    const sh = this.base64RawUrlEncode(this.serverHashValue_);
+    const saved = window.localStorage.getItem(b64);
+    if (saved !== null && saved !== sh) {
+      throw new Error('keyId belongs to another server');
+    }
+    if (saved === null) {
+      window.localStorage.setItem(b64, sh);
+    }
+  }
+
+  async addSecurityKey(password) {
+    if (!('PublicKeyCredential' in window)) {
+      throw new Error('Browser doesn\'t support WebAuthn');
+    }
+    return this.sendRPC('addSecurityKey', {password})
+      .then(options => {
+        options.challenge = this.base64DecodeToBytes(options.challenge);
+        // Set user.id to the concatenation of server hash and user id from the server.
+        const uid = this.base64DecodeToBytes(options.user.id);
+        const id = new Uint8Array(this.serverHashValue_.byteLength + uid.byteLength);
+        id.set(this.serverHashValue_);
+        id.set(uid, this.serverHashValue_.byteLength);
+        options.user.id = id;
+        for (let i = 0; i < options.excludeCredentials?.length; i++) {
+          options.excludeCredentials[i].id = this.base64DecodeToBytes(options.excludeCredentials[i].id);
+        }
+        return navigator.credentials.create({publicKey: options});
+      })
+      .then(async pkc => {
+        if (pkc.type !== 'public-key' || !(pkc.response instanceof window.AuthenticatorAttestationResponse)) {
+          console.log('Invalid credentials.create response', pkc);
+          throw new Error('invalid credentials.create response');
+        }
+        this.checkKeyId_(new Uint8Array(pkc.rawId));
+        let keyName = await ui.prompt({
+          message: _T('enter-security-key-name'),
+          getValue: true,
+          defaultValue: pkc.id,
+        });
+        if (keyName === '') {
+          keyName = pkc.id;
+        }
+        const args = {
+          password: password,
+          keyName: keyName,
+          clientDataJSON: new Uint8Array(pkc.response.clientDataJSON),
+          attestationObject: new Uint8Array(pkc.response.attestationObject),
+          transports: pkc.response.getTransports(),
+        };
+        return this.sendRPC('addSecurityKey', args);
+      });
+  }
+
+  async getMFA(mfa) {
+    const getCode = () => {
+      return ui.prompt({
+        message: _T('enter-otp'),
+        getValue: true,
+      })
+      .then(v => {
+        return {otp: v.trim()};
+      });
+    };
+    const options = mfa.webauthn;
+    if (!options.allowCredentials || !('PublicKeyCredential' in window)) {
+      return getCode();
+    }
+    options.challenge = this.base64DecodeToBytes(options.challenge);
+    for (let i = 0; i < options.allowCredentials?.length; i++) {
+      options.allowCredentials[i].id = this.base64DecodeToBytes(options.allowCredentials[i].id);
+      this.checkKeyId_(options.allowCredentials[i].id);
+    }
+    return navigator.credentials.get({publicKey: options})
+      .then(pkc => {
+        if (pkc.type !== 'public-key' || !(pkc.response instanceof window.AuthenticatorAssertionResponse)) {
+          throw new Error('invalid PublicKeyCredential value');
+        }
+        return {
+          webauthn: {
+            id: pkc.id,
+            clientDataJSON: this.base64RawUrlEncode(new Uint8Array(pkc.response.clientDataJSON)),
+            authenticatorData: this.base64RawUrlEncode(new Uint8Array(pkc.response.authenticatorData)),
+            signature: this.base64RawUrlEncode(new Uint8Array(pkc.response.signature)),
+          },
+        };
+      })
+      .catch(err => {
+        console.log('getMFA', err);
+        return getCode();
       });
   }
 
@@ -213,17 +327,34 @@ class Main {
     return defaultValue;
   }
 
+  base64DecodeToBytes(v) {
+      v = v.replaceAll('-', '+').replaceAll('_', '/');
+      while (v.length % 4 !== 0) {
+            v += '=';
+          }
+      return base64.toByteArray(v);
+  }
+
+  base64RawUrlEncode(v) {
+    return base64.fromByteArray(v).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
+  }
+
   sendHello_() {
     console.log(`Sending hello ${VERSION}`);
     if (!navigator.serviceWorker.controller) {
       console.log('No controller');
       return;
     }
+    const capabilities = [''];
+    if ('PublicKeyCredential' in window) {
+      capabilities.push('mfa');
+    }
     navigator.serviceWorker.controller.postMessage({
       type: 'hello',
       storeKey: this.storeKey_,
       version: VERSION,
       lang: Lang.current,
+      capabilities: capabilities,
     });
   }
 
@@ -240,7 +371,10 @@ class Main {
       'updateProfile',
       'deleteAccount',
       'generateOTP',
+      'addSecurityKey',
+      'listSecurityKeys',
       'adminUsers',
+      'mfaCheck',
     ];
     const body = document.querySelector('body');
     body.classList.add('waiting');

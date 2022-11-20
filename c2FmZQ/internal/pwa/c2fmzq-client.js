@@ -88,6 +88,7 @@ class c2FmZQClient {
     const needKey = this.vars_.sk === undefined;
     return Promise.resolve({
       account: loggedIn,
+      mfaEnabled: this.vars_.mfaEnabled,
       otpEnabled: this.vars_.otpEnabled,
       isAdmin: this.vars_.isAdmin,
       needKey: needKey
@@ -120,7 +121,7 @@ class c2FmZQClient {
     return sodium.sodium_hex2bin(salt)
       .then(salt => {
         return sodium.crypto_pwhash(128, password, salt,
-          sodium.CRYPTO_PWHASH_OPSLIMIT_MODERATE,
+          sodium.CRYPTO_PWHASH_OPSLIMIT_INTERACTIVE,
           sodium.CRYPTO_PWHASH_MEMLIMIT_MODERATE,
           sodium.CRYPTO_PWHASH_ALG_ARGON2ID13);
       })
@@ -134,7 +135,7 @@ class c2FmZQClient {
    * - decode / decrypt the keybundle
    */
   async login(clientId, args) {
-    const {email, password, otpCode, server} = args;
+    const {email, password, server} = args;
     console.log(`SW login ${email}`);
     if (!SAMEORIGIN) {
       this.vars_.server = server || this.vars_.server;
@@ -146,7 +147,7 @@ class c2FmZQClient {
         this.vars_.loginSalt = resp.parts.salt;
         const salt = await sodium.sodium_hex2bin(resp.parts.salt);
         const hashed = await this.passwordForLogin_(salt, password);
-        return this.sendRequest_(clientId, 'v2/login/login', {email: email, password: hashed, _code: otpCode});
+        return this.sendRequest_(clientId, 'v2/login/login', {email: email, password: hashed});
       })
       .then(async resp => {
         if (resp.status !== 'ok') {
@@ -166,17 +167,22 @@ class c2FmZQClient {
         console.log('SW logged in');
         this.vars_.email = email;
         this.vars_.userId = resp.parts.userId;
+        this.vars_.mfaEnabled = resp.parts._mfaEnabled === '1';
         this.vars_.otpEnabled = resp.parts._otpEnabled === '1';
         this.vars_.isAdmin = resp.parts._admin === '1';
+        this.vars_.enableNotifications = args.enableNotifications;
 
         console.log('SW save password hash');
         this.vars_.passwordSalt = (await sodium.randombytes_buf(16)).toString('hex');
         this.vars_.password = await this.passwordForValidation_(this.vars_.passwordSalt, password);
 
         await this.saveVars_();
-        this.enableNotifications(clientId, args.enableNotifications);
+        if (this.vars_.keyIsBackedUp) {
+          this.enableNotifications(clientId, this.vars_.enableNotifications);
+        }
         return {
           account: email,
+          mfaEnabled: this.vars_.mfaEnabled,
           otpEnabled: this.vars_.otpEnabled,
           isAdmin: this.vars_.isAdmin,
           needKey: this.vars_.sk === undefined,
@@ -197,7 +203,7 @@ class c2FmZQClient {
           console.log('SW disable push notifications');
           const ep = sub.endpoint;
           sub.unsubscribe();
-          return this.sendRequest_(clientId, 'c2/config/push', {
+          return this.sendRequest_(clientId, 'v2x/config/push', {
             token: this.vars_.token,
             params: await this.makeParams_({endpoint: ep}),
           })
@@ -213,7 +219,7 @@ class c2FmZQClient {
         if (sub !== null) {
           return sub;
         }
-        return this.sendRequest_(clientId, 'c2/config/push', {token: this.vars_.token})
+        return this.sendRequest_(clientId, 'v2x/config/push', {token: this.vars_.token})
           .then(resp => {
             if (resp.status !== 'ok') {
               throw resp.status;
@@ -230,7 +236,7 @@ class c2FmZQClient {
           });
       })
       .then(async sub => {
-        return this.sendRequest_(clientId, 'c2/config/push', {
+        return this.sendRequest_(clientId, 'v2x/config/push', {
           token: this.vars_.token,
           params: await this.makeParams_({
             endpoint: sub.endpoint,
@@ -278,16 +284,17 @@ class c2FmZQClient {
   }
 
   async restoreSecretKey(clientId, backupPhrase) {
-    return sodium.sodium_hex2bin(bip39.mnemonicToEntropy(backupPhrase))
+    return sodium.sodium_hex2bin(bip39.mnemonicToEntropy(backupPhrase.trim()))
       .then(sk => {
         return this.checkKey_(clientId, this.vars_.email, this.vars_.pk, sk)
-          .then(res => {
-            if (res !== true) {
-              throw new Error('incorrect backup phrase');
-            }
-            this.vars_.sk = sk;
-            return this.saveVars_();
-          });
+        .then(res => {
+          if (res !== true) {
+            throw new Error('incorrect backup phrase');
+          }
+          this.vars_.sk = sk;
+          this.enableNotifications(clientId, this.vars_.enableNotifications);
+          return this.saveVars_();
+        });
       });
   }
 
@@ -330,9 +337,6 @@ class c2FmZQClient {
       .then(resp => {
         if (resp.status !== 'ok') {
           throw resp.status;
-        }
-        if (!enableBackup) {
-          self.sendMessage(clientId, {type: 'info', msg: 'Your secret key is NOT backed up. You will need a backup phrase next time you login.'});
         }
         this.vars_.pk = pk.getBuffer();
         this.vars_.sk = sk.getBuffer();
@@ -386,7 +390,7 @@ class c2FmZQClient {
       })
       .then(v => {
         if (!enableBackup) {
-          self.sendMessage(clientId, {type: 'info', msg: 'Your secret key is NOT backed up. You will need a backup phrase next time you login.'});
+          self.sendMessage(clientId, {type: 'info', msg: _T('no-key-backup-warning')});
         }
         return v;
       });
@@ -397,12 +401,31 @@ class c2FmZQClient {
     if (!await this.checkPassword_(args.password)) {
       throw new Error('incorrect password');
     }
+    const maybeSetMFA = async () => {
+      if (args.setMFA !== this.vars_.mfaEnabled) {
+        const params = {
+          requireMFA: args.setMFA ?'1':'0',
+        };
+        const resp = await this.sendRequest_(clientId, 'v2x/mfa/enable', {
+          token: this.vars_.token,
+          params: await this.makeParams_(params),
+        });
+        if (resp.status !== 'ok') {
+          throw new Error('MFA update failed');
+        }
+        this.vars_.mfaEnabled = args.setMFA;
+      }
+    };
+    if (!args.setMFA) {
+      await maybeSetMFA();
+    }
+
     if (args.setOTP !== this.vars_.otpEnabled) {
       const params = {
         key: ''+args.otpKey,
         code: ''+args.otpCode,
       };
-      const resp = await this.sendRequest_(clientId, 'c2/config/setOTP', {
+      const resp = await this.sendRequest_(clientId, 'v2x/config/setOTP', {
         token: this.vars_.token,
         params: await this.makeParams_(params),
       });
@@ -445,7 +468,66 @@ class c2FmZQClient {
       this.vars_.passwordSalt = salt2;
       this.vars_.password = await this.passwordForValidation_(salt2, args.newPassword);
     }
+    if (args.keyChanges.length > 0) {
+      const params = {
+        updates: JSON.stringify(args.keyChanges),
+      };
+      const resp = await this.sendRequest_(clientId, 'v2x/config/webauthn/updateKeys', {
+        token: this.vars_.token,
+        params: await this.makeParams_(params),
+      });
+      if (resp.status !== 'ok') {
+        throw new Error('key update failed');
+      }
+    }
+    if (args.setMFA) {
+      await maybeSetMFA();
+    }
     return this.saveVars_();
+  }
+
+  async listSecurityKeys(clientId) {
+    console.log('SW listSecurityKeys');
+    const resp = await this.sendRequest_(clientId, 'v2x/config/webauthn/keys', {
+      token: this.vars_.token,
+    });
+    if (resp.status !== 'ok') {
+      throw new Error('error');
+    }
+    return resp.parts.keys;
+  }
+
+  async addSecurityKey(clientId, args) {
+    console.log('SW addSecurityKey');
+    if (!args?.password || args.attestationObject && !await this.checkPassword_(args.password)) {
+      throw new Error('incorrect password');
+    }
+    const params = {};
+    if (args?.keyName) {
+      params.keyName = args.keyName;
+      params.clientDataJSON = self.base64RawUrlEncode(args.clientDataJSON);
+      params.attestationObject = self.base64RawUrlEncode(args.attestationObject);
+      params.transports = JSON.stringify(args.transports);
+    }
+    const resp = await this.sendRequest_(clientId, 'v2x/config/webauthn/register', {
+      token: this.vars_.token,
+      params: await this.makeParams_(params),
+    });
+    if (resp.status !== 'ok') {
+      throw new Error('error');
+    }
+    return resp.parts.attestationOptions;
+  }
+
+  async mfaCheck(clientId) {
+    console.log('SW mfaCheck');
+    const resp = await this.sendRequest_(clientId, 'v2x/mfa/check', {
+      token: this.vars_.token,
+    });
+    if (resp.status !== 'ok') {
+      throw new Error('error');
+    }
+    return true;
   }
 
   async deleteAccount(clientId, password) {
@@ -1381,7 +1463,7 @@ class c2FmZQClient {
   }
 
   async generateOTP(clientId) {
-    return this.sendRequest_(clientId, 'c2/config/generateOTP', {
+    return this.sendRequest_(clientId, 'v2x/config/generateOTP', {
       'token': this.vars_.token,
     }).then(resp => {
       if (resp.status !== 'ok') {
@@ -1396,7 +1478,7 @@ class c2FmZQClient {
     if (changes !== undefined) {
       params.changes = JSON.stringify(changes);
     }
-    return this.sendRequest_(clientId, 'c2/admin/users', {
+    return this.sendRequest_(clientId, 'v2x/admin/users', {
       token: this.vars_.token,
       params: await this.makeParams_(params),
     }).then(async resp => {
@@ -1453,11 +1535,45 @@ class c2FmZQClient {
         }
         break;
       case 4: // Test notification
-          await self.showNotif(_T('push-notifications-title'), {
-            tag: `test-notification:${js.id}`,
-            body: _T('push-notifications-body'),
+        await self.showNotif(_T('push-notifications-title'), {
+          tag: `test-notification:${js.id}`,
+          body: _T('push-notifications-body'),
+        });
+        break;
+      case 5: // Remote MFA
+        if (js.data.expires > Date.now()) {
+          let tag = `remote-mfa:${js.data.session}`;
+          await self.showNotif(_T('remote-mfa-title'), {
+            tag: tag,
+            body: _T('remote-mfa-body'),
+            actions: [
+              {
+                action: 'approve',
+                title: _T('approve'),
+              },
+              {
+                action: 'deny',
+                title: _T('deny'),
+              },
+            ],
+            requireInteraction: true,
+            vibrate: [100,50,100],
           });
+          setTimeout(() => {
+            self.registration.getNotifications({tag}).then(nn => nn.map(n => n.close()));
+          }, 30000);
+        } else {
+          console.log('SW Remote MFA expired');
+        }
+        break;
     }
+  }
+
+  async approveRemoteMFA(session) {
+    return this.sendRequest_('', 'v2x/mfa/approve', {
+      token: this.vars_.token,
+      params: await this.makeParams_({session}),
+    });
   }
 
   /*
@@ -1476,6 +1592,7 @@ class c2FmZQClient {
       mode: SAMEORIGIN ? 'same-origin' : 'cors',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
+        'X-c2FmZQ-capabilities': (self.capabilities||[]).join(','),
       },
       redirect: 'error',
       referrerPolicy: 'no-referrer',
@@ -1499,6 +1616,14 @@ class c2FmZQClient {
       }
       if (resp.errors.length > 0) {
         self.sendMessage(clientId, {type: 'error', msg: resp.errors.join('\n')});
+      }
+      if (!data.mfa && resp.status === 'nok' && resp.parts.mfa) {
+        console.log(`SW got request for MFA on ${endpoint}`);
+        return self.sendRPC(clientId, 'getMFA', resp.parts.mfa)
+          .then(res => {
+            data.mfa = JSON.stringify(res || {});
+            return this.sendRequest_(clientId, endpoint, data);
+          });
       }
       if (resp.parts && resp.parts.logout === "1") {
         this.vars_ = {};

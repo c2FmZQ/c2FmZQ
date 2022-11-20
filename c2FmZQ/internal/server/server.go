@@ -23,12 +23,11 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
-	"io"
 	"net"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/NYTimes/gziphandler"
@@ -112,6 +111,14 @@ type Server struct {
 	pathPrefix             string
 	preLoginCache          *lru.Cache
 	checkKeyCache          *lru.Cache
+
+	remoteMFAMutex sync.Mutex
+	remoteMFA      map[string]remoteMFAReq
+}
+
+type remoteMFAReq struct {
+	ch     chan struct{}
+	userID int64
 }
 
 // New returns an instance of Server that's fully initialized and ready to run.
@@ -122,6 +129,7 @@ func New(db *database.Database, addr, htdigest, pathPrefix string) *Server {
 		db:                    db,
 		addr:                  addr,
 		pathPrefix:            pathPrefix,
+		remoteMFA:             make(map[string]remoteMFAReq),
 	}
 	cache, err := lru.New(10000)
 	if err != nil {
@@ -169,13 +177,13 @@ func New(db *database.Database, addr, htdigest, pathPrefix string) *Server {
 	s.mux.HandleFunc(pathPrefix+"/v2/login/preLogin", s.noauth(s.handlePreLogin))
 	s.mux.HandleFunc(pathPrefix+"/v2/login/login", s.noauth(s.handleLogin))
 	s.mux.HandleFunc(pathPrefix+"/v2/login/logout", s.auth(s.handleLogout))
-	s.mux.HandleFunc(pathPrefix+"/v2/login/changePass", s.auth(s.handleChangePass))
+	s.mux.HandleFunc(pathPrefix+"/v2/login/changePass", s.authMFA(time.Minute, s.handleChangePass))
 	s.mux.HandleFunc(pathPrefix+"/v2/login/checkKey", s.noauth(s.handleCheckKey))
 	s.mux.HandleFunc(pathPrefix+"/v2/login/recoverAccount", s.noauth(s.handleRecoverAccount))
-	s.mux.HandleFunc(pathPrefix+"/v2/login/deleteUser", s.auth(s.handleDeleteUser))
-	s.mux.HandleFunc(pathPrefix+"/v2/login/changeEmail", s.auth(s.handleChangeEmail))
+	s.mux.HandleFunc(pathPrefix+"/v2/login/deleteUser", s.authMFA(time.Duration(0), s.handleDeleteUser))
+	s.mux.HandleFunc(pathPrefix+"/v2/login/changeEmail", s.authMFA(time.Minute, s.handleChangeEmail))
 	s.mux.HandleFunc(pathPrefix+"/v2/keys/getServerPK", s.auth(s.handleGetServerPK))
-	s.mux.HandleFunc(pathPrefix+"/v2/keys/reuploadKeys", s.auth(s.handleReuploadKeys))
+	s.mux.HandleFunc(pathPrefix+"/v2/keys/reuploadKeys", s.authMFA(time.Duration(0), s.handleReuploadKeys))
 
 	s.mux.HandleFunc(pathPrefix+"/v2/sync/getUpdates", s.auth(s.handleGetUpdates))
 	s.mux.HandleFunc(pathPrefix+"/v2/sync/upload", s.method("POST", s.handleUpload))
@@ -198,11 +206,17 @@ func New(db *database.Database, addr, htdigest, pathPrefix string) *Server {
 	s.mux.HandleFunc(pathPrefix+"/v2/sync/unshareAlbum", s.auth(s.handleUnshareAlbum))
 	s.mux.HandleFunc(pathPrefix+"/v2/sync/leaveAlbum", s.auth(s.handleLeaveAlbum))
 
-	s.mux.HandleFunc(pathPrefix+"/c2/config/echo", s.method("POST", s.handleEcho))
-	s.mux.HandleFunc(pathPrefix+"/c2/config/generateOTP", s.auth(s.handleGenerateOTP))
-	s.mux.HandleFunc(pathPrefix+"/c2/config/setOTP", s.auth(s.handleSetOTP))
-	s.mux.HandleFunc(pathPrefix+"/c2/config/push", s.auth(s.handlePush))
-	s.mux.HandleFunc(pathPrefix+"/c2/admin/users", s.auth(s.handleAdminUsers))
+	s.mux.HandleFunc(pathPrefix+"/v2x/config/generateOTP", s.auth(s.handleGenerateOTP))
+	s.mux.HandleFunc(pathPrefix+"/v2x/config/setOTP", s.authMFA(time.Minute, s.handleSetOTP))
+	s.mux.HandleFunc(pathPrefix+"/v2x/config/push", s.auth(s.handlePush))
+	s.mux.HandleFunc(pathPrefix+"/v2x/config/webauthn/keys", s.auth(s.handleWebAuthnKeys))
+	s.mux.HandleFunc(pathPrefix+"/v2x/config/webauthn/register", s.authMFA(time.Minute, s.handleWebAuthnRegister))
+	s.mux.HandleFunc(pathPrefix+"/v2x/config/webauthn/updateKeys", s.authMFA(time.Minute, s.handleWebAuthnUpdateKeys))
+	s.mux.HandleFunc(pathPrefix+"/v2x/admin/users", s.authMFA(5*time.Minute, s.handleAdminUsers))
+
+	s.mux.HandleFunc(pathPrefix+"/v2x/mfa/approve", s.strictMFA(s.handleApproveMFA))
+	s.mux.HandleFunc(pathPrefix+"/v2x/mfa/check", s.strictMFA(s.handleMFACheck))
+	s.mux.HandleFunc(pathPrefix+"/v2x/mfa/enable", s.strictMFA(s.handleEnableMFA))
 
 	return s
 }
@@ -430,6 +444,32 @@ func (s *Server) auth(f func(database.User, *http.Request) *stingle.Response) ht
 	})
 }
 
+// strictMFA wraps handlers that require both authentication and MFA for every
+// request, checking the token, and passing the authenticated user to the
+// underlying handler.
+func (s *Server) strictMFA(f func(database.User, *http.Request) *stingle.Response) http.HandlerFunc {
+	return s.auth(func(user database.User, req *http.Request) *stingle.Response {
+		if resp, _ := s.requireMFA(&user, req, time.Duration(0)); resp != nil {
+			return resp
+		}
+		return f(user, req)
+	})
+}
+
+// authMFA wraps handlers that require authentication and (possibly) MFA,
+// checking the token, and passing the authenticated user to the underlying
+// handler.
+func (s *Server) authMFA(gracePeriod time.Duration, f func(database.User, *http.Request) *stingle.Response) http.HandlerFunc {
+	return s.auth(func(user database.User, req *http.Request) *stingle.Response {
+		if user.RequireMFA {
+			if resp, _ := s.requireMFA(&user, req, gracePeriod); resp != nil {
+				return resp
+			}
+		}
+		return f(user, req)
+	})
+}
+
 // handleNotFound handles requests for undefined endpoints.
 func (s *Server) handleNotFound(w http.ResponseWriter, req *http.Request) {
 	if log.Level >= log.DebugLevel {
@@ -452,47 +492,4 @@ func (s *Server) handleNotFound(w http.ResponseWriter, req *http.Request) {
 // is not implemented.
 func (s *Server) handleNotImplemented(req *http.Request) *stingle.Response {
 	return stingle.ResponseNOK().AddError("This functionality is not yet implemented in the server")
-}
-
-// handleEcho handles the /c2/config/echo endpoint. It is used to test client
-// features. In particular, it is used the javascript client to test whether
-// streaming upload is supported by the browser.
-//
-// Arguments:
-//   - w: The http response writer.
-//   - req: The http request.
-//
-// Form arguments
-//   - token: The signed session token.
-//   - echo: An arbitrary string to be returned to the client.
-//
-// Returns:
-//   - stingle.Response("ok")
-//     Parts("echo", the arbitrary string)
-func (s *Server) handleEcho(w http.ResponseWriter, req *http.Request) {
-	log.Infof("%s %s %s", req.Proto, req.Method, req.RequestURI)
-	buf := make([]byte, 4096)
-	n, err := io.ReadFull(req.Body, buf)
-	if err != io.EOF && err != io.ErrUnexpectedEOF {
-		log.Errorf("handleEcho: ReadFull failed: %v", err)
-		http.Error(w, "Internal Error", http.StatusInternalServerError)
-		return
-	}
-	body := string(buf[:n])
-	form, err := url.ParseQuery(body)
-	if err != nil {
-		log.Errorf("handleEcho: ParseQuery failed: %v", err)
-		http.Error(w, body, http.StatusInternalServerError)
-		return
-	}
-	if !form.Has("token") {
-		http.Error(w, body, http.StatusInternalServerError)
-		return
-	}
-	tok := form.Get("token")
-	if _, user, err := s.checkToken(tok, "session"); err != nil || !user.ValidTokens[token.Hash(tok)] {
-		http.Error(w, body, http.StatusInternalServerError)
-		return
-	}
-	stingle.ResponseOK().AddPart("echo", form.Get("echo")).Send(w)
 }

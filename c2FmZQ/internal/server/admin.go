@@ -26,20 +26,20 @@ import (
 	"c2FmZQ/internal/stingle"
 )
 
-// handleAdminUsers handles the /c2/admin/users endpoint.
+// handleAdminUsers handles the /v2x/admin/users endpoint.
 //
 // Arguments:
-//  - user: The authenticated user.
-//  - req: The http request.
+//   - user: The authenticated user.
+//   - req: The http request.
 //
 // Form arguments:
-//  - token: The signed session token.
-//  - params: The encrypted parameters
-//     - changes: changes to apply
+//   - token: The signed session token.
+//   - params: The encrypted parameters
+//   - changes: changes to apply
 //
 // Returns:
-//  - stingle.Response(ok)
-//        Parts("users", encrypted list of user data)
+//   - stingle.Response(ok)
+//     Parts("users", encrypted list of user data)
 func (s *Server) handleAdminUsers(user database.User, req *http.Request) *stingle.Response {
 	if !user.Admin {
 		return stingle.ResponseNOK()

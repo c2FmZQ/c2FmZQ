@@ -30,6 +30,7 @@ import (
 	"path"
 	"path/filepath"
 	"sort"
+	"time"
 
 	"c2FmZQ/internal/log"
 	"c2FmZQ/internal/stingle"
@@ -84,12 +85,17 @@ type User struct {
 	TokenKey string `json:"serverTokenKey"`
 	// A set of valid tokens. Each Login adds a token. Each logout remove one.
 	ValidTokens map[string]bool `json:"validTokens"`
+	// Whether multi-factor authentication is required for login and other
+	// sensitive operations.
+	RequireMFA bool `json:"requireMFA"`
 	// The OTP key for this user.
 	OTPKey string `json:"otpKey,omitempty"`
 	// Decoy accounts that the user can access with different passwords.
 	Decoys []*Decoy `json:"decoys,omitempty"`
 	// PushConfig contains the user's Push API configuration.
 	PushConfig *PushConfig `json:"pushConfig,omitempty"`
+	// WebAuthnConfig contains the user's WebAuthn configuration.
+	WebAuthnConfig *WebAuthnConfig `json:"webAuthNConfig,omitempty"`
 }
 
 // A decoy account's information.
@@ -114,6 +120,31 @@ type EndpointData struct {
 	Auth       string `json:"auth"`
 	P256dh     string `json:"p256dh"`
 	RetryAfter int64  `json:"retryAfter,omitempty"`
+}
+
+type WebAuthnConfig struct {
+	UserID        string                  `json:"userId"`
+	Keys          map[string]*WebAuthnKey `json:"keys"`
+	Challenges    []WebAuthnChallenge     `json:"challenges,omitempty"`
+	LastAuthTimes map[string]time.Time    `json:"lastAuthTimes"`
+}
+
+type WebAuthnKey struct {
+	Name           string    `json:"name"`
+	ID             string    `json:"id"`
+	PublicKey      string    `json:"publicKey"`
+	RPIDHash       string    `json:"rpIdHash"`
+	SignCount      uint32    `json:"signCount"`
+	BackupEligible bool      `json:"backupEligible"`
+	BackupState    bool      `json:"backupState"`
+	Transports     []string  `json:"transports"`
+	CreatedAt      time.Time `json:"createdAt"`
+	LastSeen       time.Time `json:"lastSeen"`
+}
+
+type WebAuthnChallenge struct {
+	Challenge string    `json:"challenge"`
+	CreatedAt time.Time `json:"createdAt"`
 }
 
 // A user's contact list information.
@@ -192,6 +223,7 @@ func (d *Database) AddUser(u User) (userID int64, retErr error) {
 	if len(ul) == 0 {
 		// First user is an admin.
 		u.Admin = true
+		u.NeedApproval = false
 	}
 	ul = append(ul, userList{UserID: uid, Email: u.Email, Admin: u.Admin})
 
@@ -235,6 +267,7 @@ func (d *Database) AddUser(u User) (userID int64, retErr error) {
 }
 
 // UpdateUser adds or updates a user object.
+// MutateUser is usually a better choice.
 func (d *Database) UpdateUser(u User) error {
 	defer recordLatency("UpdateUser")()
 
@@ -244,6 +277,29 @@ func (d *Database) UpdateUser(u User) error {
 		return err
 	}
 	f = u
+	return commit(true, nil)
+}
+
+// MutateUser is used to update an existing user object. It takes care of
+// locking so that mutation from concurrent calls will happen in the correct
+// order.
+func (d *Database) MutateUser(userID int64, f func(*User) error) error {
+	defer recordLatency("MutateUser")()
+	var u User
+	commit, err := d.storage.OpenForUpdate(d.filePath(homeByUserID(userID, userFile)), &u)
+	if err != nil {
+		return err
+	}
+	if u.ValidTokens == nil {
+		u.ValidTokens = make(map[string]bool)
+	}
+	if u.WebAuthnConfig == nil {
+		u.WebAuthnConfig = &WebAuthnConfig{}
+	}
+	if err := f(&u); err != nil {
+		commit(false, nil)
+		return err
+	}
 	return commit(true, nil)
 }
 
@@ -322,6 +378,9 @@ func (d *Database) UserByID(id int64) (User, error) {
 	err := d.storage.ReadDataFile(d.filePath("home", fmt.Sprintf("%d", id), userFile), &u)
 	if u.ValidTokens == nil {
 		u.ValidTokens = make(map[string]bool)
+	}
+	if u.WebAuthnConfig == nil {
+		u.WebAuthnConfig = &WebAuthnConfig{}
 	}
 	return u, err
 }
@@ -678,4 +737,29 @@ func (d *Database) ContactUpdates(user User, ts int64) ([]stingle.Contact, error
 		return out[i].DateModified < out[j].DateModified
 	})
 	return out, nil
+}
+
+func (c *WebAuthnConfig) AddChallenge(challenge string) {
+	c.Challenges = append(c.Challenges, WebAuthnChallenge{
+		Challenge: challenge,
+		CreatedAt: time.Now().UTC(),
+	})
+}
+
+func (c *WebAuthnConfig) CheckChallenge(challenge string) bool {
+	var cc []WebAuthnChallenge
+	var found bool
+	now := time.Now()
+	for _, ch := range c.Challenges {
+		if ch.CreatedAt.Add(5 * time.Minute).Before(now) {
+			continue
+		}
+		if ch.Challenge == challenge {
+			found = true
+			continue
+		}
+		cc = append(cc, ch)
+	}
+	c.Challenges = cc
+	return found
 }
