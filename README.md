@@ -137,6 +137,34 @@ raspberry pi, or on a NAS. It can run pretty much on anything that has at least
 
 --- 
 
+### Pull the docker image
+
+You can find the c2fmzq-server image on [hub.docker.com](https://hub.docker.com/r/c2fmzq/c2fmzq-server/tags).
+
+```bash
+docker pull c2fmzq/c2fmzq-server:latest
+docker run -u ${USER} -e C2FMZQ_DOMAIN=${DOMAIN} -v ${DATABASEDIR}:/data -v ${SECRETSDIR}:/secrets:ro c2fmzq/c2fmzq-server:latest
+```
+The TLS credentials are fetched from [letsencrypt.org](https://letsencrypt.org) automatically.
+
+`${DATABASEDIR}` is where all the encrypted data will be stored, `${SECRETSDIR}`
+is where the database encryption passphrase is stored (`${SECRETSDIR}/passphrase`),
+and `${DOMAIN}` is the domain or hostname to use.
+
+The domain or hostname must resolve to the IP address where the server will be running,
+and firewall and/or port forwarding rules must be in place to allow TCP connections to
+ports 80 and 443. The clients will connect to `https://${DOMAIN}/`.
+
+---
+
+### Or, build your own docker image
+
+```bash
+docker build -t c2fmzq/c2fmzq-server .
+```
+
+---
+
 ### Build it, and run it locally
 
 ```bash
@@ -173,26 +201,6 @@ GLOBAL OPTIONS:
    --enable-webapp                  Enable Progressive Web App. (default: false)
    --licenses                       Show the software licenses. (default: false)
 ```
-
----
-
-### Or, build a docker image
-
-```bash
-docker build -t c2fmzq-server .
-docker run -u ${USER} -e C2FMZQ_DOMAIN=${DOMAIN} -v ${DATABASEDIR}:/data -v ${SECRETSDIR}:/secrets:ro c2fmzq-server
-```
-With the default Dockerfile, TLS credentials are fetched from [letsencrypt.org](https://letsencrypt.org)
-automatically.
-
-`${DATABASEDIR}` is where all the encrypted data will be stored, `${SECRETSDIR}`
-is where the database encryption passphrase is stored (`${SECRETSDIR}/passphrase`),
-and `${DOMAIN}` is the domain or hostname to use.
-
-The domain or hostname must resolve to the IP address where the server will be running,
-and firwall and/or port forwarding rules must be in place to allow TCP connections to
-ports 80 and 443. A dynamic hostname is fine (DDNS, Dynamic DNS, ...). The clients will
-connect to `https://${DOMAIN}/`.
 
 ---
 
