@@ -165,7 +165,7 @@ docker build -t c2fmzq/c2fmzq-server .
 
 ---
 
-### Build it, and run it locally
+### Or, build it, and run it locally
 
 ```bash
 cd c2FmZQ/c2FmZQ-server
