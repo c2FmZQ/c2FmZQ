@@ -1,5 +1,5 @@
-FROM golang:1.18.6-alpine3.16 AS build
-MAINTAINER rthellend@gmail.com
+FROM golang:1.19.3-alpine3.16 AS build
+MAINTAINER info@c2fmzq.org
 RUN apk update && apk upgrade
 
 ADD c2FmZQ/go.mod /app/go/src/c2FmZQ/go.mod
