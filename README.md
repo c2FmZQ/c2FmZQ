@@ -141,19 +141,34 @@ raspberry pi, or on a NAS. It can run pretty much on anything that has at least
 
 You can find the c2fmzq-server image on [hub.docker.com](https://hub.docker.com/r/c2fmzq/c2fmzq-server/tags).
 
-```bash
-docker pull c2fmzq/c2fmzq-server:latest
-docker run -u ${USER} -e C2FMZQ_DOMAIN=${DOMAIN} -v ${DATABASEDIR}:/data -v ${SECRETSDIR}:/secrets:ro c2fmzq/c2fmzq-server:latest
 ```
+docker pull c2fmzq/c2fmzq-server:latest
+```
+
+Then run the server with something like:
+```
+docker run \
+    --name=c2fmzq-server \
+    -d \
+    -u 1000:1000 \
+    -p 8080:80 \
+    -p 8443:443 \
+    -e C2FMZQ_DOMAIN="${DOMAIN}" \
+    -e C2FMZQ_PASSPHRASE_FILE="" \
+    -e C2FMZQ_PASSPHRASE="<passphrase>" \
+    -v ${DATABASEDIR}:/data \
+    c2fmzq/c2fmzq-server:latest
+```
+
 The TLS credentials are fetched from [letsencrypt.org](https://letsencrypt.org) automatically.
 
-`${DATABASEDIR}` is where all the encrypted data will be stored, `${SECRETSDIR}`
-is where the database encryption passphrase is stored (`${SECRETSDIR}/passphrase`),
-and `${DOMAIN}` is the domain or hostname to use.
+`${DATABASEDIR}` is where all the encrypted data will be stored. The database passphrase can
+stored in a file, or passed in an environment variable. `${DOMAIN}` is the domain or hostname to
+use.
 
 The domain or hostname must resolve to the IP address where the server will be running,
 and firewall and/or port forwarding rules must be in place to allow TCP connections to
-ports 80 and 443. The clients will connect to `https://${DOMAIN}/`.
+ports 80 and 443 inside the container. The clients will connect to `https://${DOMAIN}/`.
 
 ---
 
