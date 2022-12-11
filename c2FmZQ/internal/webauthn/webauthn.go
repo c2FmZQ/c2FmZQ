@@ -70,6 +70,8 @@ type AttestationOptions struct {
 	AuthenticatorSelection struct {
 		// required, preferred, or discouraged
 		UserVerification string `json:"userVerification"`
+		// Whether we want discoverable credentials.
+		RequireResidentKey bool `json:"requireResidentKey"`
 	} `json:"authenticatorSelection"`
 	// Extensions.
 	Extensions map[string]interface{} `json:"extensions,omitempty"`
@@ -118,7 +120,7 @@ type AssertionOptions struct {
 // and Timeout already populated.
 func NewAssertionOptions() (*AssertionOptions, error) {
 	ao := &AssertionOptions{
-		Timeout:          20000, // 20 sec
+		Timeout:          45000, // 45 sec
 		UserVerification: "discouraged",
 	}
 	challenge := make([]byte, 32)

@@ -281,9 +281,11 @@ sudo docker exec -it c2fmzq-server inspect edit ps
 
 [WebAuthn](https://webauthn.guide/) and [One-time passwords](https://en.wikipedia.org/wiki/Time-based_One-Time_Password) can
 be used as an extra layer of protection for sensitive operations, e.g. login, password changes, account recovery, etc.
-A strong password is still required though.
+A strong password is still required to protect the user's main encryption key.
 
-Security keys (e.g. yubikey) and OTP keys can be added from the `Profile` window on the progressive web app.
+External security keys (e.g. yubikeys), [passkeys](https://developers.google.com/identity/passkeys), and
+[OTP](https://en.wikipedia.org/wiki/Time-based_one-time_password) keys can be added from the `Profile` window
+on the progressive web app.
 
 When push notifications are enabled, the progressive web app can also be used to authenticate other clients that
 don't have native support for MFA, e.g. the android app. In that case, a notification will appear in the

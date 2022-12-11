@@ -168,7 +168,7 @@ func (c *client) sendRequest(uri string, form url.Values) (*stingle.Response, er
 		if err := json.Unmarshal(b, &opts); err != nil {
 			return nil, err
 		}
-		id, clientDataJSON, authData, signature, err := c.authenticator.Get(&opts.Options)
+		id, clientDataJSON, authData, signature, userHandle, err := c.authenticator.Get(&opts.Options)
 		if err != nil {
 			return nil, err
 		}
@@ -178,12 +178,16 @@ func (c *client) sendRequest(uri string, form url.Values) (*stingle.Response, er
 				ClientDataJSON    string `json:"clientDataJSON"`
 				AuthenticatorData string `json:"authenticatorData"`
 				Signature         string `json:"signature"`
+				UserHandle        string `json:"userHandle"`
 			} `json:"webauthn"`
 		}
 		mfa.WebAuthn.ID = id
 		mfa.WebAuthn.ClientDataJSON = base64.RawURLEncoding.EncodeToString(clientDataJSON)
 		mfa.WebAuthn.AuthenticatorData = base64.RawURLEncoding.EncodeToString(authData)
 		mfa.WebAuthn.Signature = base64.RawURLEncoding.EncodeToString(signature)
+		if userHandle != nil {
+			mfa.WebAuthn.UserHandle = base64.RawURLEncoding.EncodeToString(userHandle)
+		}
 		jsMFA, err := json.Marshal(mfa)
 		if err != nil {
 			return nil, err

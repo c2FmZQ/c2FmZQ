@@ -44,7 +44,9 @@ import (
 // Returns:
 //   - stingle.Response(ok)
 func (s *Server) handleWebAuthnRegister(user database.User, req *http.Request) *stingle.Response {
+	var passKey bool
 	var keyName string
+	var discoverable bool
 	var clientDataJSON string
 	var attestationObject string
 	var transports []string
@@ -54,7 +56,9 @@ func (s *Server) handleWebAuthnRegister(user database.User, req *http.Request) *
 			log.Errorf("decodeParams: %v", err)
 			return stingle.ResponseNOK()
 		}
+		passKey = params["passKey"] == "1"
 		keyName = params["keyName"]
+		discoverable = params["discoverable"] == "1"
 		clientDataJSON = params["clientDataJSON"]
 		attestationObject = params["attestationObject"]
 		if tr := params["transports"]; tr != "" {
@@ -101,6 +105,10 @@ func (s *Server) handleWebAuthnRegister(user database.User, req *http.Request) *
 				})
 			}
 			user.WebAuthnConfig.AddChallenge(opts.Challenge)
+			if passKey {
+				opts.AuthenticatorSelection.UserVerification = "required"
+				opts.AuthenticatorSelection.RequireResidentKey = true
+			}
 			return nil
 		}
 		rawClientDataJSON, err := base64.RawURLEncoding.DecodeString(clientDataJSON)
@@ -148,6 +156,7 @@ func (s *Server) handleWebAuthnRegister(user database.User, req *http.Request) *
 			BackupEligible: ao.AuthData.BackupEligible,
 			BackupState:    ao.AuthData.BackupState,
 			Transports:     transports,
+			Discoverable:   discoverable,
 			CreatedAt:      now,
 			LastSeen:       now,
 		}
@@ -160,7 +169,7 @@ func (s *Server) handleWebAuthnRegister(user database.User, req *http.Request) *
 	if opts != nil {
 		resp.AddPart("attestationOptions", opts)
 	} else {
-		resp.AddInfo("Security key registered")
+		resp.AddInfo("Security device registered")
 	}
 	return resp
 }
@@ -178,19 +187,21 @@ func (s *Server) handleWebAuthnRegister(user database.User, req *http.Request) *
 //   - stingle.Response(ok)
 func (s *Server) handleWebAuthnKeys(user database.User, req *http.Request) *stingle.Response {
 	type key struct {
-		Name      string `json:"name"`
-		ID        string `json:"id"`
-		CreatedAt int64  `json:"createdAt"`
-		LastSeen  int64  `json:"lastSeen"`
+		Name         string `json:"name"`
+		ID           string `json:"id"`
+		Discoverable bool   `json:"discoverable"`
+		CreatedAt    int64  `json:"createdAt"`
+		LastSeen     int64  `json:"lastSeen"`
 	}
 	keys := make([]key, 0, len(user.WebAuthnConfig.Keys))
 	if user.WebAuthnConfig != nil {
 		for _, k := range user.WebAuthnConfig.Keys {
 			keys = append(keys, key{
-				Name:      k.Name,
-				ID:        k.ID,
-				CreatedAt: k.CreatedAt.UnixMilli(),
-				LastSeen:  k.LastSeen.UnixMilli(),
+				Name:         k.Name,
+				ID:           k.ID,
+				Discoverable: k.Discoverable,
+				CreatedAt:    k.CreatedAt.UnixMilli(),
+				LastSeen:     k.LastSeen.UnixMilli(),
 			})
 		}
 		sort.Slice(keys, func(i, j int) bool {
@@ -251,5 +262,5 @@ func (s *Server) handleWebAuthnUpdateKeys(user database.User, req *http.Request)
 		return stingle.ResponseNOK()
 	}
 	return stingle.ResponseOK().
-		AddInfo("Security keys updated")
+		AddInfo("Security devices updated")
 }

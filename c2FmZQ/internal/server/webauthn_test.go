@@ -37,7 +37,7 @@ func TestWebAuthn(t *testing.T) {
 		t.Fatalf("createAccountAndLogin failed: %v", err)
 	}
 
-	if err := c.registerSecurityKey("testkey"); err != nil {
+	if err := c.registerSecurityKey("testkey", false); err != nil {
 		t.Fatalf("c.registerSecurityKey failed: %v", err)
 	}
 
@@ -53,8 +53,14 @@ func TestWebAuthn(t *testing.T) {
 	}
 }
 
-func (c *client) registerSecurityKey(name string) error {
-	res := c.webAuthnRegister(nil)
+func (c *client) registerSecurityKey(name string, passKey bool) error {
+	params := map[string]string{
+		"passKey": "0",
+	}
+	if passKey {
+		params["passKey"] = "1"
+	}
+	res := c.webAuthnRegister(params)
 	sr, ok := res.(*stingle.Response)
 	if !ok || sr.Status != "ok" {
 		return fmt.Errorf("c.webAuthnRegister: %v", res)
@@ -71,10 +77,14 @@ func (c *client) registerSecurityKey(name string) error {
 	if err != nil {
 		return err
 	}
-	params := map[string]string{
+	params = map[string]string{
 		"keyName":           name,
 		"clientDataJSON":    base64.RawURLEncoding.EncodeToString(clientDataJSON),
 		"attestationObject": base64.RawURLEncoding.EncodeToString(attestationObject),
+		"discoverable":      "0",
+	}
+	if passKey {
+		params["discoverable"] = "1"
 	}
 	res = c.webAuthnRegister(params)
 	if _, ok := res.(*stingle.Response); !ok || sr.Status != "ok" {

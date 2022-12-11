@@ -89,6 +89,7 @@ class c2FmZQClient {
     return Promise.resolve({
       account: loggedIn,
       mfaEnabled: this.vars_.mfaEnabled,
+      passKey: this.vars_.passKey,
       otpEnabled: this.vars_.otpEnabled,
       isAdmin: this.vars_.isAdmin,
       needKey: needKey
@@ -168,6 +169,7 @@ class c2FmZQClient {
         this.vars_.email = email;
         this.vars_.userId = resp.parts.userId;
         this.vars_.mfaEnabled = resp.parts._mfaEnabled === '1';
+        this.vars_.passKey = resp.parts._passKey === '1';
         this.vars_.otpEnabled = resp.parts._otpEnabled === '1';
         this.vars_.isAdmin = resp.parts._admin === '1';
         this.vars_.enableNotifications = args.enableNotifications;
@@ -183,6 +185,7 @@ class c2FmZQClient {
         return {
           account: email,
           mfaEnabled: this.vars_.mfaEnabled,
+          passKey: this.vars_.passKey,
           otpEnabled: this.vars_.otpEnabled,
           isAdmin: this.vars_.isAdmin,
           needKey: this.vars_.sk === undefined,
@@ -402,9 +405,10 @@ class c2FmZQClient {
       throw new Error('incorrect password');
     }
     const maybeSetMFA = async () => {
-      if (args.setMFA !== this.vars_.mfaEnabled) {
+      if (args.setMFA !== this.vars_.mfaEnabled || args.passKey !== this.vars_.passKey) {
         const params = {
-          requireMFA: args.setMFA ?'1':'0',
+          requireMFA: args.setMFA ? '1' : '0',
+          passKey: args.passKey ? '1' : '0',
         };
         const resp = await this.sendRequest_(clientId, 'v2x/mfa/enable', {
           token: this.vars_.token,
@@ -505,9 +509,12 @@ class c2FmZQClient {
     const params = {};
     if (args?.keyName) {
       params.keyName = args.keyName;
+      params.discoverable = args.discoverable ? '1' : '0';
       params.clientDataJSON = self.base64RawUrlEncode(args.clientDataJSON);
       params.attestationObject = self.base64RawUrlEncode(args.attestationObject);
       params.transports = JSON.stringify(args.transports);
+    } else {
+      params.passKey = args.usePassKey ? '1' : '0';
     }
     const resp = await this.sendRequest_(clientId, 'v2x/config/webauthn/register', {
       token: this.vars_.token,
@@ -519,10 +526,13 @@ class c2FmZQClient {
     return resp.parts.attestationOptions;
   }
 
-  async mfaCheck(clientId) {
+  async mfaCheck(clientId, passKey) {
     console.log('SW mfaCheck');
     const resp = await this.sendRequest_(clientId, 'v2x/mfa/check', {
       token: this.vars_.token,
+      params: await this.makeParams_({
+        passKey: passKey ? '1' : '0',
+      }),
     });
     if (resp.status !== 'ok') {
       throw new Error('error');

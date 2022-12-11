@@ -185,6 +185,7 @@ class UI {
   }
 
   serverHash_(n) {
+    this.serverUrl_ = n;
     let e = document.querySelector('#server-fingerprint');
     if (!e) {
       e = document.createElement('div');
@@ -359,10 +360,11 @@ class UI {
     }
 
     main.sendRPC('isLoggedIn')
-    .then(({account, mfaEnabled, otpEnabled, isAdmin, needKey}) => {
+    .then(({account, mfaEnabled, passKey, otpEnabled, isAdmin, needKey}) => {
       if (account !== '') {
         this.accountEmail_ = account;
         this.mfaEnabled_ = mfaEnabled;
+        this.passKey_ = passKey;
         this.otpEnabled_ = otpEnabled;
         this.isAdmin_ = isAdmin;
         this.loggedInAccount_.textContent = account;
@@ -553,9 +555,10 @@ class UI {
     };
     this.backupPhraseInput_.value = this.backupPhraseInput_.value.replaceAll(/./g, 'X');
     return main.sendRPC(this.tabs_[this.selectedTab_].rpc, args)
-    .then(({mfaEnabled, otpEnabled, isAdmin, needKey}) => {
+    .then(({mfaEnabled, passKey, otpEnabled, isAdmin, needKey}) => {
       this.accountEmail_ = this.emailInput_.value;
       this.mfaEnabled_ = mfaEnabled;
+      this.passKey_ = passKey;
       this.otpEnabled_ = otpEnabled;
       this.isAdmin_ = isAdmin;
       document.querySelector('#loggedin-account').textContent = this.emailInput_.value;
@@ -1330,6 +1333,7 @@ class UI {
     const body = document.querySelector('body');
     body.appendChild(bg);
     body.appendChild(win);
+    if (input) input.focus();
 
     const waiting = body.classList.contains('waiting');
     if (waiting) {
@@ -1353,9 +1357,17 @@ class UI {
           body.classList.add('waiting');
         }
       };
+      if (input) {
+        input.addEventListener('keyup', e => {
+          if (e.key === 'Enter') {
+            close();
+            resolve(input.value);
+          }
+        });
+      }
       conf.addEventListener('click', () => {
         close();
-        resolve(params.getValue ? input.value : true);
+        resolve(params.getValue ? input.value.trim() : true);
       });
       canc.addEventListener('click', () => {
         close();
@@ -1363,6 +1375,36 @@ class UI {
       });
     });
     return p;
+  }
+
+  freeze(params) {
+    const win = document.createElement('div');
+    win.className = 'prompt-div';
+    const bg = document.createElement('div');
+    bg.className = 'prompt-bg';
+
+    const text = document.createElement('div');
+    text.className = 'prompt-text';
+    text.textContent = params.message;
+    win.appendChild(text);
+
+    const body = document.querySelector('body');
+    body.appendChild(bg);
+    body.appendChild(win);
+
+    const waiting = body.classList.contains('waiting');
+    if (waiting) {
+      body.classList.remove('waiting');
+    }
+    this.setGlobalEventHandlers([]);
+    return () => {
+      this.setGlobalEventHandlers(null);
+      body.removeChild(bg);
+      body.removeChild(win);
+      if (waiting) {
+        body.classList.add('waiting');
+      }
+    };
   }
 
   commonPopup_(params) {
@@ -1717,7 +1759,7 @@ class UI {
       name.type = 'text';
       name.value = c.name;
       name.addEventListener('change', onChange);
-      name.addEventListener('keyUp', e => {
+      name.addEventListener('keyup', e => {
         if (e.key === 'Enter') {
           onChange();
         }
@@ -1885,7 +1927,7 @@ class UI {
             input.readonly = false;
           });
         };
-        input.addEventListener('keyUp', e => {
+        input.addEventListener('keyup', e => {
           if (e.key === 'Enter') {
             addFunc();
           }
@@ -2320,6 +2362,9 @@ class UI {
       if (mfa.checked !== this.mfaEnabled_) {
         changed = true;
       }
+      if (passkey.checked !== this.passKey_) {
+        changed = true;
+      }
       if (otp.checked !== this.otpEnabled_ && (!otp.checked || form.querySelector('#profile-form-otp-code').value !== '')) {
         changed = true;
       }
@@ -2334,6 +2379,7 @@ class UI {
         pass.classList.remove('highlight');
       }
       button.disabled = pass.value === '' || !changed;
+      addSkButton.textContent = passkey.checked ? _T('add-passkey') : _T('add-security-key');
     };
 
     const form = document.createElement('div');
@@ -2398,17 +2444,17 @@ class UI {
     mfa.type = 'checkbox';
     mfa.checked = this.mfaEnabled_;
     mfa.addEventListener('change', () => {
-      testButton.style.display = mfa.checked ? '' : 'none';
+      form.querySelectorAll('.hide-no-mfa').forEach(e => e.style.display = mfa.checked ? '' : 'none');
       onchange();
     });
     mfaDiv.appendChild(mfa);
     const testButton = document.createElement('button');
     testButton.id = 'profile-form-test-mfa';
-    testButton.style.display = mfa.checked ? '' : 'none';
+    testButton.className = 'hide-no-mfa';
     testButton.textContent = _T('test');
     testButton.addEventListener('click', () => {
       testButton.disabled = true;
-      main.sendRPC('mfaCheck').finally(() => {
+      main.sendRPC('mfaCheck', passkey.checked).finally(() => {
         testButton.disabled = false;
       });
     });
@@ -2418,10 +2464,12 @@ class UI {
 
     let otpKey = '';
     const otpLabel = document.createElement('label');
+    otpLabel.className = 'hide-no-mfa';
     otpLabel.forHtml = 'profile-form-enable-otp';
     otpLabel.textContent = _T('enable-otp?');
     const otpDiv = document.createElement('div');
     otpDiv.id = 'profile-form-enable-otp-div';
+    otpDiv.className = 'hide-no-mfa';
     const otp = document.createElement('input');
     otp.id = 'profile-form-enable-otp';
     otp.type = 'checkbox';
@@ -2464,19 +2512,41 @@ class UI {
     form.appendChild(otpLabel);
     form.appendChild(otpDiv);
 
+    const passkeyLabel = document.createElement('label');
+    passkeyLabel.className = 'hide-no-mfa';
+    passkeyLabel.forHtml = 'profile-form-enable-passkey';
+    passkeyLabel.textContent = _T('enable-passkey?');
+    const passkeyDiv = document.createElement('div');
+    passkeyDiv.id = 'profile-form-enable-passkey-div';
+    passkeyDiv.className = 'hide-no-mfa';
+    const passkey = document.createElement('input');
+    passkey.id = 'profile-form-enable-passkey';
+    passkey.className = 'hide-no-mfa';
+    passkey.type = 'checkbox';
+    passkey.checked = this.passKey_;
+    passkey.addEventListener('change', () => {
+      updateKeyList();
+      onchange();
+    });
+    passkeyDiv.appendChild(passkey);
+    form.appendChild(passkeyLabel);
+    form.appendChild(passkeyDiv);
+
     const skLabel = document.createElement('label');
+    skLabel.className = 'hide-no-mfa';
     skLabel.forHtml = 'profile-form-add-security-key-button';
     skLabel.textContent = _T('security-keys:');
     const skDiv = document.createElement('div');
     skDiv.id = 'profile-form-security-keys-div';
+    skDiv.className = 'hide-no-mfa';
 
     const addSkButton = document.createElement('button');
     addSkButton.id = 'profile-form-add-security-key-button';
     addSkButton.disabled = true;
-    addSkButton.textContent = _T('add-security-key');
+    addSkButton.textContent = passkey.checked ? _T('add-passkey') : _T('add-security-key');
     addSkButton.addEventListener('click', () => {
       addSkButton.disabled = true;
-      main.addSecurityKey(pass.value)
+      main.addSecurityKey(pass.value, passkey.checked)
       .finally(() => {
         addSkButton.disabled = false;
         updateKeyList();
@@ -2498,6 +2568,7 @@ class UI {
         while (skList.firstChild) {
           skList.removeChild(skList.firstChild);
         }
+        keys = keys.filter(k => !passkey.checked || k.discoverable);
         keyList = {};
         if (keys.length > 0) {
           skList.innerHTML = `<div class="profile-form-security-key-list-header">${_T('name')}</div><div class="profile-form-security-key-list-header">${_T('added')}</div><div></div>`;
@@ -2550,7 +2621,7 @@ class UI {
         return;
       }
       if (mfa.checked) {
-        if (!otp.checked && Object.keys(keyList).filter(k => !keyList[k].deleted).length === 0) {
+        if (!otp.checked && Object.keys(keyList).filter(k => (!passkey.checked || keyList[k].key.discoverable) && !keyList[k].deleted).length === 0) {
           this.popupMessage(_T('otp-or-sk-required'));
           return;
         }
@@ -2561,6 +2632,7 @@ class UI {
       newPass2.disabled = true;
       mfa.disabled = true;
       otp.disabled = true;
+      passkey.disabled = true;
       button.disabled = true;
       button.textContent = _T('updating');
       delButton.disabled = true;
@@ -2578,6 +2650,7 @@ class UI {
         password: pass.value,
         newPassword: newPass.value,
         setMFA: mfa.checked,
+        passKey: passkey.checked,
         setOTP: otp.checked,
         otpKey: otpKey,
         otpCode: code ? code.value : '',
@@ -2588,6 +2661,7 @@ class UI {
         this.loggedInAccount_.textContent = email.value;
         this.mfaEnabled_ = mfa.checked;
         this.otpEnabled_ = otp.checked;
+        this.passKey_ = passkey.checked;
         close();
       })
       .catch(err => {
@@ -2600,12 +2674,14 @@ class UI {
         newPass2.disabled = false;
         mfa.disabled = false;
         otp.disabled = false;
+        passkey.disabled = false;
         button.disabled = false;
         button.textContent = _T('update');
         delButton.disabled = false;
       });
     });
     form.appendChild(button);
+    form.querySelectorAll('.hide-no-mfa').forEach(e => e.style.display = mfa.checked ? '' : 'none');
     content.appendChild(form);
 
     const deleteMsg = document.createElement('div');

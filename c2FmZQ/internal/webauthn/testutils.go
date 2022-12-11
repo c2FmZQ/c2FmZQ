@@ -40,6 +40,8 @@ type FakeAuthenticator struct {
 
 type fakeAuthKey struct {
 	id         []byte
+	uid        []byte
+	rk         bool
 	privateKey crypto.Signer
 	signCount  uint32
 }
@@ -85,12 +87,21 @@ func (a *FakeAuthenticator) Create(options *AttestationOptions) (clientDataJSON,
 	if clientDataJSON, err = json.Marshal(cd); err != nil {
 		return nil, nil, err
 	}
+
+	uid, err := base64.RawURLEncoding.DecodeString(options.User.ID)
+	if err != nil {
+		return nil, nil, err
+	}
+	authKey.uid = uid
+	authKey.rk = options.AuthenticatorSelection.RequireResidentKey
+
 	authKey.id = make([]byte, 32)
 	if _, err := rand.Read(authKey.id); err != nil {
 		return nil, nil, err
 	}
 	rpIDHash := sha256.Sum256([]byte(options.RelyingParty.ID))
 	a.rpIDHash = rpIDHash[:]
+
 	authData, err := authKey.makeAuthData(a.rpIDHash, coseKey)
 	if err != nil {
 		return nil, nil, err
@@ -107,13 +118,24 @@ func (a *FakeAuthenticator) Create(options *AttestationOptions) (clientDataJSON,
 }
 
 // Get mimics the behavior of the WebAuthn create call.
-func (a *FakeAuthenticator) Get(options *AssertionOptions) (id string, clientDataJSON, authData, signature []byte, err error) {
+func (a *FakeAuthenticator) Get(options *AssertionOptions) (id string, clientDataJSON, authData, signature, userHandle []byte, err error) {
 	var authKey fakeAuthKey
-	for _, k := range options.AllowCredentials {
-		if ak, ok := a.keys[k.ID]; ok {
-			id = k.ID
-			authKey = ak
-			break
+	if len(options.AllowCredentials) > 0 {
+		for _, k := range options.AllowCredentials {
+			if ak, ok := a.keys[k.ID]; ok {
+				id = k.ID
+				authKey = ak
+				break
+			}
+		}
+	} else {
+		for kid, key := range a.keys {
+			if key.rk {
+				id = kid
+				authKey = key
+				userHandle = key.uid
+				break
+			}
 		}
 	}
 	if id == "" {
@@ -153,7 +175,8 @@ func (k *fakeAuthKey) makeAuthData(rpIDHash, coseKey []byte) ([]byte, error) {
 	buf.Write(rpIDHash)
 
 	var bits uint8
-	bits |= 1 // UP
+	bits |= 1      // UP
+	bits |= 1 << 2 // UV
 	if coseKey != nil {
 		bits |= 1 << 6 // AT
 	}

@@ -108,10 +108,10 @@ func (w *wrapper) enableWebauthn() error {
 	data, err := json.Marshal(map[string]interface{}{
 		"protocol":            "ctap2",
 		"transport":           "internal",
-		"hasResidentKey":      false,
-		"hasUserVerification": false,
+		"hasResidentKey":      true,
+		"hasUserVerification": true,
 		"isUserConsenting":    true,
-		"isUserVerified":      false,
+		"isUserVerified":      true,
 	})
 	if err != nil {
 		return err

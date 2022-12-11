@@ -199,6 +199,9 @@ func (s *Server) handleLogin(req *http.Request) *stingle.Response {
 	if u.RequireMFA {
 		resp.AddPart("_mfaEnabled", "1")
 	}
+	if u.WebAuthnConfig.UsePasskey {
+		resp.AddPart("_passKey", "1")
+	}
 	if u.OTPKey != "" {
 		resp.AddPart("_otpEnabled", "1")
 	}

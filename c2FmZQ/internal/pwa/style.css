@@ -691,3 +691,5 @@ button.deleted-key {
   font-size: 5vh;
   opacity: 0.1;
 }
+.hide-no-mfa {
+}

@@ -124,6 +124,7 @@ type EndpointData struct {
 
 type WebAuthnConfig struct {
 	UserID        string                  `json:"userId"`
+	UsePasskey    bool                    `json:"usePasskey"`
 	Keys          map[string]*WebAuthnKey `json:"keys"`
 	Challenges    []WebAuthnChallenge     `json:"challenges,omitempty"`
 	LastAuthTimes map[string]time.Time    `json:"lastAuthTimes"`
@@ -137,6 +138,7 @@ type WebAuthnKey struct {
 	SignCount      uint32    `json:"signCount"`
 	BackupEligible bool      `json:"backupEligible"`
 	BackupState    bool      `json:"backupState"`
+	Discoverable   bool      `json:"discoverable"`
 	Transports     []string  `json:"transports"`
 	CreatedAt      time.Time `json:"createdAt"`
 	LastSeen       time.Time `json:"lastSeen"`

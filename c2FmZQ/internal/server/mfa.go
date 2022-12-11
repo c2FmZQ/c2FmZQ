@@ -54,21 +54,29 @@ func (s *Server) handleEnableMFA(user database.User, req *http.Request) *stingle
 		log.Errorf("decodeParams: %v", err)
 		return stingle.ResponseNOK()
 	}
-	requireMFA := params["requireMFA"]
-	if requireMFA == "1" && !mfaAvailableForUser(user) {
-		return stingle.ResponseNOK().
-			AddError("No MFA method")
+	requireMFA := params["requireMFA"] == "1"
+	passKey := params["passKey"] == "1"
+
+	if !user.RequireMFA {
+		user.WebAuthnConfig.UsePasskey = passKey
+	}
+	if resp, _ := s.requireMFA(&user, req, time.Duration(0)); resp != nil {
+		return resp
 	}
 
 	if err := s.db.MutateUser(user.UserID, func(user *database.User) error {
-		user.RequireMFA = requireMFA == "1"
+		user.RequireMFA = requireMFA
+		user.WebAuthnConfig.UsePasskey = passKey
+		if user.RequireMFA && !mfaAvailableForUser(*user) {
+			return errors.New("no MFA method")
+		}
 		return nil
 	}); err != nil {
 		log.Errorf("MutateUser: %v", err)
 		return stingle.ResponseNOK()
 	}
 	resp := stingle.ResponseOK()
-	if requireMFA == "1" {
+	if requireMFA {
 		resp.AddInfo("MFA enabled")
 	} else {
 		resp.AddInfo("MFA disabled")
@@ -77,7 +85,18 @@ func (s *Server) handleEnableMFA(user database.User, req *http.Request) *stingle
 }
 
 func mfaAvailableForUser(user database.User) bool {
-	return user.OTPKey != "" || len(user.WebAuthnConfig.Keys) > 0
+	if user.OTPKey != "" {
+		return true
+	}
+	if !user.WebAuthnConfig.UsePasskey && len(user.WebAuthnConfig.Keys) > 0 {
+		return true
+	}
+	for _, k := range user.WebAuthnConfig.Keys {
+		if k.Discoverable {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Server) tryRemoteMFA(ctx context.Context, user database.User) error {
@@ -107,7 +126,7 @@ func (s *Server) tryRemoteMFA(ctx context.Context, user database.User) error {
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
-	case <-time.After(time.Minute):
+	case <-time.After(2 * time.Minute):
 		return errors.New("timeout")
 	}
 }
@@ -161,37 +180,45 @@ func (s *Server) requireMFA(user *database.User, req *http.Request, gracePeriod 
 
 	if c := req.Header.Get("X-c2FmZQ-capabilities"); !strings.Contains(c, "mfa") {
 		ctx := req.Context()
-		s.setDeadline(ctx, time.Now().Add(2*time.Minute))
+		s.setDeadline(ctx, time.Now().Add(3*time.Minute))
 		if err := s.tryRemoteMFA(ctx, *user); err != nil {
 			log.Errorf("tryRemoteMFA: %v", err)
 			return stingle.ResponseNOK(), false
 		}
 		return nil, false
 	}
-	opts, err := webauthn.NewAssertionOptions()
-	if err != nil {
-		log.Errorf("webauthn.NewAssertionOptions: %v", err)
-		return stingle.ResponseNOK(), false
-	}
-	for _, key := range user.WebAuthnConfig.Keys {
-		opts.AllowCredentials = append(opts.AllowCredentials, webauthn.CredentialID{
-			Type:       "public-key",
-			ID:         key.ID,
-			Transports: key.Transports,
-		})
-	}
-	sort.Slice(opts.AllowCredentials, func(i, j int) bool {
-		a := user.WebAuthnConfig.Keys[opts.AllowCredentials[i].ID]
-		b := user.WebAuthnConfig.Keys[opts.AllowCredentials[j].ID]
-		return a.LastSeen.After(b.LastSeen)
-	})
-	if err := s.db.MutateUser(user.UserID, func(u *database.User) error {
-		u.WebAuthnConfig.AddChallenge(opts.Challenge)
-		*user = *u
-		return nil
-	}); err != nil {
-		log.Errorf("MutateUser: %v", err)
-		return stingle.ResponseNOK(), false
+	var opts *webauthn.AssertionOptions
+	if len(user.WebAuthnConfig.Keys) > 0 {
+		var err error
+		if opts, err = webauthn.NewAssertionOptions(); err != nil {
+			log.Errorf("webauthn.NewAssertionOptions: %v", err)
+			return stingle.ResponseNOK(), false
+		}
+		if user.WebAuthnConfig.UsePasskey {
+			opts.UserVerification = "required"
+			opts.AllowCredentials = make([]webauthn.CredentialID, 0)
+		} else {
+			for _, key := range user.WebAuthnConfig.Keys {
+				opts.AllowCredentials = append(opts.AllowCredentials, webauthn.CredentialID{
+					Type:       "public-key",
+					ID:         key.ID,
+					Transports: key.Transports,
+				})
+			}
+			sort.Slice(opts.AllowCredentials, func(i, j int) bool {
+				a := user.WebAuthnConfig.Keys[opts.AllowCredentials[i].ID]
+				b := user.WebAuthnConfig.Keys[opts.AllowCredentials[j].ID]
+				return a.LastSeen.After(b.LastSeen)
+			})
+		}
+		if err := s.db.MutateUser(user.UserID, func(u *database.User) error {
+			u.WebAuthnConfig.AddChallenge(opts.Challenge)
+			*user = *u
+			return nil
+		}); err != nil {
+			log.Errorf("MutateUser: %v", err)
+			return stingle.ResponseNOK(), false
+		}
 	}
 	return stingle.ResponseNOK().
 		AddPart("mfa", struct {
@@ -209,6 +236,7 @@ func (s *Server) checkMFAResponse(user *database.User, req *http.Request) *sting
 			ClientDataJSON    string `json:"clientDataJSON"`
 			AuthenticatorData string `json:"authenticatorData"`
 			Signature         string `json:"signature"`
+			UserHandle        string `json:"userHandle"`
 		} `json:"webauthn"`
 	}
 	if err := json.Unmarshal([]byte(req.PostFormValue("mfa")), &data); err != nil {
@@ -261,6 +289,16 @@ func (s *Server) checkMFAResponse(user *database.User, req *http.Request) *sting
 	if !authData.UserPresence {
 		log.Error("UserPresence is false")
 		return failResp
+	}
+	if user.WebAuthnConfig.UsePasskey {
+		if !authData.UserVerification {
+			log.Error("UserVerification is false")
+			return failResp
+		}
+		if data.WebAuthn.UserHandle != user.WebAuthnConfig.UserID {
+			log.Errorf("userHandle mismatch %q != %q", data.WebAuthn.UserHandle, user.WebAuthnConfig.UserID)
+			return failResp
+		}
 	}
 	creds, ok := user.WebAuthnConfig.Keys[data.WebAuthn.ID]
 	if !ok {
@@ -315,6 +353,15 @@ func (s *Server) checkMFAResponse(user *database.User, req *http.Request) *sting
 //
 // Returns:
 //   - stingle.Response(ok)
-func (s *Server) handleMFACheck(database.User, *http.Request) *stingle.Response {
+func (s *Server) handleMFACheck(user database.User, req *http.Request) *stingle.Response {
+	params, err := s.decodeParams(req.PostFormValue("params"), user)
+	if err != nil {
+		log.Errorf("decodeParams: %v", err)
+		return stingle.ResponseNOK()
+	}
+	user.WebAuthnConfig.UsePasskey = params["passKey"] == "1"
+	if resp, _ := s.requireMFA(&user, req, time.Duration(0)); resp != nil {
+		return resp
+	}
 	return stingle.ResponseOK().AddInfo("MFA OK")
 }

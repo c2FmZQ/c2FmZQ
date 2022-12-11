@@ -225,11 +225,11 @@ class Main {
     }
   }
 
-  async addSecurityKey(password) {
+  async addSecurityKey(password, usePassKey) {
     if (!('PublicKeyCredential' in window)) {
       throw new Error('Browser doesn\'t support WebAuthn');
     }
-    return this.sendRPC('addSecurityKey', {password})
+    return this.sendRPC('addSecurityKey', {password, usePassKey})
       .then(options => {
         options.challenge = this.base64DecodeToBytes(options.challenge);
         // Set user.id to the concatenation of server hash and user id from the server.
@@ -238,10 +238,14 @@ class Main {
         id.set(this.serverHashValue_);
         id.set(uid, this.serverHashValue_.byteLength);
         options.user.id = id;
+        if (!SAMEORIGIN) {
+          options.user.name = ui.serverUrl_ + '; ' + options.user.name;
+        }
         for (let i = 0; i < options.excludeCredentials?.length; i++) {
           options.excludeCredentials[i].id = this.base64DecodeToBytes(options.excludeCredentials[i].id);
         }
-        return navigator.credentials.create({publicKey: options});
+        const done = ui.freeze({message: _T('select-security-key')});
+        return navigator.credentials.create({publicKey: options}).finally(done);
       })
       .then(async pkc => {
         if (pkc.type !== 'public-key' || !(pkc.response instanceof window.AuthenticatorAttestationResponse)) {
@@ -260,6 +264,7 @@ class Main {
         const args = {
           password: password,
           keyName: keyName,
+          discoverable: usePassKey,
           clientDataJSON: new Uint8Array(pkc.response.clientDataJSON),
           attestationObject: new Uint8Array(pkc.response.attestationObject),
           transports: pkc.response.getTransports(),
@@ -279,7 +284,7 @@ class Main {
       });
     };
     const options = mfa.webauthn;
-    if (!options.allowCredentials || !('PublicKeyCredential' in window)) {
+    if (!options || !('PublicKeyCredential' in window)) {
       return getCode();
     }
     options.challenge = this.base64DecodeToBytes(options.challenge);
@@ -287,10 +292,25 @@ class Main {
       options.allowCredentials[i].id = this.base64DecodeToBytes(options.allowCredentials[i].id);
       this.checkKeyId_(options.allowCredentials[i].id);
     }
+    const done = ui.freeze({message: _T('verify-identity')});
     return navigator.credentials.get({publicKey: options})
+      .finally(done)
       .then(pkc => {
         if (pkc.type !== 'public-key' || !(pkc.response instanceof window.AuthenticatorAssertionResponse)) {
           throw new Error('invalid PublicKeyCredential value');
+        }
+        let userHandle = pkc.response.userHandle;
+        if (userHandle) {
+          let uh = new Uint8Array(userHandle);
+          if (uh.byteLength < this.serverHashValue_.byteLength) {
+            throw new Error("invalid userHandle");
+          }
+          for (let i = 0; i < this.serverHashValue_.byteLength; i++) {
+            if (uh[i] !== this.serverHashValue_[i]) {
+              throw new Error("invalid userHandle");
+            }
+          }
+          userHandle = uh.slice(this.serverHashValue_.byteLength);
         }
         return {
           webauthn: {
@@ -298,6 +318,7 @@ class Main {
             clientDataJSON: this.base64RawUrlEncode(new Uint8Array(pkc.response.clientDataJSON)),
             authenticatorData: this.base64RawUrlEncode(new Uint8Array(pkc.response.authenticatorData)),
             signature: this.base64RawUrlEncode(new Uint8Array(pkc.response.signature)),
+            userHandle: userHandle ? this.base64RawUrlEncode(userHandle) : undefined,
           },
         };
       })
@@ -391,8 +412,6 @@ class Main {
   }
 
   async sendMessageRPC_(f, ...args) {
-    // Wake up serviceworker.
-    await this.sendWebRPC_('ping');
     const send = () => {
       if (!navigator.serviceWorker.controller || navigator.serviceWorker.controller.state !== 'activated') {
         setTimeout(send, 100);
@@ -406,8 +425,22 @@ class Main {
       });
     };
     const id = this.rpcId_++;
-    return new Promise((resolve, reject) => {
+    return new Promise(async (resolve, reject) => {
       this.rpcWait_[id] = {'resolve': resolve, 'reject': reject};
+      // Keep serviceworker awake.
+      if (!this.keepAliveRunning_) {
+        this.keepAliveRunning_ = true;
+        const keepAlive = async () => {
+          if (Object.keys(this.rpcWait_).length === 0) {
+            this.keepAliveRunning_ = false;
+            return;
+          }
+          return this.sendWebRPC_('ping').finally(() => {
+            setTimeout(keepAlive, 1000);
+          });
+        };
+        await keepAlive();
+      }
       send();
     });
   }

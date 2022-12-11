@@ -165,8 +165,8 @@ func TestWithFakeAuthenticator(t *testing.T) {
 		if !ao.AuthData.UserPresence {
 			t.Error("Expected UserPresence to be true")
 		}
-		if ao.AuthData.UserVerification {
-			t.Error("Expected UserVerification to be false")
+		if !ao.AuthData.UserVerification {
+			t.Error("Expected UserVerification to be true")
 		}
 		if ao.AuthData.AttestedCredentials == nil {
 			t.Fatal("no AttestedCredentials")
@@ -182,7 +182,7 @@ func TestWithFakeAuthenticator(t *testing.T) {
 		assertOpts.AllowCredentials = append(assertOpts.AllowCredentials, CredentialID{
 			ID: keyID,
 		})
-		id, clientDataJSON, authData, signature, err := auth.Get(assertOpts)
+		id, clientDataJSON, authData, signature, _, err := auth.Get(assertOpts)
 		if err != nil {
 			t.Fatalf("Get: %v", err)
 		}
@@ -204,7 +204,7 @@ func TestWithFakeAuthenticator(t *testing.T) {
 		assertOpts.AllowCredentials = append(assertOpts.AllowCredentials, CredentialID{
 			ID: keyID,
 		})
-		id, clientDataJSON, authData, signature, err := auth.Get(assertOpts)
+		id, clientDataJSON, authData, signature, _, err := auth.Get(assertOpts)
 		if err != nil {
 			t.Fatalf("Get: %v", err)
 		}
