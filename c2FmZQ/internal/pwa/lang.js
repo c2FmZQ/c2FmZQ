@@ -135,7 +135,7 @@ window.Lang = {
       'optional': 'optional',
       'enable-mfa?': 'Require MFA?',
       'enable-otp?': 'Enable OTP?',
-      'enable-passkey?': 'Require Passkey?',
+      'enable-passkey?': 'Use resident keys\n(e.g. passkeys)?',
       'enter-code': 'Enter code',
       'update': 'Update',
       'updating': 'Updating',

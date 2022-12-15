@@ -434,6 +434,47 @@ self.addEventListener('resume', event => {
   console.log('SW resume', event);
 });
 
+async function handleRpcRequest(clientId, event) {
+  if (!self.app) {
+    console.log('SW handleRpcRequest not ready');
+    setTimeout(() => {
+      self.handleRpcRequest(clientId, event);
+    }, 100);
+    return;
+  }
+  const methods = [
+    'login',
+    'createAccount',
+    'recoverAccount',
+    'upload',
+    'cancelUpload',
+    'backupPhrase',
+    'changeKeyBackup',
+    'restoreSecretKey',
+    'updateProfile',
+    'deleteAccount',
+    'generateOTP',
+    'addSecurityKey',
+    'listSecurityKeys',
+    'adminUsers',
+    'mfaCheck',
+  ];
+  if (!methods.includes(event.data.func)) {
+    console.log('SW RPC method not allowed', event.data.func);
+    self.sendMessage(clientId, {type: 'rpc-result', id: event.data.id, func: event.data.func, reject: 'method not allowed'});
+    return;
+  }
+  await store.open();
+  self.app[event.data.func](clientId, ...event.data.args)
+  .then(e => {
+    self.sendMessage(clientId, {type: 'rpc-result', id: event.data.id, func: event.data.func, resolve: e});
+  })
+  .catch(e => {
+    self.sendMessage(clientId, {type: 'rpc-result', id: event.data.id, func: event.data.func, reject: e});
+  })
+  .finally(() => store.release());
+}
+
 self.addEventListener('message', async event => {
   const clientId = event.source.id;
   switch(event.data?.type) {
@@ -449,41 +490,7 @@ self.addEventListener('message', async event => {
       initApp(event.data.storeKey);
       break;
     case 'rpc':
-      if (!self.app) {
-        self.sendMessage(clientId, {type: 'rpc-result', id: event.data.id, func: event.data.func, reject: 'not ready'});
-        return;
-      }
-      const methods = [
-        'login',
-        'createAccount',
-        'recoverAccount',
-        'upload',
-        'cancelUpload',
-        'backupPhrase',
-        'changeKeyBackup',
-        'restoreSecretKey',
-        'updateProfile',
-        'deleteAccount',
-        'generateOTP',
-        'addSecurityKey',
-        'listSecurityKeys',
-        'adminUsers',
-        'mfaCheck',
-      ];
-      if (!methods.includes(event.data.func)) {
-        console.log('SW RPC method not allowed', event.data.func);
-        self.sendMessage(clientId, {type: 'rpc-result', id: event.data.id, func: event.data.func, reject: 'method not allowed'});
-        return;
-      }
-      await store.open();
-      self.app[event.data.func](clientId, ...event.data.args)
-      .then(e => {
-        self.sendMessage(clientId, {type: 'rpc-result', id: event.data.id, func: event.data.func, resolve: e});
-      })
-      .catch(e => {
-        self.sendMessage(clientId, {type: 'rpc-result', id: event.data.id, func: event.data.func, reject: e});
-      })
-      .finally(() => store.release());
+      self.handleRpcRequest(clientId, event);
       break;
     case 'rpc-result':
       if (event.data.id in self.rpcWait_) {

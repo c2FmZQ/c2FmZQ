@@ -1662,6 +1662,7 @@ class c2FmZQClient {
   }
 
   async ping() {
+    console.log('SW ping');
     return true;
   }
 

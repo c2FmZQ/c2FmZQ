@@ -1345,6 +1345,10 @@ class UI {
           close();
           reject(_T('canceled'));
         }
+        if (e.key === 'Enter') {
+          close();
+          resolve(params.getValue ? input.value.trim() : true);
+        }
       };
       this.setGlobalEventHandlers([
         ['keyup', handleEscape],
@@ -1357,14 +1361,6 @@ class UI {
           body.classList.add('waiting');
         }
       };
-      if (input) {
-        input.addEventListener('keyup', e => {
-          if (e.key === 'Enter') {
-            close();
-            resolve(input.value);
-          }
-        });
-      }
       conf.addEventListener('click', () => {
         close();
         resolve(params.getValue ? input.value.trim() : true);
