@@ -30,6 +30,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/tebeka/selenium"
 	"github.com/tebeka/selenium/chrome"
@@ -188,25 +189,25 @@ func (w *wrapper) css(s string) selenium.WebElement {
 
 func (w *wrapper) waitFor(sel string) selenium.WebElement {
 	var e selenium.WebElement
-	if err := w.Wait(func(wd selenium.WebDriver) (bool, error) {
+	if err := w.WaitWithTimeout(func(wd selenium.WebDriver) (bool, error) {
 		var err error
 		if e, err = wd.FindElement(selenium.ByCSSSelector, sel); err != nil {
 			return false, nil
 		}
 		return e.IsDisplayed()
-	}); err != nil || e == nil {
+	}, 2*time.Minute); err != nil || e == nil {
 		w.t.Fatalf("waitFor(%q): %v", sel, err)
 	}
 	return e
 }
 
 func (w *wrapper) waitGone(sel string) {
-	if err := w.Wait(func(wd selenium.WebDriver) (bool, error) {
+	if err := w.WaitWithTimeout(func(wd selenium.WebDriver) (bool, error) {
 		if _, err := wd.FindElement(selenium.ByCSSSelector, sel); err == nil {
 			return false, nil
 		}
 		return true, nil
-	}); err != nil {
+	}, 2*time.Minute); err != nil {
 		w.t.Fatalf("waitGone(%q): %v", sel, err)
 	}
 }

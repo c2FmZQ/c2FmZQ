@@ -1304,7 +1304,12 @@ class UI {
 
     let input;
     if (params.getValue) {
-      input = document.createElement('textarea');
+      if (params.password) {
+        input = document.createElement('input');
+        input.type = 'password';
+      } else {
+        input = document.createElement('textarea');
+      }
       input.className = 'prompt-input';
       if (params.defaultValue) {
         input.value = params.defaultValue;
@@ -1395,6 +1400,10 @@ class UI {
         body.classList.add('waiting');
       }
     };
+  }
+
+  async getCurrentPassword() {
+    return this.prompt({message: _T('enter-current-password'), getValue: true, password: true});
   }
 
   commonPopup_(params) {
@@ -2342,13 +2351,11 @@ class UI {
     content.id = 'profile-content';
 
     const onchange = () => {
-      delButton.disabled = pass.value === '';
-      addSkButton.disabled = pass.value === '';
       let changed = false;
       if (email.value !== this.accountEmail_) {
         changed = true;
       }
-      if (newPass.value !== '' && newPass2.value !== '') {
+      if (newPass.value !== '' && newPass.value === newPass2.value) {
         changed = true;
       }
       if (mfa.checked !== curr.mfaEnabled) {
@@ -2365,12 +2372,7 @@ class UI {
           changed = true;
         }
       }
-      if (pass.value === '' && changed) {
-        pass.classList.add('highlight');
-      } else {
-        pass.classList.remove('highlight');
-      }
-      button.disabled = pass.value === '' || !changed;
+      button.disabled = !changed;
       addSkButton.textContent = passkey.checked ? _T('add-passkey') : _T('add-security-key');
     };
 
@@ -2388,18 +2390,6 @@ class UI {
     email.addEventListener('change', onchange);
     form.appendChild(emailLabel);
     form.appendChild(email);
-
-    const passLabel = document.createElement('label');
-    passLabel.forHtml = 'profile-form-password';
-    passLabel.textContent = _T('form-current-password');
-    const pass = document.createElement('input');
-    pass.id = 'profile-form-password';
-    pass.type = 'password';
-    pass.placeholder = _T('required');
-    pass.addEventListener('keyup', onchange);
-    pass.addEventListener('change', onchange);
-    form.appendChild(passLabel);
-    form.appendChild(pass);
 
     const newPassLabel = document.createElement('label');
     newPassLabel.forHtml = 'profile-form-new-password';
@@ -2534,11 +2524,11 @@ class UI {
 
     const addSkButton = document.createElement('button');
     addSkButton.id = 'profile-form-add-security-key-button';
-    addSkButton.disabled = true;
     addSkButton.textContent = passkey.checked ? _T('add-passkey') : _T('add-security-key');
     addSkButton.addEventListener('click', () => {
       addSkButton.disabled = true;
-      main.addSecurityKey(pass.value, passkey.checked)
+      this.getCurrentPassword()
+      .then(pw => main.addSecurityKey(pw, passkey.checked))
       .finally(() => {
         addSkButton.disabled = false;
         updateKeyList();
@@ -2598,11 +2588,7 @@ class UI {
     button.id = 'profile-form-button';
     button.textContent = _T('update');
     button.disabled = true;
-    button.addEventListener('click', () => {
-      if (pass.value === '') {
-        this.popupMessage(_T('current-password-required'));
-        return;
-      }
+    button.addEventListener('click', async () => {
       if ((newPass.value !== '' || newPass2.value !== '') && newPass.value !== newPass2.value) {
         this.popupMessage(_T('new-pass-doesnt-match'));
         return;
@@ -2619,7 +2605,6 @@ class UI {
         }
       }
       email.disabled = true;
-      pass.disabled = true;
       newPass.disabled = true;
       newPass2.disabled = true;
       mfa.disabled = true;
@@ -2637,9 +2622,10 @@ class UI {
           keyChanges.push({id:k, name:keyList[k].input.value});
         }
       }
-      main.sendRPC('updateProfile', {
+      this.getCurrentPassword()
+      .then(pw => main.sendRPC('updateProfile', {
         email: email.value,
-        password: pass.value,
+        password: pw,
         newPassword: newPass.value,
         setMFA: mfa.checked,
         passKey: passkey.checked,
@@ -2647,7 +2633,7 @@ class UI {
         otpKey: otpKey,
         otpCode: code ? code.value : '',
         keyChanges: keyChanges,
-      })
+      }))
       .then(() => {
         this.accountEmail_ = email.value;
         this.loggedInAccount_.textContent = email.value;
@@ -2658,7 +2644,6 @@ class UI {
       })
       .finally(() => {
         email.disabled = false;
-        pass.disabled = false;
         newPass.disabled = false;
         newPass2.disabled = false;
         mfa.disabled = false;
@@ -2680,31 +2665,22 @@ class UI {
     const delButton = document.createElement('button');
     delButton.id = 'profile-form-delete-button';
     delButton.textContent = _T('delete-account');
-    delButton.disabled = true;
     delButton.addEventListener('click', () => {
-      if (pass.value === '') {
-        this.popupMessage(_T('current-password-required'));
-        return;
-      }
       email.disabled = true;
-      pass.disabled = true;
       newPass.disabled = true;
       newPass2.disabled = true;
       button.disabled = true;
-      button.textContent = _T('updating');
       delButton.disabled = true;
-      this.prompt({message: _T('confirm-delete-account')})
-      .then(() => main.sendRPC('deleteAccount', pass.value))
+      this.prompt({message: _T('confirm-delete-account'), getValue: true, password: true})
+      .then(pw => main.sendRPC('deleteAccount', pw))
       .then(() => {
         window.location.reload();
       })
       .finally(() => {
         email.disabled = false;
-        pass.disabled = false;
         newPass.disabled = false;
         newPass2.disabled = false;
         button.disabled = false;
-        button.textContent = _T('update');
         delButton.disabled = false;
       });
     });
@@ -2717,20 +2693,6 @@ class UI {
     });
     content.id = 'backup-phrase-content';
     let keyBackupEnabled = await main.sendRPC('keyBackupEnabled');
-
-    const pwInput = document.createElement('div');
-    pwInput.id = 'key-backup-password-input';
-    const pw = document.createElement('input');
-    pw.type = 'password';
-    pw.id = 'key-backup-password';
-    pw.name = 'key-backup-password';
-    pw.autocomplete = 'new-password';
-    const pwLabel = document.createElement('label');
-    pwLabel.htmlFor = 'key-backup-password';
-    pwLabel.textContent = _T('enter-current-password');
-    pwInput.appendChild(pwLabel);
-    pwInput.appendChild(pw);
-    content.appendChild(pwInput);
 
     const warning = document.createElement('div');
     warning.id = 'backup-phrase-warning';
@@ -2750,7 +2712,9 @@ class UI {
       if (phrase.textContent === '') {
         button.disabled = true;
         button.textContent = _T('checking-password');
-        main.sendRPC('backupPhrase', pw.value).then(v => {
+        this.getCurrentPassword()
+        .then(pw => main.sendRPC('backupPhrase', pw))
+        .then(v => {
           phrase.textContent = v;
           button.textContent = _T('hide-backup-phrase');
         })
@@ -2776,7 +2740,8 @@ class UI {
     const changeBackup = choice => {
       inputYes.disabled = true;
       inputNo.disabled = true;
-      main.sendRPC('changeKeyBackup', pw.value, choice)
+      this.getCurrentPassword()
+      .then(pw => main.sendRPC('changeKeyBackup', pw, choice))
       .then(() => {
         keyBackupEnabled = choice;
         this.popupMessage(choice ? _T('enabled') : _T('disabled'), 'info');

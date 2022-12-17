@@ -49,9 +49,9 @@ func TestMFAWithSecurityKey(t *testing.T) {
 	t.Log("Adding security key")
 	wd.click("#loggedin-account")
 	wd.click("#account-menu-profile")
-	wd.sendKeys("#profile-form-password", "foobar")
 	wd.click("#profile-form-enable-mfa")
 	wd.click("#profile-form-add-security-key-button")
+	wd.sendKeys(".prompt-input", "foobar\n")
 	wd.clear(".prompt-input")
 	wd.sendKeys(".prompt-input", "test key")
 	wd.click(".prompt-confirm-button")
@@ -61,6 +61,7 @@ func TestMFAWithSecurityKey(t *testing.T) {
 	wd.waitPopupMessage("MFA OK")
 
 	wd.click("#profile-form-button")
+	wd.sendKeys(".prompt-input", "foobar\n")
 	wd.waitPopupMessage("MFA enabled")
 
 	t.Log("Logging out")
@@ -68,7 +69,7 @@ func TestMFAWithSecurityKey(t *testing.T) {
 	wd.click("#account-menu-logout")
 
 	t.Log("Logging in")
-	wd.waitFor("#login-tab")
+	wd.waitFor("#loggedout-div")
 	wd.click("#login-tab")
 	wd.sendKeys("#email-input", "test@c2fmzq.org")
 	wd.sendKeys("#password-input", "foobar")
@@ -78,8 +79,8 @@ func TestMFAWithSecurityKey(t *testing.T) {
 	t.Log("Getting backup phrase")
 	wd.click("#loggedin-account")
 	wd.click("#account-menu-key-backup")
-	wd.sendKeys("#key-backup-password", "foobar")
 	wd.click("#backup-phrase-show-button")
+	wd.sendKeys(".prompt-input", "foobar\n")
 
 	var backupPhrase string
 	wd.Wait(func(selenium.WebDriver) (bool, error) {
@@ -145,10 +146,10 @@ func TestMFAWithPasskey(t *testing.T) {
 	t.Log("Adding passkey")
 	wd.click("#loggedin-account")
 	wd.click("#account-menu-profile")
-	wd.sendKeys("#profile-form-password", "foobar")
 	wd.click("#profile-form-enable-mfa")
 	wd.click("#profile-form-enable-passkey")
 	wd.click("#profile-form-add-security-key-button")
+	wd.sendKeys(".prompt-input", "foobar\n")
 	wd.clear(".prompt-input")
 	wd.sendKeys(".prompt-input", "my passkey")
 	wd.click(".prompt-confirm-button")
@@ -158,6 +159,7 @@ func TestMFAWithPasskey(t *testing.T) {
 	wd.waitPopupMessage("MFA OK")
 
 	wd.click("#profile-form-button")
+	wd.sendKeys(".prompt-input", "foobar\n")
 	wd.waitPopupMessage("MFA enabled")
 
 	t.Log("Logging out")
@@ -165,7 +167,7 @@ func TestMFAWithPasskey(t *testing.T) {
 	wd.click("#account-menu-logout")
 
 	t.Log("Logging in")
-	wd.waitFor("#login-tab")
+	wd.waitFor("#loggedout-div")
 	wd.click("#login-tab")
 	wd.sendKeys("#email-input", "test@c2fmzq.org")
 	wd.sendKeys("#password-input", "foobar")
@@ -175,8 +177,8 @@ func TestMFAWithPasskey(t *testing.T) {
 	t.Log("Getting backup phrase")
 	wd.click("#loggedin-account")
 	wd.click("#account-menu-key-backup")
-	wd.sendKeys("#key-backup-password", "foobar")
 	wd.click("#backup-phrase-show-button")
+	wd.sendKeys(".prompt-input", "foobar\n")
 
 	var backupPhrase string
 	wd.Wait(func(selenium.WebDriver) (bool, error) {
@@ -240,7 +242,6 @@ func TestMFAWithOTP(t *testing.T) {
 	t.Log("Adding OTP")
 	wd.click("#loggedin-account")
 	wd.click("#account-menu-profile")
-	wd.sendKeys("#profile-form-password", "foobar")
 	wd.click("#profile-form-enable-mfa")
 	wd.click("#profile-form-enable-otp")
 	otpKey, err := wd.waitFor("#profile-form-otp-key").Text()
@@ -258,6 +259,7 @@ func TestMFAWithOTP(t *testing.T) {
 	wd.sendKeys("#profile-form-otp-code", code())
 
 	wd.click("#profile-form-button")
+	wd.sendKeys(".prompt-input", "foobar\n")
 	wd.sendKeys(".prompt-input", code()+"\n")
 	wd.waitPopupMessage("MFA enabled", "OTP enabled")
 
@@ -266,7 +268,7 @@ func TestMFAWithOTP(t *testing.T) {
 	wd.click("#account-menu-logout")
 
 	t.Log("Logging in")
-	wd.waitFor("#login-tab")
+	wd.waitFor("#loggedout-div")
 	wd.click("#login-tab")
 	wd.sendKeys("#email-input", "test@c2fmzq.org")
 	wd.sendKeys("#password-input", "foobar")
@@ -278,10 +280,10 @@ func TestMFAWithOTP(t *testing.T) {
 	t.Log("Turn off OTP and MFA")
 	wd.click("#loggedin-account")
 	wd.click("#account-menu-profile")
-	wd.sendKeys("#profile-form-password", "foobar")
 	wd.click("#profile-form-enable-otp")
 	wd.click("#profile-form-enable-mfa")
 	wd.click("#profile-form-button")
+	wd.sendKeys(".prompt-input", "foobar\n")
 	wd.sendKeys(".prompt-input", code())
 	wd.click(".prompt-confirm-button")
 	wd.waitPopupMessage("MFA disabled", "OTP disabled")

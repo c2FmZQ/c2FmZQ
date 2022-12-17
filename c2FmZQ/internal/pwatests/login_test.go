@@ -44,8 +44,8 @@ func TestRegisterRecoverLogin(t *testing.T) {
 	t.Log("Getting backup phrase")
 	wd.click("#loggedin-account")
 	wd.click("#account-menu-key-backup")
-	wd.sendKeys("#key-backup-password", "foobar")
 	wd.click("#backup-phrase-show-button")
+	wd.sendKeys(".prompt-input", "foobar\n")
 
 	var backupPhrase string
 	wd.Wait(func(selenium.WebDriver) (bool, error) {
@@ -106,8 +106,8 @@ func TestNoBackupKeys(t *testing.T) {
 	t.Log("Getting backup phrase")
 	wd.click("#loggedin-account")
 	wd.click("#account-menu-key-backup")
-	wd.sendKeys("#key-backup-password", "foobar")
 	wd.click("#backup-phrase-show-button")
+	wd.sendKeys(".prompt-input", "foobar\n")
 
 	var backupPhrase string
 	wd.Wait(func(selenium.WebDriver) (bool, error) {
@@ -137,8 +137,8 @@ func TestNoBackupKeys(t *testing.T) {
 	t.Log("Enable key backup")
 	wd.click("#loggedin-account")
 	wd.click("#account-menu-key-backup")
-	wd.sendKeys("#key-backup-password", "foobar")
 	wd.click("#choose-key-backup-yes")
+	wd.sendKeys(".prompt-input", "foobar\n")
 	wd.waitPopupMessage("Enabled")
 	wd.click(".popup-close")
 
