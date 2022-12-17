@@ -88,9 +88,6 @@ class c2FmZQClient {
     const needKey = this.vars_.sk === undefined;
     return Promise.resolve({
       account: loggedIn,
-      mfaEnabled: this.vars_.mfaEnabled,
-      passKey: this.vars_.passKey,
-      otpEnabled: this.vars_.otpEnabled,
       isAdmin: this.vars_.isAdmin,
       needKey: needKey
     });
@@ -168,9 +165,6 @@ class c2FmZQClient {
         console.log('SW logged in');
         this.vars_.email = email;
         this.vars_.userId = resp.parts.userId;
-        this.vars_.mfaEnabled = resp.parts._mfaEnabled === '1';
-        this.vars_.passKey = resp.parts._passKey === '1';
-        this.vars_.otpEnabled = resp.parts._otpEnabled === '1';
         this.vars_.isAdmin = resp.parts._admin === '1';
         this.vars_.enableNotifications = args.enableNotifications;
 
@@ -184,9 +178,6 @@ class c2FmZQClient {
         }
         return {
           account: email,
-          mfaEnabled: this.vars_.mfaEnabled,
-          passKey: this.vars_.passKey,
-          otpEnabled: this.vars_.otpEnabled,
           isAdmin: this.vars_.isAdmin,
           needKey: this.vars_.sk === undefined,
         };
@@ -404,8 +395,9 @@ class c2FmZQClient {
     if (!await this.checkPassword_(args.password)) {
       throw new Error('incorrect password');
     }
+    const curr = await this.mfaStatus(clientId);
     const maybeSetMFA = async () => {
-      if (args.setMFA !== this.vars_.mfaEnabled || args.passKey !== this.vars_.passKey) {
+      if (args.setMFA !== curr.mfaEnabled || args.passKey !== curr.passKey) {
         const params = {
           requireMFA: args.setMFA ? '1' : '0',
           passKey: args.passKey ? '1' : '0',
@@ -417,14 +409,13 @@ class c2FmZQClient {
         if (resp.status !== 'ok') {
           throw new Error('MFA update failed');
         }
-        this.vars_.mfaEnabled = args.setMFA;
       }
     };
     if (!args.setMFA) {
       await maybeSetMFA();
     }
 
-    if (args.setOTP !== this.vars_.otpEnabled) {
+    if (args.setOTP !== curr.otpEnabled) {
       const params = {
         key: ''+args.otpKey,
         code: ''+args.otpCode,
@@ -436,7 +427,6 @@ class c2FmZQClient {
       if (resp.status !== 'ok') {
         throw new Error('OTP update failed');
       }
-      this.vars_.otpEnabled = args.setOTP;
     }
     if (this.vars_.email !== args.email) {
       const resp = await this.sendRequest_(clientId, 'v2/login/changeEmail', {
@@ -524,6 +514,15 @@ class c2FmZQClient {
       throw new Error('error');
     }
     return resp.parts.attestationOptions;
+  }
+
+  async mfaStatus(clientId) {
+    console.log('SW mfaStatus');
+    const resp = await this.sendRequest_(clientId, 'v2x/mfa/status', {token: this.vars_.token});
+    if (resp.status !== 'ok') {
+      throw new Error('error');
+    }
+    return resp.parts;
   }
 
   async mfaCheck(clientId, passKey) {
@@ -1705,6 +1704,7 @@ class c2FmZQClient {
           'setCachePreference',
           'cachePreference',
           'enableNotifications',
+          'mfaStatus',
           'ping',
         ];
         if (allowedMethods.includes(func)) {

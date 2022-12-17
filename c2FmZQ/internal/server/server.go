@@ -217,6 +217,7 @@ func New(db *database.Database, addr, htdigest, pathPrefix string) *Server {
 	s.mux.HandleFunc(pathPrefix+"/v2x/mfa/approve", s.strictMFA(s.handleApproveMFA))
 	s.mux.HandleFunc(pathPrefix+"/v2x/mfa/check", s.auth(s.handleMFACheck))
 	s.mux.HandleFunc(pathPrefix+"/v2x/mfa/enable", s.auth(s.handleEnableMFA))
+	s.mux.HandleFunc(pathPrefix+"/v2x/mfa/status", s.auth(s.handleMFAStatus))
 
 	return s
 }

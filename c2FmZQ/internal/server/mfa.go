@@ -365,3 +365,18 @@ func (s *Server) handleMFACheck(user database.User, req *http.Request) *stingle.
 	}
 	return stingle.ResponseOK().AddInfo("MFA OK")
 }
+
+// handleMFAStatus handles the /v2x/mfa/status endpoint.
+//
+// Arguments:
+//   - user: The authenticated user.
+//   - req: The http request.
+//
+// Returns:
+//   - stingle.Response(ok)
+func (s *Server) handleMFAStatus(user database.User, req *http.Request) *stingle.Response {
+	return stingle.ResponseOK().
+		AddPart("mfaEnabled", user.RequireMFA).
+		AddPart("otpEnabled", user.OTPKey != "").
+		AddPart("passKey", user.WebAuthnConfig.UsePasskey)
+}

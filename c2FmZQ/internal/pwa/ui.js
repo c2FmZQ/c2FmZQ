@@ -360,12 +360,9 @@ class UI {
     }
 
     main.sendRPC('isLoggedIn')
-    .then(({account, mfaEnabled, passKey, otpEnabled, isAdmin, needKey}) => {
+    .then(({account, isAdmin, needKey}) => {
       if (account !== '') {
         this.accountEmail_ = account;
-        this.mfaEnabled_ = mfaEnabled;
-        this.passKey_ = passKey;
-        this.otpEnabled_ = otpEnabled;
         this.isAdmin_ = isAdmin;
         this.loggedInAccount_.textContent = account;
         this.showLoggedIn_();
@@ -555,11 +552,8 @@ class UI {
     };
     this.backupPhraseInput_.value = this.backupPhraseInput_.value.replaceAll(/./g, 'X');
     return main.sendRPC(this.tabs_[this.selectedTab_].rpc, args)
-    .then(({mfaEnabled, passKey, otpEnabled, isAdmin, needKey}) => {
+    .then(({isAdmin, needKey}) => {
       this.accountEmail_ = this.emailInput_.value;
-      this.mfaEnabled_ = mfaEnabled;
-      this.passKey_ = passKey;
-      this.otpEnabled_ = otpEnabled;
       this.isAdmin_ = isAdmin;
       document.querySelector('#loggedin-account').textContent = this.emailInput_.value;
       this.passwordInput_.value = '';
@@ -2339,6 +2333,8 @@ class UI {
   }
 
   async showProfile_() {
+    const curr = await main.sendRPC('mfaStatus');
+
     const {content, close} = this.commonPopup_({
       title: _T('profile'),
       className: 'popup profile-popup',
@@ -2355,13 +2351,13 @@ class UI {
       if (newPass.value !== '' && newPass2.value !== '') {
         changed = true;
       }
-      if (mfa.checked !== this.mfaEnabled_) {
+      if (mfa.checked !== curr.mfaEnabled) {
         changed = true;
       }
-      if (passkey.checked !== this.passKey_) {
+      if (passkey.checked !== curr.passKey) {
         changed = true;
       }
-      if (otp.checked !== this.otpEnabled_ && (!otp.checked || form.querySelector('#profile-form-otp-code').value !== '')) {
+      if (otp.checked !== curr.otpEnabled && (!otp.checked || form.querySelector('#profile-form-otp-code').value !== '')) {
         changed = true;
       }
       for (let k of Object.keys(keyList)) {
@@ -2438,7 +2434,7 @@ class UI {
     const mfa = document.createElement('input');
     mfa.id = 'profile-form-enable-mfa';
     mfa.type = 'checkbox';
-    mfa.checked = this.mfaEnabled_;
+    mfa.checked = curr.mfaEnabled;
     mfa.addEventListener('change', () => {
       form.querySelectorAll('.hide-no-mfa').forEach(e => e.style.display = mfa.checked ? '' : 'none');
       onchange();
@@ -2469,9 +2465,9 @@ class UI {
     const otp = document.createElement('input');
     otp.id = 'profile-form-enable-otp';
     otp.type = 'checkbox';
-    otp.checked = this.otpEnabled_;
+    otp.checked = curr.otpEnabled;
     otp.addEventListener('change', () => {
-      if (otp.checked && !this.otpEnabled_) {
+      if (otp.checked && !curr.otpEnabled) {
         otp.disabled = true;
         main.sendRPC('generateOTP')
         .then(({key, img}) => {
@@ -2519,7 +2515,7 @@ class UI {
     passkey.id = 'profile-form-enable-passkey';
     passkey.className = 'hide-no-mfa';
     passkey.type = 'checkbox';
-    passkey.checked = this.passKey_;
+    passkey.checked = curr.passKey;
     passkey.addEventListener('change', () => {
       updateKeyList();
       onchange();
@@ -2612,7 +2608,7 @@ class UI {
         return;
       }
       const code = form.querySelector('#profile-form-otp-code');
-      if (otp.checked && !this.otpEnabled_ && !code?.value) {
+      if (otp.checked && !curr.otpEnabled && !code?.value) {
         this.popupMessage(_T('otp-code-required'));
         return;
       }
@@ -2655,9 +2651,6 @@ class UI {
       .then(() => {
         this.accountEmail_ = email.value;
         this.loggedInAccount_.textContent = email.value;
-        this.mfaEnabled_ = mfa.checked;
-        this.otpEnabled_ = otp.checked;
-        this.passKey_ = passkey.checked;
         close();
       })
       .catch(err => {

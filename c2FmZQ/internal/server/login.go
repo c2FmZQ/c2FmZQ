@@ -196,15 +196,6 @@ func (s *Server) handleLogin(req *http.Request) *stingle.Response {
 		AddPart("userId", fmt.Sprintf("%d", u.UserID)).
 		AddPart("isKeyBackedUp", u.IsBackup).
 		AddPart("homeFolder", u.HomeFolder)
-	if u.RequireMFA {
-		resp.AddPart("_mfaEnabled", "1")
-	}
-	if u.WebAuthnConfig.UsePasskey {
-		resp.AddPart("_passKey", "1")
-	}
-	if u.OTPKey != "" {
-		resp.AddPart("_otpEnabled", "1")
-	}
 	if u.Admin {
 		resp.AddPart("_admin", "1")
 	}
