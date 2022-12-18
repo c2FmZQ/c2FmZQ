@@ -1038,13 +1038,14 @@ class c2FmZQClient {
 
   /*
    */
-  async getCollections(/*clientId*/) {
+  async getCollections(clientId) {
     return new Promise(async resolve => {
+      let {url} = await this.getCover(clientId, 'gallery');
       let out = [
         {
           'collection': 'gallery',
           'name': 'gallery',
-          'cover': await this.getCover_('gallery'),
+          'cover': url,
           'isOwner': true,
           'isShared': false,
           'canAdd': true,
@@ -1065,10 +1066,11 @@ class c2FmZQClient {
           continue;
         }
         const a = this.db_.albums[n];
+        let {url} = await this.getCover(clientId, a.albumId);
         albums.push({
           'collection': a.albumId,
           'name': await this.decryptString_(a.encName),
-          'cover': await this.getCover_(a.albumId),
+          'cover': url,
           'members': a.members.map(m => {
             if (m === this.vars_.userId) return {userId: m, email: this.vars_.email, myself: true};
             if (m in this.db_.contacts) return {userId: m, email: this.db_.contacts[m].email};
@@ -1091,28 +1093,30 @@ class c2FmZQClient {
     });
   }
 
-  async getCover_(collection) {
-    let cover = '';
-    if (collection in this.db_.albums) {
-      cover = this.db_.albums[collection].cover;
-      if (cover === '__b__') {
-        return null;
-      }
+  async getCover(clientId, collection, opt_code) {
+    let code = opt_code;
+    if (code === undefined && collection in this.db_.albums) {
+      code = this.db_.albums[collection].cover;
     }
-    if (cover === '') {
+    if (code === '__b__') {
+      return {url:null, code:code};
+    }
+    let file = code || '';
+    if (file === '') {
       const idx = await store.get(`index/${collection}/000000`);
       if (idx?.files?.length > 0) {
-        cover = idx.files[0].file;
+        file = idx.files[0].file;
       }
     }
-    if (cover === '') {
-      return null;
+    if (file === '') {
+      return {url:null, code:code};
     }
-    const f = await this.getFile_(collection, cover);
+    const f = await this.getFile_(collection, file);
     if (!f) {
-      return null;
+      return {url:null, code:code};
     }
-    return this.getDecryptUrl_(f, true);
+    const url = await this.getDecryptUrl_(f, true);
+    return {url:url, code:code};
   }
 
   async getDecryptUrl_(f, isThumb) {
@@ -1688,6 +1692,7 @@ class c2FmZQClient {
           'getContacts',
           'getFiles',
           'getCollections',
+          'getCover',
           'getUpdates',
           'moveFiles',
           'emptyTrash',

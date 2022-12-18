@@ -650,10 +650,12 @@ class UI {
         {
           text: _T('upload-files'),
           onclick: this.showUploadView_.bind(this),
+          id: 'menu-upload-files',
         },
         {
           text: _T('create-collection'),
           onclick: () => this.collectionProperties_(),
+          id: 'menu-create-collection',
         },
       ],
     };
@@ -707,25 +709,6 @@ class UI {
         }
       }
       if (c.collection !== 'trash' && c.collection !== 'gallery') {
-        if (c.isOwner) {
-          params.items.push({
-            text: _T('default-cover'),
-            onclick: () => this.changeCover_(c.collection, ''),
-          });
-          params.items.push({
-            text: _T('no-cover'),
-            onclick: () => this.changeCover_(c.collection, '__b__'),
-          });
-          params.items.push({
-            text: _T('delete'),
-            onclick: () => this.deleteCollection_(c.collection),
-          });
-        } else {
-          params.items.push({
-            text: _T('leave'),
-            onclick: () => this.leaveCollection_(c.collection),
-          });
-        }
         params.items.push({
           text: _T('properties'),
           onclick: () => this.collectionProperties_(c),
@@ -736,6 +719,7 @@ class UI {
       }
     };
 
+    let currentCollection;
     for (let i in collections) {
       if (!collections.hasOwnProperty(i)) {
         continue;
@@ -770,12 +754,9 @@ class UI {
         this.switchView(c);
       });
       if (this.galleryState_.collection === c.collection) {
-        collectionName = c.name;
+        currentCollection = c;
         this.title_.textContent = c.name;
-        members = c.members;
         scrollTo = div;
-        isOwner = c.isOwner;
-        canAdd = c.canAdd;
         this.galleryState_.canDrag = c.isOwner || c.canCopy;
         this.galleryState_.isOwner = c.isOwner;
       }
@@ -802,7 +783,17 @@ class UI {
       cd.appendChild(div);
     }
 
-    if (isOwner || canAdd) {
+    if (this.galleryState_.collection !== 'gallery' && this.galleryState_.collection !== 'trash') {
+      const settingsButton = document.createElement('button');
+      settingsButton.id = 'settings-button';
+      settingsButton.textContent = '⚙';
+      settingsButton.addEventListener('click', () => {
+        this.collectionProperties_(currentCollection);
+      });
+      g.appendChild(settingsButton);
+    }
+
+    if (currentCollection.isOwner || currentCollection.canAdd) {
       const addDiv = document.createElement('div');
       addDiv.id = 'add-button';
       addDiv.textContent = '＋';
@@ -815,7 +806,7 @@ class UI {
     br.clear = 'all';
     g.appendChild(br);
     const h1 = document.createElement('h1');
-    h1.textContent = _T('collection:', collectionName);
+    h1.textContent = _T('collection:', currentCollection.name);
     if (this.galleryState_.collection === 'trash') {
       const button = document.createElement('button');
       button.className = 'empty-trash';
@@ -826,10 +817,10 @@ class UI {
       h1.appendChild(button);
     }
     g.appendChild(h1);
-    if (members?.length > 0) {
-      UI.sortBy(members, 'email');
+    if (currentCollection?.members?.length > 0) {
+      UI.sortBy(currentCollection.members, 'email');
       const div = document.createElement('div');
-      div.textContent = _T('shared-with', members.map(m => m.email).join(', '));
+      div.textContent = _T('shared-with', currentCollection.members.map(m => m.email).join(', '));
       g.appendChild(div);
     }
 
@@ -1155,35 +1146,34 @@ class UI {
   }
 
   async changeCover_(collection, cover) {
-    main.sendRPC('changeCover', collection, cover)
-    .then(() => {
-      this.refresh_();
-    })
-    .catch(e => {
-      this.showError_(e);
-    });
+    return main.sendRPC('changeCover', collection, cover)
+      .then(() => {
+        this.refresh_();
+      })
+      .catch(e => {
+        this.showError_(e);
+      });
   }
 
   async leaveCollection_(collection) {
-    this.prompt({message: _T('confirm-leave')})
+    return this.prompt({message: _T('confirm-leave')})
     .then(() => main.sendRPC('leaveCollection', collection))
-    .then(() => this.refresh_())
-    .catch(e => {
-      this.showError_(e);
+    .then(() => {
+      if (this.galleryState_.collection === collection) {
+        this.switchView({collection: 'gallery'});
+      }
+      this.refresh_();
     });
   }
 
   async deleteCollection_(collection) {
-    this.prompt({message: _T('confirm-delete')})
+    return this.prompt({message: _T('confirm-delete')})
     .then(() => main.sendRPC('deleteCollection', collection))
     .then(() => {
       if (this.galleryState_.collection === collection) {
         this.switchView({collection: 'gallery'});
       }
       this.refresh_();
-    })
-    .catch(e => {
-      this.showError_(e);
     });
   }
 
@@ -1640,6 +1630,10 @@ class UI {
         isShared: false,
       };
     }
+    let cover = null;
+    if (c.collection) {
+      cover = await main.sendRPC('getCover', c.collection);
+    }
     const contacts = await main.sendRPC('getContacts');
     const {content, close} = this.commonPopup_({
       title: _T('properties:', c.name !== '' ? c.name : _T('new-collection')),
@@ -1653,26 +1647,31 @@ class UI {
     const getChanges = () => {
       const changes = {};
       if (c.isOwner) {
-        const newName = content.querySelector('#collection-properties-name').value;
+        const currCode = cover ? cover.code : '';
+        const v = coverSelect.options[coverSelect.options.selectedIndex].value;
+        if (currCode !== v) {
+          changes.coverCode = v;
+        }
+        const newName = name.value;
         if (c.name !== newName) {
           changes.name = newName;
         }
-        const newShared = content.querySelector('#collection-properties-shared').checked;
+        const newShared = shared.checked;
         if (c.isShared !== newShared) {
           changes.shared = newShared;
         }
         if (!newShared) {
           return changes;
         }
-        const newCanAdd = content.querySelector('#collection-properties-perm-add').checked;
+        const newCanAdd = permAdd.checked;
         if (c.canAdd !== newCanAdd) {
           changes.canAdd = newCanAdd;
         }
-        const newCanCopy = content.querySelector('#collection-properties-perm-copy').checked;
+        const newCanCopy = permCopy.checked;
         if (c.canCopy !== newCanCopy) {
           changes.canCopy = newCanCopy;
         }
-        const newCanShare = content.querySelector('#collection-properties-perm-share').checked;
+        const newCanShare = permShare.checked;
         if (c.canShare !== newCanShare) {
           changes.canShare = newCanShare;
         }
@@ -1689,12 +1688,6 @@ class UI {
     };
 
     const onChange = () => {
-      const name = content.querySelector('#collection-properties-name');
-      if (name && name.value) {
-        name.value = name.value.replace(/^ *([^ ]*) */g, '$1');
-      }
-
-      const shared = content.querySelector('#collection-properties-shared');
       if (shared) {
         content.querySelectorAll('.sharing-setting').forEach(elem => {
           if (shared.checked) {
@@ -1704,11 +1697,9 @@ class UI {
           }
         });
       }
-
       const any = Object.keys(getChanges()).length > 0;
-      const elem = content.querySelector('#collection-properties-apply-button');
-      elem.disabled = !any;
-      elem.textContent = any ? _T('apply-changes') : _T('no-changes');
+      applyButton.disabled = !any;
+      applyButton.textContent = any ? _T('apply-changes') : _T('no-changes');
     };
 
     const applyChanges = async () => {
@@ -1717,15 +1708,15 @@ class UI {
         if (changes.name === undefined) {
           return false;
         }
-        c.collection = await main.sendRPC('createCollection', changes.name);
+        c.collection = await main.sendRPC('createCollection', changes.name.trim());
       } else if (changes.name !== undefined) {
-        await main.sendRPC('renameCollection', c.collection, changes.name);
+        await main.sendRPC('renameCollection', c.collection, changes.name.trim());
       }
 
       const perms = {
-        canAdd: c.isOwner ? content.querySelector('#collection-properties-perm-add').checked : c.canAdd,
-        canCopy: c.isOwner ? content.querySelector('#collection-properties-perm-copy').checked : c.canCopy,
-        canShare: c.isOwner ? content.querySelector('#collection-properties-perm-share').checked : c.canShare,
+        canAdd: c.isOwner ? permAdd.checked : c.canAdd,
+        canCopy: c.isOwner ? permCopy.checked : c.canCopy,
+        canShare: c.isOwner ? permShare.checked : c.canShare,
       };
 
       if (changes.shared === true || changes.add !== undefined) {
@@ -1743,30 +1734,112 @@ class UI {
       if (changes.canAdd !== undefined || changes.canCopy !== undefined || changes.canShare !== undefined) {
         await main.sendRPC('updatePermissions', c.collection, perms);
       }
+
+      if (changes.coverCode !== undefined) {
+        await main.sendRPC('changeCover', c.collection, changes.coverCode);
+      }
       close();
-      this.refresh_();
+      main.sendRPC('getUpdates')
+      .then(() => {
+        this.switchView(c);
+      });
     };
+
+    if (!c.create) {
+      const deleteButton = document.createElement('button');
+      deleteButton.id = 'collection-properties-delete';
+      deleteButton.textContent = '🗑';
+      deleteButton.addEventListener('click', () => {
+        if (c.isOwner) {
+          this.deleteCollection_(c.collection).then(() => close());
+        } else {
+          this.leaveCollection_(c.collection).then(() => close());
+        }
+      });
+      content.appendChild(deleteButton);
+    }
+
+    const coverLabel = document.createElement('div');
+    coverLabel.id = 'collection-properties-cover-label';
+    coverLabel.textContent = _T('cover');
+    content.appendChild(coverLabel);
+
+    const coverInput = document.createElement('div');
+    const imgDiv = document.createElement('div');
+    imgDiv.id = 'collection-properties-thumbdiv';
+    imgDiv.draggable = false;
+    imgDiv.addEventListener('dragstart', event => {
+      event.stopPropagation();
+      event.preventDefault();
+    }, true);
+    const sz = UI.px_(150);
+    if (cover) {
+      imgDiv.style.width = sz;
+      imgDiv.style.height = sz;
+    }
+    coverInput.appendChild(imgDiv);
+    const setImage = url => {
+      if (c.create) {
+        return;
+      }
+      while (imgDiv.firstChild) {
+        imgDiv.removeChild(imgDiv.firstChild);
+      }
+      const img = new Image();
+      img.id = 'collection-properties-thumb';
+      img.draggable = false;
+      img.src = url ? url : 'clear.png';
+      img.style.height = sz;
+      imgDiv.appendChild(img);
+    };
+    setImage(cover?.url);
+
+    let coverSelect;
+    if (c.isOwner) {
+      coverSelect = document.createElement('select');
+      coverSelect.id = 'collection-properties-cover';
+      const opts = [
+        {code:'', label:_T('cover-latest')},
+        {code:'__b__', label:_T('cover-blank')},
+      ];
+      if (cover !== null && cover.code !== '' && cover.code !== '__b__') {
+        opts.push({code:cover.code, label:_T('cover-selected')});
+      }
+      let currCode = cover ? cover.code : '';
+      for (let opt of opts) {
+        let e = document.createElement('option');
+        e.value = opt.code;
+        e.textContent = opt.label;
+        e.selected = currCode === e.value;
+        coverSelect.appendChild(e);
+      }
+      coverSelect.addEventListener('change', () => {
+        if (c.collection) {
+          main.sendRPC('getCover', c.collection, coverSelect.options[coverSelect.options.selectedIndex].value)
+          .then(cover => setImage(cover.url));
+          onChange();
+        }
+      });
+      coverInput.appendChild(coverSelect);
+    }
+    content.appendChild(coverInput);
 
     const nameLabel = document.createElement('div');
     nameLabel.id = 'collection-properties-name-label';
     nameLabel.textContent = _T('name');
     content.appendChild(nameLabel);
 
+    let name;
     if (c.isOwner) {
-      const name = document.createElement('input');
+      name = document.createElement('input');
       name.id = 'collection-properties-name';
       name.type = 'text';
       name.value = c.name;
-      name.addEventListener('change', onChange);
-      name.addEventListener('keyup', e => {
-        if (e.key === 'Enter') {
-          onChange();
-        }
-      });
+      name.addEventListener('keyup', onChange);
       content.appendChild(name);
       if (c.create) name.focus();
     } else {
-      const name = document.createElement('div');
+      name = document.createElement('div');
       name.id = 'collection-properties-name';
       name.textContent = c.name;
       content.appendChild(name);
@@ -1777,8 +1850,9 @@ class UI {
     sharedLabel.textContent = _T('shared');
     content.appendChild(sharedLabel);
 
+    let shared;
     if (c.isOwner) {
-      const shared = document.createElement('input');
+      shared = document.createElement('input');
       shared.id = 'collection-properties-shared';
       shared.type = 'checkbox';
       shared.checked = c.isShared;
@@ -2372,7 +2446,10 @@ class UI {
           changed = true;
         }
       }
+      newPass.placeholder = newPass.value !== '' || newPass2.value !== '' ? _T('required') : _T('optional');
+      newPass2.placeholder = newPass.placeholder;
       button.disabled = !changed;
+      button.textContent = changed ? _T('apply-changes') : _T('no-changes');
       addSkButton.textContent = passkey.checked ? _T('add-passkey') : _T('add-security-key');
     };
 
@@ -2410,6 +2487,7 @@ class UI {
     const newPass2 = document.createElement('input');
     newPass2.id = 'profile-form-new-password2';
     newPass2.type = 'password';
+    newPass2.placeholder = _T('optional');
     newPass2.autocomplete = 'new-password';
     newPass2.addEventListener('keyup', onchange);
     newPass2.addEventListener('change', onchange);
@@ -2586,7 +2664,7 @@ class UI {
 
     const button = document.createElement('button');
     button.id = 'profile-form-button';
-    button.textContent = _T('update');
+    button.textContent = _T('no-changes');
     button.disabled = true;
     button.addEventListener('click', async () => {
       if ((newPass.value !== '' || newPass2.value !== '') && newPass.value !== newPass2.value) {
@@ -2650,8 +2728,9 @@ class UI {
         otp.disabled = false;
         passkey.disabled = false;
         button.disabled = false;
-        button.textContent = _T('update');
+        button.textContent = _T('no-changes');
         delButton.disabled = false;
+        onchange();
       });
     });
     form.appendChild(button);
@@ -2682,6 +2761,7 @@ class UI {
         newPass2.disabled = false;
         button.disabled = false;
         delButton.disabled = false;
+        onchange();
       });
     });
     content.appendChild(delButton);
@@ -2941,10 +3021,11 @@ class UI {
     };
     const onchange = () => {
       saveButton.disabled = changes() === null;
+      saveButton.textContent = saveButton.disabled ? _T('no-changes') : _T('apply-changes');
     };
     const saveButton = document.createElement('button');
     saveButton.id = 'admin-console-save-button';
-    saveButton.textContent = _T('save-changes');
+    saveButton.textContent = _T('no-changes');
     saveButton.disabled = true;
     saveButton.addEventListener('click', () => {
       const c = changes();

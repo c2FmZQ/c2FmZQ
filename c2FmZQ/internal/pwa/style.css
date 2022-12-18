@@ -173,6 +173,11 @@ a {
   position: relative;
   top: 200px;
 }
+#settings-button {
+  position: absolute;
+  right: 0;
+  font-size: 12pt;
+}
 #messages {
   position: fixed;
   bottom: 0;
@@ -304,7 +309,9 @@ a {
   box-shadow: 5px 5px 5px black;
   max-width: 90vw;
   max-height: 90vh;
-  overflow-y: auto;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 .popup-header {
   border-bottom: 1px solid black;
@@ -437,13 +444,23 @@ a {
   align-items: start;
   overflow-y: auto;
 }
+#collection-properties-thumbdiv {
+  display: inline-flex;
+  flex-direction: column;
+  justify-content: center;
+  overflow: hidden;
+}
+#collection-properties-thumb {
+  border: 1px solid black;
+  object-fit: cover;
+}
+#collection-properties-delete {
+  position: absolute;
+  right: 0;
+}
 #collection-properties-name-label {
-  grid-row: 1 / 2;
-  grid-column: 1 / 2;
 }
 #collection-properties-name {
-  grid-row: 1 / 2;
-  grid-column: 2 / 3;
 }
 #collection-properties-perm {
   display: inline-flex;
@@ -464,7 +481,6 @@ a {
   overflow-y: auto;
   min-width: 75vw;
   max-width: 90vw;
-  max-height: 90vh;
 }
 #backup-phrase-value {
   border: 2px solid darkgray;
@@ -628,6 +644,7 @@ button.deleted-key {
   align-items: stretch;
   border: 1px solid black;
   flex: 0 1 auto;
+  width: 100%;
 }
 #admin-console-table>div:nth-child(-n+5) {
   font-weight: bold;

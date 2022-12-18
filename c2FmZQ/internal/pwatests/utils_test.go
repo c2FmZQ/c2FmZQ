@@ -36,8 +36,11 @@ import (
 	"github.com/tebeka/selenium/chrome"
 	slog "github.com/tebeka/selenium/log"
 
+	"c2FmZQ/internal/client"
+	"c2FmZQ/internal/crypto"
 	"c2FmZQ/internal/database"
 	"c2FmZQ/internal/log"
+	"c2FmZQ/internal/secure"
 	"c2FmZQ/internal/server"
 )
 
@@ -73,6 +76,20 @@ func startServer(t *testing.T) (*wrapper, func()) {
 	}
 }
 
+func newClient(t *testing.T) *client.Client {
+	dir := t.TempDir()
+	masterKey, err := crypto.CreateAESMasterKeyForTest()
+	if err != nil {
+		t.Fatalf("crypto.CreateAESMasterKeyForTest: %v", err)
+	}
+	storage := secure.NewStorage(dir, masterKey)
+	c, err := client.Create(masterKey, storage)
+	if err != nil {
+		t.Fatalf("client.Create: %v", err)
+	}
+	return c
+}
+
 func newWebDriver(t *testing.T, url string) *wrapper {
 	caps := selenium.Capabilities{"browserName": "chrome"}
 	caps.AddChrome(chrome.Capabilities{
@@ -92,6 +109,7 @@ func newWebDriver(t *testing.T, url string) *wrapper {
 	return &wrapper{
 		WebDriver: wd,
 		t:         t,
+		serverURL: url,
 		urlPrefix: prefix,
 	}
 }
@@ -100,8 +118,13 @@ type wrapper struct {
 	selenium.WebDriver
 
 	t               *testing.T
+	serverURL       string
 	urlPrefix       string
 	authenticatorID string
+}
+
+func (w *wrapper) ServerURL() string {
+	return w.serverURL
 }
 
 func (w *wrapper) enableWebauthn() error {
@@ -251,4 +274,30 @@ func (w *wrapper) waitPopupMessage(messages ...string) {
 		w.t.Fatalf("waitPopupMessage(%v): %v", messages, err)
 	}
 	w.waitGone(".popup-message")
+}
+
+func (w *wrapper) waitText(sel, value string) selenium.WebElement {
+	var elem selenium.WebElement
+	if err := w.Wait(func(wd selenium.WebDriver) (bool, error) {
+		elems, err := wd.FindElements(selenium.ByCSSSelector, sel)
+		if err != nil {
+			return false, nil
+		}
+		for _, e := range elems {
+			if t, err := e.Text(); err == nil || t == value {
+				elem = e
+				return true, nil
+			}
+		}
+		return false, nil
+	}); err != nil || elem == nil {
+		w.t.Fatalf("lwaitText(%q): %v", value, err)
+	}
+	return elem
+}
+
+func (w *wrapper) sleep(d time.Duration) {
+	w.WaitWithTimeout(func(wd selenium.WebDriver) (bool, error) {
+		return false, nil
+	}, d)
 }
