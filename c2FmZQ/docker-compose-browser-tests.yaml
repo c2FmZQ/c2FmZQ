@@ -22,7 +22,7 @@ services:
     #stdin_open: true
     user: "${USERID:-1000}"
     working_dir: "/home/user/src/c2FmZQ/c2FmZQ"
-    command: "go test -v -tags selenium -run=${TESTS:-.*} ./internal/pwatests/..."
+    command: "go test -v -failfast -tags selenium -run=${TESTS:-.*} ./internal/pwatests/..."
     environment:
      - HOME=/home/user
      - GOPATH=/home/user/go
