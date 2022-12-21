@@ -8,6 +8,7 @@
   * [Connecting the Stingle Photos app to this server](#stingle)
   * [Scale and performance](#scale)
   * [How to run the server](#run-server)
+  * [DEMO / test drive](#demo)
   * [Experimental features](#experimental)
     * [Progressive Web App (PWA)](#webapp)
     * [Multi-Factor Authentication](#mfa)
@@ -230,6 +231,21 @@ GOOS=darwin GOARCH=arm64 go build -o c2FmZQ-server-darwin
 
 ---
 
+## <a name="demo"></a>DEMO / test drive
+
+For DEMO or testing purpose, the server can be launched on a gitlab codespace.
+
+Create a [codespace](https://github.com/codespaces) for the `c2FmZQ/c2FmZQ` repository, open the terminal, and run:
+```
+cd c2FmZQ
+go run ./c2FmZQ-server --enable-webapp --passphrase=test
+```
+Select `Open in Browser` to open the PWA, or connect the android app to the same URL.
+
+Please note that this is **NOT** a secure configuration. Do not use this to store anything you care about.
+
+---
+
 ## <a name="experimental"></a>Experimental features
 
 The following features are experimental and could change or disappear in the future.
@@ -246,11 +262,7 @@ There are multiple ways to access the PWA:
 
 * Open your server URL in a browser: `https://${DOMAIN}/${path-prefix}/`. This requires `--enable-webapp` to be set on the server. Or,
 * Open https://c2fmzq.org/pwa/ and enter your server URL in the `Server` field. This works with or without `--enable-webapp`, Or,
-* Clone https://github.com/c2FmZQ/c2FmZQ.github.io, and publish it on your own web site, Or,
-* Try it in a github codespace. Create a [codespace](https://github.com/codespaces) for the `c2FmZQ/c2FmZQ` repository, open the terminal, and run:
-  * `cd c2FmZQ`
-  * `go run ./c2FmZQ-server --enable-webapp --passphrase=test`
-  * Select `Open in Browser`.
+* Clone https://github.com/c2FmZQ/c2FmZQ.github.io, and publish it on your own web site.
 
 Currently implemented:
 
