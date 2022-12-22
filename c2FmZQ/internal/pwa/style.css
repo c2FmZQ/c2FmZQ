@@ -235,6 +235,9 @@ a {
   position: fixed;
   top: 0;
 }
+#collections.noscroll {
+  overflow-x: hidden;
+}
 @keyframes slideDown {
   0% {opacity: 0; top: -75%;}
   100% {opacity: 1; top: 0;}
@@ -356,17 +359,27 @@ a {
 .context-menu {
   animation: fadeIn 0.25s;
   position: fixed;
-  border: 3px ridge lightgray;
-  padding: 0;
+  border: 1px solid black;
+  border-radius: 5px;
+  padding: 3px;
   background-color: white;
   z-index: 100;
   display: flex;
   flex-direction: column;
   min-width: 10em;
-  box-shadow: 2px 2px 5px black;
+  box-shadow: 1px 1px 4px darkgrey;
 }
 .context-menu-item:hover {
   background-color: lightgray;
+}
+button.context-menu-item {
+  text-align: left;
+  border: 0px;
+  border-radius: 5px;
+  background-color: white;
+}
+.context-menu-space {
+  height: 0.75em;
 }
 .blur {
   animation: fadeIn 0.25s;

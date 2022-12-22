@@ -414,12 +414,14 @@ class UI {
       ],
     };
     if (this.isAdmin_) {
+      params.items.push({});
       params.items.push({
         text: _T('admin-console'),
         onclick: this.showAdminConsole_.bind(this),
         id: 'account-menu-admin',
       });
     }
+    params.items.push({});
     params.items.push({
       text: _T('logout'),
       onclick: this.logout_.bind(this),
@@ -688,13 +690,26 @@ class UI {
     let canAdd = false;
 
     const showContextMenu = (event, c) => {
-      let params = { x: event.x, y: event.y, items: [] };
+      let params = {
+        x: event.x,
+        y: event.y,
+        items: [],
+      };
       if (this.galleryState_.collection !== c.collection) {
         params.items.push({
           text: _T('open'),
           onclick: () => this.switchView({collection: c.collection}),
         });
+      }
+      if (c.collection !== 'trash' && c.collection !== 'gallery') {
+        params.items.push({
+          text: _T('properties'),
+          onclick: () => this.collectionProperties_(c),
+        });
+      }
+      if (this.galleryState_.collection !== c.collection) {
         if ((this.galleryState_.collection !== 'trash' || c.collection === 'gallery') && this.galleryState_.content.files.some(f => f.selected)) {
+          params.items.push({});
           const f = this.galleryState_.content.files.find(f => f.selected);
           if (this.galleryState_.collection !== 'trash') {
             params.items.push({
@@ -707,12 +722,6 @@ class UI {
             onclick: () => this.moveFiles_({file: f.file, collection: f.collection, move: true}, c.collection),
           });
         }
-      }
-      if (c.collection !== 'trash' && c.collection !== 'gallery') {
-        params.items.push({
-          text: _T('properties'),
-          onclick: () => this.collectionProperties_(c),
-        });
       }
       if (params.items.length > 0) {
         this.contextMenu_(params);
@@ -871,12 +880,17 @@ class UI {
     }
 
     const showContextMenu = (event, f) => {
-      let params = { x: event.x, y: event.y, items: [] };
+      let params = {
+        x: event.x,
+        y: event.y,
+        items: [],
+      };
       params.items.push({
         text: _T('open'),
         onclick: () => this.setUpPopup_(f),
       });
       if (f.isImage && (this.galleryState_.isOwner || this.galleryState_.canAdd)) {
+        params.items.push({});
         params.items.push({
           text: _T('edit'),
           onclick: () => this.showEdit_(f),
@@ -887,7 +901,14 @@ class UI {
         onclick: f.select,
       });
       if (this.galleryState_.isOwner) {
+        if (f.collection !== 'trash' && f.collection !== 'gallery') {
+          params.items.push({
+            text: _T('use-as-cover'),
+            onclick: () => this.changeCover_(f.collection, f.file),
+          });
+        }
         if (this.galleryState_.collection !== 'trash') {
+          params.items.push({});
           params.items.push({
             text: _T('move-to-trash'),
             onclick: () => this.prompt({message: _T('confirm-move-to-trash')}).then(() => this.moveFiles_({file: f.file, collection: f.collection, move: true}, 'trash')),
@@ -897,15 +918,10 @@ class UI {
             text: _T('move-to-gallery'),
             onclick: () => this.prompt({message: _T('confirm-move-to-gallery')}).then(() => this.moveFiles_({file: f.file, collection: f.collection, move: true}, 'gallery')),
           });
+          params.items.push({});
           params.items.push({
             text: _T('delete-perm'),
             onclick: () => this.prompt({message: _T('confirm-delete-perm')}).then(() => this.deleteFiles_({file: f.file, collection: f.collection})),
-          });
-        }
-        if (f.collection !== 'trash' && f.collection !== 'gallery') {
-          params.items.push({
-            text: _T('use-as-cover'),
-            onclick: () => this.changeCover_(f.collection, f.file),
           });
         }
       }
@@ -1191,6 +1207,9 @@ class UI {
     menu.addEventListener('contextmenu', event => {
       event.preventDefault();
     });
+    const point = document.createElement('img');
+    point.style.position = 'absolute';
+    menu.appendChild(point);
 
     let closeMenu;
     const handleEscape = e => {
@@ -1204,53 +1223,92 @@ class UI {
         closeMenu();
       }
     };
-    document.addEventListener('keyup', handleEscape);
     setTimeout(() => {
-      document.addEventListener('click', handleClickOutside, true);
+      this.setGlobalEventHandlers([
+        ['keyup', handleEscape],
+        ['click', handleClickOutside, true],
+      ]);
     });
 
-    const g = document.querySelector('#gallery');
+    const body = document.querySelector('body');
+    const collections = document.querySelector('#collections');
+    body.classList.add('noscroll');
+    collections.classList.add('noscroll');
+    let once = false;
     closeMenu = () => {
+      if (once) return;
+      once = true;
       this.closeContextMenu_ = null;
+      body.classList.remove('noscroll');
+      collections.classList.remove('noscroll');
       // Remove handlers.
-      document.removeEventListener('keyup', handleEscape);
-      document.removeEventListener('click', handleClickOutside, true);
+      this.setGlobalEventHandlers(null);
       menu.style.animation = 'fadeOut 0.25s';
       menu.addEventListener('animationend', () => {
         try {
-          g.removeChild(menu);
+          body.removeChild(menu);
         } catch (e) {}
       });
       closeMenu = () => null;
     };
 
     for (let i = 0; i < params.items.length; i++) {
-      const item = document.createElement('button');
+      if (!params.items[i].text) {
+        const space = document.createElement('div');
+        space.className = 'context-menu-space';
+        space.innerHTML = '&nbsp;';
+        menu.appendChild(space);
+        continue;
+      }
+      const item = document.createElement(params.items[i].onclick ? 'button' : 'div');
       item.className = 'context-menu-item';
       item.textContent = params.items[i].text;
       if (params.items[i].id) {
         item.id = params.items[i].id;
       }
-      item.addEventListener('click', e => {
-        closeMenu();
-        if (params.items[i].onclick) {
-          params.items[i].onclick();
-        }
-      });
+      if (params.items[i].onclick) {
+        item.addEventListener('click', e => {
+          closeMenu();
+          if (params.items[i].onclick) {
+            params.items[i].onclick();
+          }
+        });
+      }
       menu.appendChild(item);
     }
+    body.appendChild(menu);
 
-    g.appendChild(menu);
+    let up, left;
     if (x > window.innerWidth / 2) {
+      left = true;
       x -= menu.offsetWidth + 30;
     } else {
       x += 30;
     }
     if (y > window.innerHeight / 2) {
+      up = true;
       y -= menu.offsetHeight + 10;
     } else {
       y += 10;
     }
+    if (up && !left) {
+      point.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAABmJLR0QA4ADgAODYf054AAAAg0lEQVRIx7XVQRKAIAxD0eT+h647HAeQpjSs9X1GxgJ4V9CJRwToxAFYAgN3BD54d2DCOwNLvCuwxTsCv/ht4IjfBFJ4NZDGKwEJVwMyrgRKeDZQxjOB+s7JY0A/UHLaPK9+IvL4RSjPlsUulTNYj1wR3T38XnNk10gZL4bpnhh4wLQeewpX1wE0L8gAAAAASUVORK5CYII=';
+      point.style.left = '-24px';
+      point.style.top = (menu.offsetHeight-26) + 'px';
+    } else if (up && left) {
+      point.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAABmJLR0QA4ADgAODYf054AAAAj0lEQVRIx7XSSw6AIAwE0Onc/851I8YgYL9dKYy+pgAAisaiqqITIQB0IhwPXQjfLx0I54VqhKvFSoS7jSqEp80KhH+BLEJLKIPQGowi9IQjCL0deRFG5upBGL0dVkRG6P7AXSIy/rMFnqam7kqQnayLcYQQsY7cgq0QiZzvCZsRQa6Wo3wjWeAIApBq4INdkLZW6dJ0VgoAAAAASUVORK5CYII=';
+      point.style.left = (menu.offsetWidth-2) + 'px';
+      point.style.top = (menu.offsetHeight-26) + 'px';
+    } else if (!up && left) {
+      point.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAABmJLR0QA4ADgAODYf054AAAAh0lEQVRIx7XWMRLAIAhE0d1M7n9l0kQnJkoAgZLifewk6kYAgBXoY8hMUERulf147qANHE8eXWagK1wLTJ+uzQx/L8QDWvC2lAhqwQHgjMIWHACOSjwcsOKhgAd3B7y4KxDBzYEobgrs4L+BXVwNZODLQBY+DWTin0A2PgQq8B6owlc/gdS5AJl7HmCcZQWCAAAAAElFTkSuQmCC';
+      point.style.left = (menu.offsetWidth-2) + 'px';
+      point.style.top = '-2px';
+    } else {
+      point.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAABmJLR0QA4ADgAODYf054AAAAlElEQVRIx7XV3QqAIAwF4LP3f+h1kQTTpvs5ChHE6nOYRwDQcV0ZMu7qPKcBAKCqryMiYIHzix9iiiwoHcBFqphXsEUc7Pd7uxmEkFN3pxbTyIxFFqyMZP6IeieJ2hKS3UD5hS90nUKqERBGOqEW24zNsDwijFjeZxcp9l2EdrC4UU8+IReEDSzIDcAev7g3WikcRh7lLVfXPzJ76wAAAABJRU5ErkJggg==';
+      point.style.left = '-24px';
+      point.style.top = '-2px';
+    }
+
     menu.style.left = x + 'px';
     menu.style.top = y + 'px';
     window.setTimeout(closeMenu, 10000);
