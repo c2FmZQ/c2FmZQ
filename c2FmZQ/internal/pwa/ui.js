@@ -517,6 +517,36 @@ class UI {
     this.emailInput_.focus();
   }
 
+  bitScroll_() {
+    const body = document.querySelector('body');
+    const div = document.createElement('div');
+    div.id = 'bit-scroller';
+    const a = document.createElement('div');
+    const b = document.createElement('div');
+    const c = document.createElement('div');
+    div.appendChild(a);
+    div.appendChild(b);
+    div.appendChild(c);
+    body.appendChild(div);
+
+    const spin = ['⨁','⨂'];
+    const cr = ['▀','▄'];
+    const r = () => Math.floor(Math.random()*2);
+    let count = 0;
+    for (let i = 0; i < 16; i++) {
+      a.textContent += cr[r()];
+    }
+    const id = window.setInterval(() => {
+      a.textContent = cr[r()] + a.textContent.substring(0, 15);
+      b.textContent = spin[count++ % spin.length];
+      c.textContent = cr[r()] + c.textContent.substring(0, 15);
+    }, 100);
+    return () => {
+      window.clearInterval(id);
+      body.removeChild(div);
+    };
+  }
+
   async login_() {
     if (this.selectedTab_ !== 'login' && this.passwordInput_.value !== this.passwordInput2_.value) {
       this.popupMessage(_T('new-pass-doesnt-match'));
@@ -553,7 +583,8 @@ class UI {
       enableNotifications: this.enableNotifications,
     };
     this.backupPhraseInput_.value = this.backupPhraseInput_.value.replaceAll(/./g, 'X');
-    return main.sendRPC(this.tabs_[this.selectedTab_].rpc, args)
+    const done = this.bitScroll_();
+    return main.sendRPC(this.tabs_[this.selectedTab_].rpc, args).finally(done)
     .then(({isAdmin, needKey}) => {
       this.accountEmail_ = this.emailInput_.value;
       this.isAdmin_ = isAdmin;

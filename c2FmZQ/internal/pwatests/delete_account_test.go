@@ -22,6 +22,7 @@ package pwa_test
 
 import (
 	"testing"
+	"time"
 )
 
 func TestDeleteAccount(t *testing.T) {
@@ -44,6 +45,8 @@ func TestDeleteAccount(t *testing.T) {
 	wd.click("#account-menu-profile")
 	wd.click("#profile-form-delete-button")
 	wd.sendKeys(".prompt-input", "foobar\n")
+
+	wd.sleep(2 * time.Second)
 
 	wd.waitFor("#loggedout-div")
 	wd.click("#login-tab")

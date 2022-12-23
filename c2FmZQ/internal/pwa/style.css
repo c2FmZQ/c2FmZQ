@@ -194,6 +194,32 @@ a {
   box-shadow: 5px 5px 5px black;
   max-width: 80vw;
 }
+#bit-scroller {
+  position: fixed;
+  left: 50vw;
+  top: 75vh;
+  transform: translate(-50%, 0);
+  white-space: nowrap;
+  font-size: 80%;
+  font-family: monospace;
+  letter-spacing: 0.5em;
+  overflow: hidden;
+  opacity: 0.2;
+  display: grid;
+  grid-template-columns: 10vw 1fr 10vw;
+  align-items: center;
+  column-gap: 2em;
+}
+#bit-scroller>div:nth-child(1) {
+  justify-self: end;
+}
+#bit-scroller>div:nth-child(2) {
+  justify-self: center;
+  font-size: 300%;
+}
+#bit-scroller>div:nth-child(3) {
+  justify-self: start;
+}
 #loggedout-div {
   position: fixed;
   left: 50%;
