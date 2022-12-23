@@ -728,6 +728,9 @@ class UI {
       if (c.collection === 'trash' && this.galleryState_.collection !== c.collection) {
         continue;
       }
+      if (!currentCollection) {
+        currentCollection = c;
+      }
       if (c.name === 'gallery' || c.name === 'trash') {
         c.name = _T(c.name);
       }
