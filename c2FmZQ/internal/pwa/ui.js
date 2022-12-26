@@ -450,7 +450,7 @@ class UI {
 
     const container = document.querySelector('#popup-messages');
     const remove = () => {
-      div.style.animation = 'slideOut 1s';
+      div.style.animation = '1s linear slideOut';
       div.addEventListener('animationend', () => {
         try {
           container.removeChild(div);
@@ -896,21 +896,27 @@ class UI {
     return ''+Math.floor(n / window.devicePixelRatio)+'px';
   }
 
+  async maybeGetMoreFiles_(count) {
+    const max = Math.min(count, this.galleryState_.content.total);
+    if (max <= this.galleryState_.content.files.length) {
+      return this.galleryState_.content.files.length;
+    }
+    return main.sendRPC('getFiles', this.galleryState_.collection, this.galleryState_.content.files.length)
+      .then(ff => {
+        this.galleryState_.content.files.push(...ff.files);
+        return this.galleryState_.content.files.length;
+      });
+  }
+
   async showMoreFiles_(n) {
     if (!this.galleryState_.content) {
       return;
     }
+    const max = await this.maybeGetMoreFiles_(this.galleryState_.shown + n);
     const g = document.querySelector('#gallery');
-    const max = Math.min(this.galleryState_.shown + n, this.galleryState_.content.total);
 
-    if (max > this.galleryState_.content.files.length) {
-      let ff = await main.sendRPC('getFiles', this.galleryState_.collection, this.galleryState_.content.files.length);
-      if (ff) {
-        this.galleryState_.content.files.push(...ff.files);
-      }
-    }
-
-    const showContextMenu = (event, f) => {
+    const showContextMenu = (event, i) => {
+      const f = this.galleryState_.content.files[i];
       let params = {
         x: event.x,
         y: event.y,
@@ -918,7 +924,7 @@ class UI {
       };
       params.items.push({
         text: _T('open'),
-        onclick: () => this.setUpPopup_(f),
+        onclick: () => this.setUpPopup_(i),
       });
       if (f.isImage && (this.galleryState_.isOwner || this.galleryState_.canAdd)) {
         params.items.push({});
@@ -992,20 +998,22 @@ class UI {
       f.elem.classList.remove('dragging');
       document.querySelector('#collections').classList.remove('fixed');
     };
-    const click = (f, event) => {
+    const click = (i, event) => {
       if (event.shiftKey || this.galleryState_.content.files.some(f => f.selected)) {
-        return f.select();
+        return this.galleryState_.content.files[i].select();
       }
-      this.setUpPopup_(f);
+      this.setUpPopup_(i);
     };
-    const contextMenu = (f, event) => {
+    const contextMenu = (i, event) => {
       event.preventDefault();
-      showContextMenu(event, f);
+      showContextMenu(event, i);
       // chrome bug
+      const f = this.galleryState_.content.files[i];
       f.elem.classList.remove('dragging');
     };
 
-    for (let i = this.galleryState_.shown; i < this.galleryState_.content.files.length && i < max; i++) {
+    const last = Math.min(this.galleryState_.shown + n, max);
+    for (let i = this.galleryState_.shown; i < last; i++) {
       this.galleryState_.shown++;
       const f = this.galleryState_.content.files[i];
       const date = (new Date(f.dateCreated)).toLocaleDateString(undefined, {weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'});
@@ -1038,10 +1046,10 @@ class UI {
       }
 
       d.draggable = true;
-      d.addEventListener('click', e => click(f, e));
+      d.addEventListener('click', e => click(i, e));
       d.addEventListener('dragstart', e => dragStart(f, e, img));
       d.addEventListener('dragend', e => dragEnd(f, e));
-      d.addEventListener('contextmenu', e => contextMenu(f, e));
+      d.addEventListener('contextmenu', e => contextMenu(i, e));
 
       g.appendChild(d);
     }
@@ -1490,7 +1498,6 @@ class UI {
 
   commonPopup_(params) {
     const popup = document.createElement('div');
-    const popupBlur = document.createElement('div');
     const popupHeader = document.createElement('div');
     const popupName = document.createElement('div');
     const popupClose = document.createElement('div');
@@ -1498,8 +1505,10 @@ class UI {
     const popupInfo = document.createElement('div');
 
     popupContent.className = 'popup-content';
+    if (params.content) {
+      popupContent.appendChild(params.content);
+    }
     popup.className = params.className || 'popup';
-    popupBlur.className = 'blur';
     popupHeader.className = 'popup-header';
     popupName.className = 'popup-name';
     popupName.textContent = params.title || 'Title';
@@ -1516,7 +1525,6 @@ class UI {
     popup.appendChild(popupHeader);
     popup.appendChild(popupContent);
 
-    let closePopup;
     const handleClickClose = () => {
       closePopup();
     };
@@ -1534,25 +1542,51 @@ class UI {
     // Add handlers.
     popupClose.addEventListener('click', handleClickClose);
     setTimeout(() => {
-      this.setGlobalEventHandlers([
-        ['keyup', handleEscape],
-        ['click', handleClickOutside, true],
-      ]);
+      const handlers = params.handlers || [];
+      handlers.push(['keyup', handleEscape]);
+      handlers.push(['click', handleClickOutside, true]);
+      this.setGlobalEventHandlers(handlers);
     });
 
     const body = document.querySelector('body');
     const g = document.querySelector('#gallery');
-    closePopup = () => {
+
+    if (!this.popupBlur_ || this.popupBlur_.depth <= 0) {
+      this.popupBlur_ = {
+        depth: 0,
+        elem: document.createElement('div'),
+      };
+      this.popupBlur_.elem.className = 'blur';
+      g.appendChild(this.popupBlur_.elem);
+    }
+    this.popupBlur_.depth++;
+
+    const closePopup = opt_slide => {
       // Remove handlers.
       popupClose.removeEventListener('click', handleClickClose);
       this.setGlobalEventHandlers(null);
-      popup.style.animation = 'fadeOut 0.25s';
+      popup.style.width = '' + popup.offsetWidth + 'px';
+      switch (opt_slide) {
+        case 'left':
+          popup.style.animation = '0.5s linear slideOutLeft';
+          break;
+        case 'right':
+          popup.style.animation = '0.5s linear slideOutRight';
+          break;
+        default:
+          popup.style.animation = '0.25s linear fadeOut';
+          break;
+      }
       popup.addEventListener('animationend', () => {
         g.removeChild(popup);
-      });
-      popupBlur.style.animation = 'fadeOut 0.25s';
-      popupBlur.addEventListener('animationend', () => {
-        g.removeChild(popupBlur);
+        if (--this.popupBlur_.depth <= 0) {
+          const elem = this.popupBlur_.elem;
+          this.popupBlur_.elem = null;
+          elem.style.animation = 'fadeOut 0.25s';
+          elem.addEventListener('animationend', () => {
+            g.removeChild(elem);
+          });
+        }
       });
       if (params.onclose) {
         params.onclose();
@@ -1560,20 +1594,162 @@ class UI {
       body.classList.remove('noscroll');
     };
     body.classList.add('noscroll');
-    g.appendChild(popupBlur);
     g.appendChild(popup);
+    popup.style.width = '' + popup.offsetWidth + 'px';
+    switch (params.slide) {
+      case 'left':
+        popup.style.animation = '0.5s linear slideInLeft';
+        break;
+      case 'right':
+        popup.style.animation = '0.5s linear slideInRight';
+        break;
+      default:
+        popup.style.animation = '0.25s linear fadeIn';
+        break;
+    }
+    popup.addEventListener('animationend', () => {
+      popup.style.width = '';
+      popup.style.animation = '';
+    });
     return {popup: popup, content: popupContent, close: closePopup, info: popupInfo};
   }
 
-  setUpPopup_(f) {
-    const {content, info} = this.commonPopup_({title: f.fileName, showInfo: true});
+  preload_(url) {
+    if (!this.recentImages_) {
+      this.recentImages_ = {
+        byUrl: {},
+        byTime: [],
+      };
+    }
+    if (this.recentImages_.byUrl[url]) {
+      if (this.recentImages_.byTime.length > 1) {
+        const i = this.recentImages_.byTime.findIndex(u => u === url);
+        const j = this.recentImages_.byTime.length-1;
+        this.recentImages_.byTime[i] = this.recentImages_.byTime[j];
+        this.recentImages_.byTime[j] = url;
+      }
+      return this.recentImages_.byUrl[url];
+    }
+    const img = new Image();
+    img.decoding = 'async';
+    img.src = url;
+    img.decode().catch(() => {
+      delete this.recentImages_.byUrl[url];
+    });
+    if (this.recentImages_.byTime.length >= 10) {
+      const u = this.recentImages_.byTime.shift();
+      delete this.recentImages_.byUrl[u];
+    }
+    this.recentImages_.byTime.push(url);
+    this.recentImages_.byUrl[url] = img;
+    return img;
+  }
+
+  async setUpPopup_(i, opt_slide) {
+    const f = this.galleryState_.content.files[i];
+    const max = await this.maybeGetMoreFiles_(i+2);
+    const goLeft = () => {
+      close('right');
+      if (i > 0) {
+        this.setUpPopup_(i-1, 'right');
+      }
+    };
+    const goRight = () => {
+     close('left');
+     if (i+1 < max) {
+        this.setUpPopup_(i+1, 'left');
+      }
+    };
+    const onkeyup = e => {
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+        e.stopPropagation();
+        goLeft();
+      } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+        e.stopPropagation();
+        goRight();
+      }
+    };
+    let touchX;
+    let touchY;
+    const ontouchstart = event => {
+      if (!event.changedTouches.length) {
+        return;
+      }
+      touchX = event.changedTouches[0].clientX;
+      touchY = event.changedTouches[0].clientY;
+    };
+    const ontouchmove = event => {
+      if (!touchX || !touchY || !event.changedTouches.length) {
+        return;
+      }
+      event.stopPropagation();
+      event.preventDefault();
+      const dx = event.changedTouches[0].clientX - touchX;
+      const dy = event.changedTouches[0].clientY - touchY;
+      if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > Math.min(content.offsetWidth / 4, 200)) {
+        touchX = null;
+        touchY = null;
+        if (dx < 0) goRight();
+        if (dx > 0) goLeft();
+      }
+    };
+    const params = {
+      title: f.fileName,
+      showInfo: true,
+      slide: opt_slide,
+      handlers: [
+        ['keyup', onkeyup],
+        ['touchstart', ontouchstart, {capture:true,passive:false}],
+        ['touchmove', ontouchmove, {capture:true,passive:false}],
+      ],
+    };
+    for (let j = i - 1; j <= i + 1; j++) {
+      if (j >= 0 && j < max && this.galleryState_.content.files[j].isImage) {
+        this.preload_(this.galleryState_.content.files[j].url);
+      }
+    }
+    let img;
     if (f.isImage) {
-      content.classList.add('image-popup');
-      const img = new Image();
+      img = this.preload_(f.url);
       img.className = 'popup-media';
       img.alt = f.fileName;
-      img.src = f.url;
-      content.appendChild(img);
+      params.content = img;
+    } else if (f.isVideo) {
+      const video = document.createElement('video');
+      video.className = 'popup-media';
+      video.src = f.url;
+      video.poster = f.thumbUrl;
+      video.controls = 'controls';
+      params.content = video;
+    } else {
+      const anchor = document.createElement('a');
+      anchor.href = f.url;
+      anchor.target = '_blank';
+      anchor.textContent = _T('open-doc');
+      params.content = anchor;
+    }
+    const {content, close, info} = this.commonPopup_(params);
+    content.draggable = false;
+    content.addEventListener('dragstart', event => {
+      event.stopPropagation();
+      event.preventDefault();
+    }, true);
+    if (i > 0) {
+      const leftButton = document.createElement('div');
+      leftButton.className = 'arrow left';
+      leftButton.textContent = '⬅️';
+      leftButton.addEventListener('click', goLeft);
+      content.appendChild(leftButton);
+    }
+    if (i+1 < max) {
+      const rightButton = document.createElement('div');
+      rightButton.className = 'arrow right';
+      rightButton.textContent = '➡️';
+      rightButton.addEventListener('click', goRight);
+      content.appendChild(rightButton);
+    }
+    if (f.isImage) {
+      content.classList.add('image-popup');
       let exifData;
       info.addEventListener('click', () => {
         if (exifData === undefined) {
@@ -1583,6 +1759,8 @@ class UI {
             exifData = EXIF.getAllTags(this);
             const div = document.createElement('div');
             div.className = 'exif-data';
+            div.style.maxHeight = '' + Math.floor(0.9*content.offsetHeight) + 'px';
+            div.style.maxWidth = '' + Math.floor(0.9*content.offsetWidth) + 'px';
             me.formatExif_(div, exifData);
             content.appendChild(div);
           });
@@ -1591,20 +1769,9 @@ class UI {
           if (e) e.classList.toggle('hidden');
         }
       });
-    } else if (f.isVideo) {
-      const video = document.createElement('video');
-      video.className = 'popup-media';
-      video.src = f.url;
-      video.poster = f.thumbUrl;
-      video.controls = 'controls';
-      content.appendChild(video);
-    } else {
-      const anchor = document.createElement('a');
-      anchor.href = f.url;
-      anchor.target = '_blank';
-      anchor.textContent = _T('open-doc');
+    }
+    if (!f.isImage && !f.isVideo) {
       content.classList.add('popup-download');
-      content.appendChild(anchor);
     }
   }
 
