@@ -67,6 +67,7 @@ func TestMFAWithSecurityKey(t *testing.T) {
 	t.Log("Logging out")
 	wd.click("#loggedin-account")
 	wd.click("#account-menu-logout")
+	wd.sleep(2 * time.Second)
 
 	t.Log("Logging in")
 	wd.waitFor("#loggedout-div")
@@ -96,6 +97,7 @@ func TestMFAWithSecurityKey(t *testing.T) {
 	t.Log("Logging out")
 	wd.click("#loggedin-account")
 	wd.click("#account-menu-logout")
+	wd.sleep(2 * time.Second)
 
 	t.Log("Recovering account")
 	wd.click("#recover-tab")
@@ -111,6 +113,7 @@ func TestMFAWithSecurityKey(t *testing.T) {
 	t.Log("Logging out")
 	wd.click("#loggedin-account")
 	wd.click("#account-menu-logout")
+	wd.sleep(2 * time.Second)
 
 	t.Log("Recovering account without webauthn")
 	wd.click("#recover-tab")
@@ -165,6 +168,7 @@ func TestMFAWithPasskey(t *testing.T) {
 	t.Log("Logging out")
 	wd.click("#loggedin-account")
 	wd.click("#account-menu-logout")
+	wd.sleep(2 * time.Second)
 
 	t.Log("Logging in")
 	wd.waitFor("#loggedout-div")
@@ -194,6 +198,7 @@ func TestMFAWithPasskey(t *testing.T) {
 	t.Log("Logging out")
 	wd.click("#loggedin-account")
 	wd.click("#account-menu-logout")
+	wd.sleep(2 * time.Second)
 
 	t.Log("Recovering account")
 	wd.click("#recover-tab")
@@ -209,6 +214,7 @@ func TestMFAWithPasskey(t *testing.T) {
 	t.Log("Logging out")
 	wd.click("#loggedin-account")
 	wd.click("#account-menu-logout")
+	wd.sleep(2 * time.Second)
 
 	t.Log("Recovering account without webauthn")
 	wd.click("#recover-tab")
@@ -266,6 +272,7 @@ func TestMFAWithOTP(t *testing.T) {
 	t.Log("Logging out")
 	wd.click("#loggedin-account")
 	wd.click("#account-menu-logout")
+	wd.sleep(2 * time.Second)
 
 	t.Log("Logging in")
 	wd.waitFor("#loggedout-div")
