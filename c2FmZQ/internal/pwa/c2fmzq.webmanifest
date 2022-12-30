@@ -1,7 +1,7 @@
 {
   "name": "c2FmZQ",
   "short_name": "c2FmZQ",
-  "start_url": "index.html",
+  "start_url": ".",
   "display": "standalone",
   "background_color": "#fff",
   "description": "c2FmZQ client",
