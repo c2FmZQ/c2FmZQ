@@ -1647,9 +1647,12 @@ class UI {
     const img = new Image();
     img.decoding = 'async';
     img.src = url;
-    img.decode().catch(() => {
-      delete this.recentImages_.byUrl[url];
-    });
+    img.readyp = img.decode()
+      .then(() => true)
+      .catch(() => {
+        delete this.recentImages_.byUrl[url];
+        return false;
+      });
     if (this.recentImages_.byTime.length >= 10) {
       const u = this.recentImages_.byTime.shift();
       delete this.recentImages_.byUrl[u];
@@ -1729,6 +1732,21 @@ class UI {
     let img;
     if (f.isImage) {
       img = this.preload_(f.url);
+      img.readyp.then(ok => {
+        if (ok) return;
+        img.onload = () => {
+          if (img.naturalHeight > img.naturalWidth) {
+            img.style.height = '75vh';
+          } else {
+            img.style.width = '75vw';
+          }
+        };
+        img.src = f.thumbUrl;
+        const t = document.createElement('div');
+        t.textContent = _T('network-error');
+        t.className = 'offline-overlay';
+        content.appendChild(t);
+      });
       img.className = 'popup-media';
       img.alt = f.fileName;
       params.content = img;

@@ -788,3 +788,12 @@ button.deleted-key {
 }
 .hide-no-mfa {
 }
+div.offline-overlay {
+  position: absolute;
+  bottom: 5px;
+  color: black;
+  background-color: yellow;
+  padding: 0.3em;
+  border: 1px solid black;
+  border-radius: 0.3em;
+}
