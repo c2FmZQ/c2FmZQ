@@ -369,7 +369,7 @@ class UI {
         if (needKey) {
           return this.promptForBackupPhrase_();
         }
-        return main.sendRPC('getUpdates')
+        return this.getUpdates_()
           .then(() => {
             this.showQuota_();
           })
@@ -596,7 +596,7 @@ class UI {
       if (needKey) {
         return this.promptForBackupPhrase_();
       }
-      return main.sendRPC('getUpdates')
+      return this.getUpdates_()
         .then(() => {
           this.showQuota_();
           this.refreshGallery_(true);
@@ -639,9 +639,17 @@ class UI {
     });
   }
 
+  async getUpdates_() {
+    return main.sendRPC('getUpdates')
+      .then(() => main.sendRPC('getCollections'))
+      .then(v => {
+        this.collections_ = v;
+      });
+  }
+
   async refresh_() {
     this.refreshButton_.disabled = true;
-    return main.sendRPC('getUpdates')
+    return this.getUpdates_()
       .then(this.refreshGallery_.bind(this, false))
       .catch(this.showError_.bind(this))
       .finally(() => {
@@ -696,13 +704,15 @@ class UI {
   }
 
   async refreshGallery_(scrollToTop) {
-    const collections = await main.sendRPC('getCollections');
     this.galleryState_.content = await main.sendRPC('getFiles', this.galleryState_.collection);
     if (!this.galleryState_.content) {
       this.galleryState_.content = {'total': 0, 'files': []};
     }
     const oldScrollLeft = document.querySelector('#collections')?.scrollLeft;
     const oldScrollTop = scrollToTop ? 0 : document.documentElement.scrollTop;
+    if (scrollToTop) {
+      document.documentElement.scrollTo(0, 0);
+    }
 
     const cd = document.querySelector('#collections');
     while (cd.firstChild) {
@@ -760,11 +770,11 @@ class UI {
     };
 
     let currentCollection;
-    for (let i in collections) {
-      if (!collections.hasOwnProperty(i)) {
+    for (let i in this.collections_) {
+      if (!this.collections_.hasOwnProperty(i)) {
         continue;
       }
-      const c = collections[i];
+      const c = this.collections_[i];
       if (!currentCollection || this.galleryState_.collection === c.collection) {
         currentCollection = c;
       }
@@ -869,7 +879,7 @@ class UI {
     this.galleryState_.lastDate = '';
     const n = Math.max(this.galleryState_.shown, SHOW_ITEMS_INCREMENT);
     this.galleryState_.shown = 0;
-    this.showMoreFiles_(n);
+    this.showMoreFiles_(n, oldScrollTop);
     if (scrollTo) {
       if (oldScrollLeft) {
         cd.scrollLeft = oldScrollLeft;
@@ -878,7 +888,6 @@ class UI {
         if (oldScrollLeft) cd.scrollLeft = oldScrollLeft;
         const left = Math.max(scrollTo.offsetLeft - (cd.offsetWidth - scrollTo.offsetWidth)/2, 0);
         cd.scrollTo({behavior: 'smooth', left: left});
-        document.documentElement.scrollTo({top: oldScrollTop, behavior: 'smooth'});
       }, 10);
     }
   }
@@ -900,14 +909,14 @@ class UI {
     if (max <= this.galleryState_.content.files.length) {
       return this.galleryState_.content.files.length;
     }
-    return main.sendRPC('getFiles', this.galleryState_.collection, this.galleryState_.content.files.length)
-      .then(ff => {
-        this.galleryState_.content.files.push(...ff.files);
-        return this.galleryState_.content.files.length;
-      });
+    while (this.galleryState_.content.files.length < max) {
+      let ff = await main.sendRPC('getFiles', this.galleryState_.collection, this.galleryState_.content.files.length);
+      this.galleryState_.content.files.push(...ff.files);
+    }
+    return this.galleryState_.content.files.length;
   }
 
-  async showMoreFiles_(n) {
+  async showMoreFiles_(n, opt_scrollTop) {
     if (!this.galleryState_.content) {
       return;
     }
@@ -1011,6 +1020,11 @@ class UI {
       f.elem.classList.remove('dragging');
     };
 
+    const scroll = () => {
+      if (opt_scrollTop && opt_scrollTop !== document.documentElement.scrollTop) {
+        document.documentElement.scrollTo(0, opt_scrollTop);
+      }
+    };
     const last = Math.min(this.galleryState_.shown + n, max);
     for (let i = this.galleryState_.shown; i < last; i++) {
       this.galleryState_.shown++;
@@ -1024,6 +1038,7 @@ class UI {
         g.appendChild(span);
       }
       const img = new Image();
+      img.onload = scroll;
       img.alt = f.fileName;
       img.src = f.thumbUrl;
       img.style.height = UI.px_(320);
@@ -2001,7 +2016,7 @@ class UI {
         await main.sendRPC('changeCover', c.collection, changes.coverCode);
       }
       close();
-      main.sendRPC('getUpdates')
+      this.getUpdates_()
       .then(() => {
         this.switchView(c);
       });
@@ -2364,16 +2379,14 @@ class UI {
   }
 
   async showUploadView_() {
-    const collections = await main.sendRPC('getCollections');
-
     let collectionName = '';
     let members = [];
 
-    for (let i in collections) {
-      if (!collections.hasOwnProperty(i)) {
+    for (let i in this.collections_) {
+      if (!this.collections_.hasOwnProperty(i)) {
         continue;
       }
-      const c = collections[i];
+      const c = this.collections_[i];
       if (this.galleryState_.collection === c.collection) {
         collectionName = c.name;
         members = c.members;
