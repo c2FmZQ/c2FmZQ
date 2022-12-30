@@ -349,14 +349,20 @@ class Main {
   }
 
   base64DecodeToBytes(v) {
-      v = v.replaceAll('-', '+').replaceAll('_', '/');
-      while (v.length % 4 !== 0) {
-            v += '=';
-          }
-      return base64.toByteArray(v);
+    if (typeof v !== 'string') {
+      throw new Error('base64DecodeToBytes arg not string');
+    }
+    v = v.replaceAll('-', '+').replaceAll('_', '/');
+    while (v && v.length % 4 !== 0) {
+      v += '=';
+    }
+    return base64.toByteArray(v);
   }
 
   base64RawUrlEncode(v) {
+    if (!(v instanceof Uint8Array)) {
+      throw new Error('base64RawUrlEncode arg not Uint8Array');
+    }
     return base64.fromByteArray(v).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
   }
 
