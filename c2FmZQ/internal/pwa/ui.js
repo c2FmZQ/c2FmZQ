@@ -1661,7 +1661,9 @@ class UI {
       }
     };
     const onkeyup = e => {
-      if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+      if (e.key === 'Enter') {
+        if (img) img.requestFullscreen();
+      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
         e.stopPropagation();
         goLeft();
       } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
@@ -1682,15 +1684,17 @@ class UI {
       if (!touchX || !touchY || !event.changedTouches.length) {
         return;
       }
-      event.stopPropagation();
-      event.preventDefault();
       const dx = event.changedTouches[0].clientX - touchX;
       const dy = event.changedTouches[0].clientY - touchY;
-      if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > Math.min(content.offsetWidth / 4, 200)) {
-        touchX = null;
-        touchY = null;
-        if (dx < 0) goRight();
-        if (dx > 0) goLeft();
+      if (Math.abs(dx) > Math.abs(dy)) {
+        event.stopPropagation();
+        event.preventDefault();
+        if (Math.abs(dx) > Math.min(content.offsetWidth / 4, 200)) {
+          touchX = null;
+          touchY = null;
+          if (dx < 0) goRight();
+          if (dx > 0) goLeft();
+        }
       }
     };
     const params = {
