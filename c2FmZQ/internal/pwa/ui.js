@@ -765,11 +765,11 @@ class UI {
         continue;
       }
       const c = collections[i];
-      if (c.collection === 'trash' && this.galleryState_.collection !== c.collection) {
-        continue;
-      }
-      if (!currentCollection) {
+      if (!currentCollection || this.galleryState_.collection === c.collection) {
         currentCollection = c;
+      }
+      if (c.collection === 'trash') {
+        continue;
       }
       if (c.name === 'gallery' || c.name === 'trash') {
         c.name = _T(c.name);
@@ -797,7 +797,6 @@ class UI {
         this.switchView(c);
       });
       if (this.galleryState_.collection === c.collection) {
-        currentCollection = c;
         this.title_.textContent = c.name;
         scrollTo = div;
         this.galleryState_.canDrag = c.isOwner || c.canCopy;
