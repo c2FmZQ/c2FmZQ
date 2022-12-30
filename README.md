@@ -214,7 +214,7 @@ GLOBAL OPTIONS:
    --passphrase value               Use value as database passphrase. [$C2FMZQ_PASSPHRASE]
    --htdigest-file FILE             The name of the htdigest FILE to use for basic auth for some endpoints, e.g. /metrics [$C2FMZQ_HTDIGEST_FILE]
    --max-concurrent-requests value  The maximum number of concurrent requests. (default: 10)
-   --enable-webapp                  Enable Progressive Web App. (default: false)
+   --enable-webapp                  Enable Progressive Web App. (default: true) [$C2FMZQ_ENABLE_WEBAPP]
    --licenses                       Show the software licenses. (default: false)
 ```
 
@@ -238,7 +238,7 @@ For DEMO or testing purpose, the server can be launched on a gitlab codespace.
 Create a [codespace](https://github.com/codespaces) for the `c2FmZQ/c2FmZQ` repository, open the terminal, and run:
 ```
 cd c2FmZQ
-go run ./c2FmZQ-server --enable-webapp --passphrase=test
+go run ./c2FmZQ-server --passphrase=test
 ```
 Select `Open in Browser` to open the PWA, or connect the android app to the same URL.
 
@@ -252,7 +252,7 @@ The following features are experimental and could change or disappear in the fut
 
 ### <a name="webapp"></a>Progressive Web App
 
-When the `--enable-webapp` flag is set on the server, it enables a Progressive Web Application
+When the `--enable-webapp` flag is set on the server (default), it enables a Progressive Web Application
 written entirely in HTML and javascript. All the cryptographic operations are performed
 in the browser using [Sodium-Plus](https://github.com/paragonie/sodium-plus)
 and [Secure webstore](https://github.com/AKASHAorg/secure-webstore), and the app

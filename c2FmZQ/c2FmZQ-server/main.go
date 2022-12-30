@@ -195,8 +195,9 @@ func main() {
 			},
 			&cli.BoolFlag{
 				Name:        "enable-webapp",
-				Value:       false,
+				Value:       true,
 				Usage:       "Enable Progressive Web App.",
+				EnvVars:     []string{"C2FMZQ_ENABLE_WEBAPP"},
 				Destination: &flagEnableWebApp,
 			},
 			&cli.BoolFlag{
