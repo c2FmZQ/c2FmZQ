@@ -24,9 +24,11 @@ self.importScripts('version.js');
 console.log(`SW Version ${VERSION}`, DEVEL ? 'DEVEL' : '');
 
 const MANIFEST = [
+  'c2fmzq.webmanifest',
   'c2fmzq-client.js',
   'c2.png',
   'c2-bg.png',
+  'c2-144x144.png',
   'clear.png',
   'index.html',
   'lang.js',

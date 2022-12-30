@@ -1,0 +1,21 @@
+{
+  "name": "c2FmZQ",
+  "short_name": "c2FmZQ",
+  "start_url": "index.html",
+  "display": "standalone",
+  "background_color": "#fff",
+  "description": "c2FmZQ client",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "c2.png",
+      "sizes": "64x64",
+      "type": "image/png"
+    },
+    {
+      "src": "c2-144x144.png",
+      "sizes": "144x144",
+      "type": "image/png"
+    }
+  ]
+}

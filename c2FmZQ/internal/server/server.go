@@ -25,6 +25,7 @@ import (
 	"encoding/json"
 	"net"
 	"net/http"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -168,6 +169,10 @@ func New(db *database.Database, addr, htdigest, pathPrefix string) *Server {
 		if err != nil {
 			http.NotFound(w, req)
 			return
+		}
+		switch filepath.Ext(p) {
+		case ".webmanifest":
+			w.Header().Set("Content-Type", "application/manifest+json")
 		}
 		http.ServeContent(w, req, p, startTime, bytes.NewReader(b))
 	})
