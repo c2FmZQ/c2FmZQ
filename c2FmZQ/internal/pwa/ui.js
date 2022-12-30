@@ -1735,10 +1735,13 @@ class UI {
       img.readyp.then(ok => {
         if (ok) return;
         img.onload = () => {
-          if (img.naturalHeight > img.naturalWidth) {
-            img.style.height = '75vh';
-          } else {
-            img.style.width = '75vw';
+          const ratio = img.naturalHeight / img.naturalWidth;
+          if (ratio > 1.0) {
+            const h = Math.floor(0.75 * Math.min(window.innerWidth * ratio, window.innerHeight));
+            img.style.height = `${h}px`;
+          } else if (ratio !== 0) {
+            const w = Math.floor(0.75 * Math.min(window.innerHeight / ratio, window.innerWidth));
+            img.style.width = `${w}px`;
           }
         };
         img.src = f.thumbUrl;
