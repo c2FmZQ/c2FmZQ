@@ -641,6 +641,9 @@ class UI {
 
   async getUpdates_() {
     return main.sendRPC('getUpdates')
+      .catch(err => {
+        this.showError_(err);
+      })
       .then(() => main.sendRPC('getCollections'))
       .then(v => {
         this.collections_ = v;
@@ -1020,7 +1023,8 @@ class UI {
       f.elem.classList.remove('dragging');
     };
 
-    const scroll = () => {
+    const scroll = event => {
+      event.target.style.width = '';
       if (opt_scrollTop && opt_scrollTop !== document.documentElement.scrollTop) {
         document.documentElement.scrollTo(0, opt_scrollTop);
       }
@@ -1038,10 +1042,11 @@ class UI {
         g.appendChild(span);
       }
       const img = new Image();
-      img.onload = scroll;
+      img.addEventListener('load', scroll);
       img.alt = f.fileName;
       img.src = f.thumbUrl;
       img.style.height = UI.px_(320);
+      img.style.width = UI.px_(240);
 
       const d = document.createElement('div');
       d.className = 'thumbdiv';
@@ -2643,7 +2648,7 @@ class UI {
               sy = Math.floor((img.height - sh) / 2);
             }
             ctx.drawImage(img, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
-            return resolve([canvas.toDataURL(file.type),0]);
+            return resolve([canvas.toDataURL('image/png'),0]);
           };
           img.onerror = err => reject(err);
           try {
