@@ -788,7 +788,14 @@ class c2FmZQClient {
           store.set('contacts', this.db_.contacts),
           Promise.all(Object.keys(changed).map(collection => this.indexCollection_(collection))),
         ];
-        return Promise.all(p);
+        return Promise.all(p)
+          .then(v => {
+            this.fetchMissingThumbnails_()
+            .catch(err => {
+              console.log('Error fetching thumbnails', err);
+            });
+            return v;
+          });
       })
       .finally(() => {
         this.gettingUpdates_ = false;
@@ -1657,7 +1664,14 @@ class c2FmZQClient {
     if (v !== 'encrypted') {
       await this.deletePrefix_('cache/');
     }
-    return this.saveVars_();
+    return this.saveVars_()
+      .then(v => {
+        this.fetchMissingThumbnails_()
+        .catch(err => {
+          console.log('Error fetching thumbnails', err);
+        });
+        return v;
+      });
   }
 
   async cachePreference() {
@@ -1667,6 +1681,86 @@ class c2FmZQClient {
   async ping() {
     console.log('SW ping');
     return true;
+  }
+
+  async fetchMissingThumbnails_() {
+    if (this.fetchingMissingThumbnails) {
+      return;
+    }
+    this.fetchingMissingThumbnails = true;
+    return this.fetchMissingThumbnailsNow_()
+      .finally(() => {
+        this.fetchingMissingThumbnails = false;
+      });
+  }
+
+  async fetchMissingThumbnailsNow_() {
+    if (this.vars_.cachePref && this.vars_.cachePref !== 'encrypted') {
+      return;
+    }
+    const keys = await store.keys();
+    const have = keys.filter(k => k.startsWith('cache/')).map(k => k.substring(6));
+    const set = {};
+    keys.filter(k => k.startsWith('files/')).map(k => {
+      const p = k.lastIndexOf('/');
+      const c = k.substring(6, p);
+      const f = k.substring(p+1);
+      set[f] = c;
+    });
+    for (let v of have) {
+      delete set[v];
+    }
+    const total = Object.keys(set).length;
+    if (total === 0) {
+      return;
+    }
+    let count = 0;
+    for (const [file, collection] of Object.entries(set)) {
+      if (++count % 10 === 0) {
+        console.log(`Downloading thumbnails: ${count}/${total}`);
+      }
+      await this.fetchThumbnail_(file, collection);
+      self.sendMessage('', {type: 'keep-alive'});
+    }
+    console.log(`Downloaded thumbnails: ${count}/${total}`);
+  }
+
+  async fetchThumbnail_(name, collection) {
+    if (this.vars_.cachePref && this.vars_.cachePref !== 'encrypted') {
+      throw new Error('caching disabled');
+    }
+    if (await store.get(`cache/${name}`)) {
+      return;
+    }
+    const file = await this.getFile_(collection, name);
+    if (!file) {
+      return;
+    }
+    const startOffset = file.headers[1].headerSize;
+    const strategy = new ByteLengthQueuingStrategy({
+      highWaterMark: 5*(file.headers[1].chunkSize+40),
+    });
+    const symKey = await sodiumKey(this.decrypt_(file.headers[1].encKey));
+    const chunkSize = file.headers[1].chunkSize;
+
+    return this.getContentUrl_({file:name,collection:collection,isThumb:true})
+    .then(url => {
+      return fetch(url, {
+        method: 'GET',
+        headers: {
+          range: `bytes=${startOffset}-`,
+        },
+        mode: SAMEORIGIN ? 'same-origin' : 'cors',
+        credentials: 'omit',
+        redirect: 'error',
+        referrerPolicy: 'no-referrer',
+      });
+    })
+    .then(resp => resp.body)
+    .then(rs => new ReadableStream(new Decrypter(rs.getReader(), symKey, chunkSize, 0, 0), strategy))
+    .then(rs => self.stream2blob(rs))
+    .then(body => body.arrayBuffer())
+    .then(data => store.set(`cache/${name}`, self.base64StdEncode(new Uint8Array(data))));
   }
 
   /*
@@ -1823,8 +1917,20 @@ class c2FmZQClient {
       const cachePref = await this.cachePreference();
       const useCache = cachePref === 'encrypted' && reqOffset === 0 && f.isThumb;
       if (useCache) {
-        const cached = await store.get(`cache/${f.file}`);
-        if (cached && Array.isArray(cached) && cached.length > 0) {
+        let cached;
+        try {
+          cached = await store.get(`cache/${f.file}`);
+          if (cached) {
+            cached = base64DecodeToBytes(cached);
+          }
+          if (cached.byteLength !== fileSize) {
+            throw new Error('corrupted');
+          }
+        } catch(err) {
+          await store.del(`cache/${f.file}`);
+          cached = null;
+        }
+        if (cached) {
           let h = {
             'accept-ranges': 'bytes',
             'cache-control': 'no-store, immutable',
@@ -1835,7 +1941,7 @@ class c2FmZQClient {
           } else {
             h['content-length'] = fileSize;
           }
-          resolve(new Response(new Blob([new Uint8Array(cached)]), {
+          resolve(new Response(new Blob([cached]), {
             'status': haveRange ? 206 : 200,
             'statusText': haveRange ? 'Partial Content' : 'OK',
             'headers': h,
@@ -1865,7 +1971,7 @@ class c2FmZQClient {
           rs = rs1;
           self.stream2blob(rs2)
             .then(body => body.arrayBuffer())
-            .then(data => store.set(`cache/${f.file}`, Array.from(new Uint8Array(data))));
+            .then(data => store.set(`cache/${f.file}`, self.base64StdEncode(new Uint8Array(data))));
         }
         let h = {
           'accept-ranges': 'bytes',

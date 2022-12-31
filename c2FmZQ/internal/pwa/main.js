@@ -131,6 +131,9 @@ class Main {
           ui.showUploadProgress(event.data.progress);
           navigator.serviceWorker.controller.postMessage({type: 'nop'});
           break;
+        case 'keep-alive':
+          navigator.serviceWorker.controller.postMessage({type: 'nop'});
+          break;
         case 'jumpto':
           console.log('Received jumpto', event.data.collection);
           this.sendRPC('getUpdates').finally(() => {
