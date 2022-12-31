@@ -57,6 +57,10 @@ class Main {
       this.salt_ = window.crypto.getRandomValues(new Uint8Array(16));
       window.localStorage.setItem('salt', this.base64RawUrlEncode(this.salt_));
     }
+    const sh = window.localStorage.getItem('sh');
+    if (sh) {
+      this.serverHashValue_ = this.base64DecodeToBytes(sh);
+    }
     navigator.serviceWorker.oncontrollerchange = () => {
       console.log('Controller Change');
       this.sendHello_();
@@ -187,35 +191,50 @@ class Main {
     });
   }
 
-  async calcServerFingerPrint(n) {
+  setServerFingerPrint(elemId) {
+    const elem = document.querySelector(elemId);
+    const fp = this.fingerPrint(this.serverHashValue_);
+    elem.textContent = fp;
+  }
+
+  async calcServerFingerPrint(n, elemId, commit) {
+    const elem = document.querySelector(elemId);
     try { 
       n = new URL(n).toString();
     } catch (err) {
+      if (elem) {
+        elem.textContent = '';
+      }
       return Promise.resolve('');
     }
     const data = new TextEncoder().encode(n);
     return window.crypto.subtle.digest('SHA-256', data)
       .then(b => {
         const a = new Uint8Array(b);
-        this.serverHashValue_ = a;
-        const map = 'BCDFHJMNPQRSTVWZbcdfhjmnpqrstvwz';
-        const h = [
-          (a[0]) & 0x1f,                  // bits 4, 3, 2, 1, 0
-          (a[1] << 3 | a[0] >> 5) & 0x1f, // bits 1, 0, 7, 6, 5
-          (a[1] >> 2) & 0x1f,             // bits 6, 5, 4, 3, 2
-          (a[2] << 1 | a[1] >> 7) & 0x1f, // bits 3, 2, 1, 0, 7
-          (a[3] << 4 | a[2] >> 4) & 0x1f, // bits 0, 7, 6, 5, 4
-          (a[3] >> 1) & 0x1f,             // bits 5, 4, 3, 2, 1
-          (a[4] << 2 | a[3] >> 6) & 0x1f, // bits 2, 1, 0, 7, 6
-          (a[4] >> 3) & 0x1f,             // bits 7, 6, 5, 4, 3
-        ].map(c => map.substr(c, 1));
-        return h.slice(0, 4).join('') + '-' + h.slice(4, 8).join('');
+        const fp = this.fingerPrint(a);
+        if (elem) {
+          elem.textContent = fp;
+        }
+        if (commit) {
+          this.serverHashValue_ = a;
+          window.localStorage.setItem('sh', this.base64RawUrlEncode(a));
+        }
+        return fp;
       });
+  }
+
+  fingerPrint(hash) {
+    const map = ['0','1','2','3','4','5','6','7','8','9','A','B','C','D','E','F'];
+    const h = [];
+    for (let i = 0; i < 6; i++) {
+      h.push(map[(hash[i]>>4)&0xf]+map[hash[i]&0xf]);
+    }
+    return h.slice(0, 2).join('') + '-' + h.slice(2, 4).join('') + '-' + h.slice(4, 6).join('');
   }
 
   checkKeyId_(keyId) {
     const b64 = this.base64RawUrlEncode(keyId);
-    const sh = this.base64RawUrlEncode(this.serverHashValue_);
+    const sh = window.localStorage.getItem('sh');
     const saved = window.localStorage.getItem(b64);
     if (saved !== null && saved !== sh) {
       throw new Error('keyId belongs to another server');
@@ -241,8 +260,10 @@ class Main {
         if (!SAMEORIGIN) {
           options.user.name = ui.serverUrl_ + '; ' + options.user.name;
         }
-        for (let i = 0; i < options.excludeCredentials?.length; i++) {
-          options.excludeCredentials[i].id = this.base64DecodeToBytes(options.excludeCredentials[i].id);
+        if (options.excludeCredentials) {
+          for (let i = 0; i < options.excludeCredentials.length; i++) {
+            options.excludeCredentials[i].id = this.base64DecodeToBytes(options.excludeCredentials[i].id);
+          }
         }
         const done = ui.freeze({message: _T('select-security-key')});
         return navigator.credentials.create({publicKey: options}).finally(done);
@@ -288,9 +309,11 @@ class Main {
       return getCode();
     }
     options.challenge = this.base64DecodeToBytes(options.challenge);
-    for (let i = 0; i < options.allowCredentials?.length; i++) {
-      options.allowCredentials[i].id = this.base64DecodeToBytes(options.allowCredentials[i].id);
-      this.checkKeyId_(options.allowCredentials[i].id);
+    if (options.allowCredentials) {
+      for (let i = 0; i < options.allowCredentials.length; i++) {
+        options.allowCredentials[i].id = this.base64DecodeToBytes(options.allowCredentials[i].id);
+        this.checkKeyId_(options.allowCredentials[i].id);
+      }
     }
     const done = ui.freeze({message: _T('verify-identity')});
     return navigator.credentials.get({publicKey: options})
@@ -353,7 +376,7 @@ class Main {
       throw new Error('base64DecodeToBytes arg not string');
     }
     v = v.replaceAll('-', '+').replaceAll('_', '/');
-    while (v && v.length % 4 !== 0) {
+    while (v.length % 4 !== 0) {
       v += '=';
     }
     return base64.toByteArray(v);

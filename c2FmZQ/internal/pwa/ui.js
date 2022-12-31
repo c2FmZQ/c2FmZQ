@@ -184,18 +184,14 @@ class UI {
     this.popupMessage(err);
   }
 
-  serverHash_(n) {
-    this.serverUrl_ = n;
+  async serverHash_(n, commit) {
     let e = document.querySelector('#server-fingerprint');
     if (!e) {
       e = document.createElement('div');
       e.id = 'server-fingerprint';
       document.querySelector('body').appendChild(e);
     }
-    main.calcServerFingerPrint(n)
-    .then(fp => {
-      e.textContent = fp;
-    });
+    return main.calcServerFingerPrint(n, '#server-fingerprint', commit);
   }
 
   startUI() {
@@ -206,13 +202,13 @@ class UI {
     this.uiStarted_ = true;
 
     if (SAMEORIGIN) {
-      this.serverHash_(window.location.href.replace(/^(.*\/)[^\/]*/, '$1'));
+      this.serverUrl_ = window.location.href.replace(/^(.*\/)[^\/]*/, '$1');
     } else {
       document.querySelector('label[for=server]').style.display = '';
       this.serverInput_.style.display = '';
-      this.serverInput_.value = main.getHash('server') || '';
-      this.serverHash_(this.serverInput_.value);
+      this.serverUrl_ = this.serverInput_.value;
     }
+    this.serverHash_(this.serverUrl_, false);
 
     window.addEventListener('scroll', this.onScroll_.bind(this));
     window.addEventListener('resize', this.onScroll_.bind(this));
@@ -285,10 +281,10 @@ class UI {
     });
 
     this.serverInput_.addEventListener('keyup', () => {
-      this.serverHash_(this.serverInput_.value);
+      this.serverHash_(this.serverInput_.value, false);
     });
     this.serverInput_.addEventListener('change', () => {
-      this.serverHash_(this.serverInput_.value);
+      this.serverHash_(this.serverInput_.value, false);
     });
     this.loggedInAccount_.addEventListener('click', this.showAccountMenu_.bind(this));
     this.loggedInAccount_.addEventListener('contextmenu', this.showAccountMenu_.bind(this));
@@ -366,6 +362,7 @@ class UI {
         this.isAdmin_ = isAdmin;
         this.loggedInAccount_.textContent = account;
         this.showLoggedIn_();
+        main.setServerFingerPrint('#server-fingerprint');
         if (needKey) {
           return this.promptForBackupPhrase_();
         }
@@ -558,9 +555,9 @@ class UI {
       } catch (err) {
         return Promise.reject(err);
       }
-      this.serverHash_(this.serverInput_.value);
-      main.setHash('server', this.serverInput_.value);
+      this.serverUrl_ = this.serverInput_.value;
     }
+    await this.serverHash_(this.serverUrl_, true);
     let old = this.loginButton_.textContent;
     this.loginButton_.textContent = this.tabs_[this.selectedTab_].message;
     this.loginButton_.disabled = true;

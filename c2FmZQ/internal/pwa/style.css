@@ -784,7 +784,7 @@ button.deleted-key {
   text-align: center;
   font-family: monospace;
   font-weight: 500;
-  font-size: 5vh;
+  font-size: min(5vh,5vw);
   opacity: 0.1;
 }
 .hide-no-mfa {
