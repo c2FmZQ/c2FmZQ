@@ -364,6 +364,7 @@ a {
 .popup-name {
   grid-column: 1;
   overflow: hidden;
+  white-space: nowrap;
 }
 .popup-info {
   cursor: pointer;
