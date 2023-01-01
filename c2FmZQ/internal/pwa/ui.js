@@ -1577,7 +1577,10 @@ class UI {
     }
     this.popupBlur_.depth++;
 
+    let closed = false;
     const closePopup = opt_slide => {
+      if (closed) return;
+      closed = true;
       // Remove handlers.
       popupClose.removeEventListener('click', handleClickClose);
       this.setGlobalEventHandlers(null);
@@ -1876,7 +1879,7 @@ class UI {
     if (!f.isImage) {
       return;
     }
-    const {content} = this.commonPopup_({
+    const {content, close} = this.commonPopup_({
       title: _T('edit:', f.fileName),
       className: 'popup photo-editor-popup',
       disableClickOutsideClose: true,
@@ -1887,12 +1890,8 @@ class UI {
       source: f.url,
       onSave: (img, state) => {
         console.log('saving', img.fullName);
-        const binary = atob(img.imageBase64.split(',')[1]);
-        const array = [];
-        for (let i = 0; i < binary.length; i++) {
-          array.push(binary.charCodeAt(i));
-        }
-        const blob = new Blob([new Uint8Array(array)], { type: img.mimeType });
+        const binary = main.base64DecodeToBytes(img.imageBase64.split(',')[1]);
+        const blob = new Blob([binary], { type: img.mimeType });
         this.makeThumbnail_(blob)
         .then(([data, duration]) => {
           const up = [{
@@ -1906,6 +1905,7 @@ class UI {
           return main.sendRPC('upload', f.collection, up);
         })
         .then(() => {
+          close();
           this.refresh_();
         })
         .catch(e => {
