@@ -3395,6 +3395,9 @@ class UI {
     filter.addEventListener('keyup', () => {
       showUsers();
     });
+    filter.addEventListener('input', () => {
+      showUsers();
+    });
     content.appendChild(filter);
 
     const view = {};
