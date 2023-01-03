@@ -596,6 +596,7 @@ class c2FmZQClient {
         this.vars_ = {};
         this.resetDB_();
         await store.clear();
+        await this.deleteCache_();
         this.loadVars_();
         console.log('SW internal data cleared');
       });
@@ -1662,7 +1663,7 @@ class c2FmZQClient {
     }
     this.vars_.cachePref = v;
     if (v !== 'encrypted') {
-      await this.deletePrefix_('cache/');
+      await this.deleteCache_();
     }
     return this.saveVars_()
       .then(v => {
@@ -1683,6 +1684,18 @@ class c2FmZQClient {
     return true;
   }
 
+  async openCache_() {
+    if (!this.cache_) {
+      this.cache_ = await self.caches.open('local');
+    }
+    return this.cache_;
+  }
+
+  async deleteCache_() {
+    await self.caches.delete('local');
+    this.cache_ = null;
+  }
+
   async fetchMissingThumbnails_() {
     if (this.fetchingMissingThumbnails) {
       return;
@@ -1695,21 +1708,29 @@ class c2FmZQClient {
   }
 
   async fetchMissingThumbnailsNow_() {
+    await this.openCache_();
     if (this.vars_.cachePref && this.vars_.cachePref !== 'encrypted') {
       return;
     }
-    const keys = await store.keys();
-    const have = keys.filter(k => k.startsWith('cache/')).map(k => k.substring(6));
     const set = {};
-    keys.filter(k => k.startsWith('files/')).map(k => {
+    (await store.keys()).filter(k => k.startsWith('files/')).map(k => {
       const p = k.lastIndexOf('/');
       const c = k.substring(6, p);
       const f = k.substring(p+1);
       set[f] = c;
     });
-    for (let v of have) {
-      delete set[v];
-    }
+    (await this.cache_.keys()).forEach(req => {
+      const url = req.url;
+      const off = url.lastIndexOf('local/tn/');
+      if (off !== -1) {
+        const key = url.substring(off+9);
+        if (Object.hasOwn(set, key)) {
+          delete set[key];
+        } else {
+          this.cache_.delete(req);
+        }
+      }
+    });
     const total = Object.keys(set).length;
     if (total === 0) {
       return;
@@ -1729,11 +1750,16 @@ class c2FmZQClient {
     if (this.vars_.cachePref && this.vars_.cachePref !== 'encrypted') {
       throw new Error('caching disabled');
     }
-    if (await store.get(`cache/${name}`)) {
+    const cacheKey = `local/tn/${name}`;
+    const cached = await this.cache_.keys(cacheKey);
+    if (cached.length) {
       return;
     }
     const file = await this.getFile_(collection, name);
     if (!file) {
+      return;
+    }
+    if (this.saveBandwidth_()) {
       return;
     }
     const startOffset = file.headers[1].headerSize;
@@ -1744,23 +1770,77 @@ class c2FmZQClient {
     const chunkSize = file.headers[1].chunkSize;
 
     return this.getContentUrl_({file:name,collection:collection,isThumb:true})
-    .then(url => {
-      return fetch(url, {
-        method: 'GET',
-        headers: {
-          range: `bytes=${startOffset}-`,
-        },
-        mode: SAMEORIGIN ? 'same-origin' : 'cors',
-        credentials: 'omit',
-        redirect: 'error',
-        referrerPolicy: 'no-referrer',
-      });
-    })
-    .then(resp => resp.body)
-    .then(rs => new ReadableStream(new Decrypter(rs.getReader(), symKey, chunkSize, 0, 0), strategy))
-    .then(rs => self.stream2blob(rs))
-    .then(body => body.arrayBuffer())
-    .then(data => store.set(`cache/${name}`, self.base64StdEncode(new Uint8Array(data))));
+    .then(url => fetch(url, {
+      method: 'GET',
+      headers: {
+        range: `bytes=${startOffset}-`,
+      },
+      mode: SAMEORIGIN ? 'same-origin' : 'cors',
+      credentials: 'omit',
+      redirect: 'error',
+      referrerPolicy: 'no-referrer',
+    }))
+    .then(resp => {
+      if (!resp.ok) {
+        throw new Error(`Status: ${resp.status}`);
+      }
+      return this.cache_.put(cacheKey, new Response(resp.body, {status:200, statusText:'OK', headers:resp.headers}));
+    });
+  }
+
+  async manageFullSizeCache_(name) {
+    if (!this.cacheLRU_) {
+      try {
+        const r = await store.get('cacheLRU');
+        if (r) {
+          this.cacheLRU_ = JSON.parse(r);
+        }
+      } catch(err) {}
+      if (!this.cacheLRU_) {
+        this.cacheLRU_ = {n:[]};
+        (await this.cache_.keys()).forEach(req => {
+          const url = req.url;
+          const off = url.lastIndexOf('local/fs/');
+          if (off !== -1) {
+            this.cacheLRU_.n.push(url.substring(off+9));
+          }
+        });
+      }
+    }
+    const off = this.cacheLRU_.n.indexOf(name);
+    if (off !== -1) {
+      this.cacheLRU_.n.splice(off, 1);
+    }
+    this.cacheLRU_.n.push(name);
+
+    const full = async () => {
+      if (this.cacheLRU_.n.length === 0) return false;
+      if (this.cacheLRU_.n.length > 1000) return true;
+      if ('estimate' in navigator.storage) {
+        const est = await navigator.storage.estimate();
+        if (est.usage > est.quota / 2) {
+          return true;
+        }
+      }
+      return false;
+    };
+
+    while(await full()) {
+      let it = this.cacheLRU_.n.shift();
+      await this.cache_.delete(`local/fs/${it}`);
+    }
+    return store.set('cacheLRU', JSON.stringify(this.cacheLRU_));
+  }
+
+  saveBandwidth_() {
+    if ('connection' in navigator) {
+      const c = navigator.connection;
+      if (c.saveData) {
+        console.log('SW data saving is enabled on device');
+        return true;
+      }
+    }
+    return false;
   }
 
   /*
@@ -1831,6 +1911,10 @@ class c2FmZQClient {
       return new Response('No such endpoint', {'status': 404, 'statusText': 'Not found'});
     }
 
+    if (!this.cache_) {
+      await this.openCache_();
+    }
+
     const p = new Promise(async (resolve, reject) => {
       const ext = url.pathname.replace(/^.*(\.[^.]+)$/, '$1').toLowerCase();
       const params = url.searchParams;
@@ -1858,7 +1942,6 @@ class c2FmZQClient {
           chunkNum = Math.floor(reqOffset / file.headers[0].chunkSize);
           chunkOffset = reqOffset % file.headers[0].chunkSize;
           startOffset += chunkNum * (file.headers[0].chunkSize+40);
-          //console.info('FETCH RANGE HEADER', range, reqOffset);
         }
       }
 
@@ -1915,87 +1998,81 @@ class c2FmZQClient {
       const chunkSize = file.headers[f.isThumb?1:0].chunkSize;
 
       const cachePref = await this.cachePreference();
-      const useCache = cachePref === 'encrypted' && reqOffset === 0 && f.isThumb;
+      const useCache = cachePref === 'encrypted';
+      const cacheKey = `local/${f.isThumb?'tn':'fs'}/${f.file}`;
+
+      let skipChunks = 0;
+      let addToCache = false;
+      let resp;
       if (useCache) {
-        let cached;
-        try {
-          cached = await store.get(`cache/${f.file}`);
-          if (cached) {
-            cached = base64DecodeToBytes(cached);
-          }
-          if (cached.byteLength !== fileSize) {
-            throw new Error('corrupted');
-          }
-        } catch(err) {
-          await store.del(`cache/${f.file}`);
-          cached = null;
-        }
-        if (cached) {
-          let h = {
-            'accept-ranges': 'bytes',
-            'cache-control': 'no-store, immutable',
-            'content-type': ctype,
-          };
-          if (haveRange) {
-            h['content-range'] = `bytes ${reqOffset}-${fileSize-1}/${fileSize}`;
-          } else {
-            h['content-length'] = fileSize;
-          }
-          resolve(new Response(new Blob([cached]), {
-            'status': haveRange ? 206 : 200,
-            'statusText': haveRange ? 'Partial Content' : 'OK',
-            'headers': h,
-          }));
-          return;
+        resp = await this.cache_.match(cacheKey)
+          .then(v => {
+            if (v && !f.isThumb) {
+              this.manageFullSizeCache_(f.file)
+              .catch(err => console.log('SW cache error', err));
+            }
+            return v;
+          });
+        if (resp) {
+          skipChunks = chunkNum;
         }
       }
-
-      this.getContentUrl_(f)
-      .then(url => {
-        return fetch(url, {
-          method: 'GET',
-          headers: {
-            range: `bytes=${startOffset}-`,
-          },
-          mode: SAMEORIGIN ? 'same-origin' : 'cors',
-          credentials: 'omit',
-          redirect: 'error',
-          referrerPolicy: 'no-referrer',
+      if (!resp) {
+        addToCache = useCache && reqOffset === 0;
+        resp = await this.getContentUrl_(f)
+          .then(url => fetch(url, {
+              method: 'GET',
+              headers: {
+                range: `bytes=${startOffset}-`,
+              },
+              mode: SAMEORIGIN ? 'same-origin' : 'cors',
+              credentials: 'omit',
+              redirect: 'error',
+              referrerPolicy: 'no-referrer',
+            }))
+          .catch(() => new Response('', {'status': 502, 'statusText': 'network error'}));
+      }
+      if (!resp.ok) {
+        console.log('SW fetch resp', resp.status);
+        return resolve(new Response('', {'status': 502, 'statusText': 'network error'}));
+      }
+      let onAbort;
+      let body = resp.body;
+      if (addToCache) {
+        const [rs1, rs2] = body.tee();
+        body = rs1;
+        const stream = new CacheStream(rs2);
+        onAbort = stream.cancel.bind(stream);
+        this.cache_.put(cacheKey, new Response(new ReadableStream(stream), {status:200, statusText:'OK', headers:resp.headers}))
+        .then(() => {
+          if (!f.isThumb) {
+            this.manageFullSizeCache_(f.file)
+            .catch(err => console.log('SW cache error', err));
+          }
+        })
+        .catch(err => {
+          console.log(`SW ${cacheKey} not cached`);
         });
-      })
-      .then(resp => resp.body)
-      .then(rs => new ReadableStream(new Decrypter(rs.getReader(), symKey, chunkSize, chunkNum, chunkOffset), strategy))
-      .then(rs => {
-        if (useCache) {
-          const [rs1, rs2] = rs.tee();
-          rs = rs1;
-          self.stream2blob(rs2)
-            .then(body => body.arrayBuffer())
-            .then(data => store.set(`cache/${f.file}`, self.base64StdEncode(new Uint8Array(data))));
-        }
-        let h = {
-          'accept-ranges': 'bytes',
-          'cache-control': 'no-store, immutable',
-          'content-type': ctype,
-        };
-        if (cachePref === 'private') {
-          h['cache-control'] = 'private, max-age=3600';
-        }
-        if (haveRange) {
-          h['content-range'] = `bytes ${reqOffset}-${fileSize-1}/${fileSize}`;
-        } else {
-          h['content-length'] = fileSize;
-        }
-        resolve(new Response(rs, {
-          'status': haveRange ? 206 : 200,
-          'statusText': haveRange ? 'Partial Content' : 'OK',
-          'headers': h,
-        }));
-      })
-      .catch(e => {
-        console.log('SW Error', e);
-        resolve(new Response('', {'status': 502, 'statusText': 'network error'}));
-      });
+      }
+      const rs = new ReadableStream(new Decrypter(body.getReader(), symKey, chunkSize, chunkNum, chunkOffset, skipChunks, onAbort), strategy);
+      let h = {
+        'accept-ranges': 'bytes',
+        'cache-control': 'no-store, immutable',
+        'content-type': ctype,
+      };
+      if (cachePref === 'private') {
+        h['cache-control'] = 'private, max-age=3600';
+      }
+      if (haveRange) {
+        h['content-range'] = `bytes ${reqOffset}-${fileSize-1}/${fileSize}`;
+      } else {
+        h['content-length'] = fileSize;
+      }
+      resolve(new Response(rs, {
+        'status': haveRange ? 206 : 200,
+        'statusText': haveRange ? 'Partial Content' : 'OK',
+        'headers': h,
+      }));
     });
     return p;
   }
@@ -2235,7 +2312,7 @@ class c2FmZQClient {
  * A Transformer to decrypt a stream.
  */
 class Decrypter {
-  constructor(reader, symKey, chunkSize, n, offset) {
+  constructor(reader, symKey, chunkSize, n, offset, skipChunks, onAbort) {
     this.reader_ = reader;
     this.symmetricKey_ = symKey;
     this.chunkSize_ = chunkSize;
@@ -2243,6 +2320,8 @@ class Decrypter {
     this.buf_ = new Uint8Array(0);
     this.n_ = n;
     this.offset_ = offset;
+    this.skipChunks_ = skipChunks;
+    this.onAbort_ = onAbort;
     this.canceled_ = false;
   }
 
@@ -2258,6 +2337,10 @@ class Decrypter {
         return;
       }
       if (done) {
+        if (this.skipChunks_ > 0) {
+          controller.close();
+          return;
+        }
         return this.decryptChunk(controller).then(() => {
           controller.close();
         });
@@ -2266,6 +2349,11 @@ class Decrypter {
       tmp.set(this.buf_);
       tmp.set(value, this.buf_.byteLength);
       this.buf_ = tmp;
+
+      while (this.buf_.byteLength >= this.encChunkSize_ && this.skipChunks_ > 0) {
+        this.buf_ = this.buf_.slice(this.encChunkSize_);
+        this.skipChunks_--;
+      }
     }
     while (this.buf_.byteLength >= this.encChunkSize_) {
       if (this.canceled_) return;
@@ -2276,6 +2364,9 @@ class Decrypter {
   cancel(/*reason*/) {
     this.canceled_ = true;
     this.reader_.cancel();
+    if (this.onAbort_) {
+      this.onAbort_();
+    }
   }
 
   async decryptChunk(controller) {
@@ -2296,8 +2387,34 @@ class Decrypter {
       }
       controller.enqueue(dec);
     } catch (e) {
+      controller.error(new Error('decryption error'));
       console.error('SW decryptChunk', e);
+      this.cancel();
     }
+  }
+}
+
+class CacheStream {
+  constructor(rs) {
+    this.reader_ = rs.getReader();
+    this.canceled_ = false;
+  }
+  async pull(controller) {
+    if (this.canceled_) {
+      this.reader_.cancel();
+      controller.error(new Error('canceled stream'));
+      return;
+    }
+    const {value, done} = await this.reader_.read();
+    if (value) {
+      controller.enqueue(value);
+    }
+    if (done) {
+      controller.close();
+    }
+  }
+  cancel() {
+    this.canceled_ = true;
   }
 }
 

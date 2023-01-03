@@ -154,7 +154,7 @@ window.Lang = {
       'opt-dont-keep-backup': 'Do NOT keep a backup on the server',
       'prefs': 'Preferences',
       'choose-cache-pref': '<h1>Cache:</h1>',
-      'opt-encrypted': 'Store thumbnails in a local encrypted database. Thumbnails are stored securely on the local system, along with the App\'s metadata. The other files, e.g. photos and videos, are not cached. This option might lead to quota issues. The cache is cleared on logout or when another option is selected. (DEFAULT)',
+      'opt-encrypted': 'Store the encrypted thumbnails in a local browser cache. The other files are also cached if enough storage space is available. The cache is cleared on logout or when another option is selected. (DEFAULT)',
       'opt-no-store': 'Disable caching. All files, including thumbnails, are fetched and decrypted each time they are accessed. This is the slowest option.',
       'opt-private': 'Use the default browser cache. Decrypted files are stored in the browser\'s cache. This is the fastest option, but also the most likely the leak information.',
       'choose-notifications-pref': '<h1>Notifications:</h1>',

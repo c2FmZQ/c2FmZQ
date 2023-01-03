@@ -22,7 +22,7 @@
 
 let _T;
 
-const SHOW_ITEMS_INCREMENT = 10;
+const SHOW_ITEMS_INCREMENT = 25;
 
 class UI {
   constructor() {
@@ -1642,10 +1642,9 @@ class UI {
     }
     if (this.recentImages_.byUrl[url]) {
       if (this.recentImages_.byTime.length > 1) {
-        const i = this.recentImages_.byTime.findIndex(u => u === url);
-        const j = this.recentImages_.byTime.length-1;
-        this.recentImages_.byTime[i] = this.recentImages_.byTime[j];
-        this.recentImages_.byTime[j] = url;
+        const i = this.recentImages_.byTime.indexOf(url);
+        this.recentImages_.byTime.splice(i, 1);
+        this.recentImages_.byTime.push(url);
       }
       return this.recentImages_.byUrl[url];
     }

@@ -407,7 +407,7 @@ self.addEventListener('activate', event => {
     console.log(`SW activate ${VERSION} DEVEL`);
     event.waitUntil(
       self.caches.keys()
-      .then(keys => keys.map(k => self.caches.delete(k)))
+      .then(keys => keys.filter(k => k !== 'local').map(k => self.caches.delete(k)))
       .then(p => Promise.all(p))
       .then(r => console.log('SW cache deletes', r))
       .then(() => self.clients.claim())
@@ -417,7 +417,7 @@ self.addEventListener('activate', event => {
   console.log(`SW activate ${VERSION}`);
   event.waitUntil(
     self.caches.keys()
-    .then(keys => keys.filter(k => k !== VERSION).map(k => self.caches.delete(k)))
+    .then(keys => keys.filter(k => k !== VERSION && k !== 'local').map(k => self.caches.delete(k)))
     .then(p => Promise.all(p))
     .then(r => console.log('SW cache deletes', r))
     .then(() => self.clients.claim())
