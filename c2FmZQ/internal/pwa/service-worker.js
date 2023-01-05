@@ -1,5 +1,5 @@
 /*
- * Copyright 2021-2022 TTBT Enterprises LLC
+ * Copyright 2021-2023 TTBT Enterprises LLC
  *
  * This file is part of c2FmZQ (https://c2FmZQ.org/).
  *
@@ -23,12 +23,13 @@
 self.importScripts('version.js');
 console.log(`SW Version ${VERSION}`, DEVEL ? 'DEVEL' : '');
 
-const MANIFEST = [
+let MANIFEST = [
   'c2fmzq.webmanifest',
   'c2fmzq-client.js',
   'c2.png',
   'c2-bg.png',
   'c2-144x144.png',
+  'cache-manager.js',
   'clear.png',
   'index.html',
   'lang.js',
@@ -36,16 +37,24 @@ const MANIFEST = [
   'store.js',
   'style.css',
   'ui.js',
+  'utils.js',
   'version.js',
   'thirdparty/browser-libs.js',
   'thirdparty/filerobot-image-editor.min.js',
   'thirdparty/libs.js',
 ];
+if (self.location.search.includes('tests')) {
+  self.includeTests = true;
+  MANIFEST.push('sw-tests.js');
+  MANIFEST.push('sw-tests.html');
+}
 
 self.importScripts('thirdparty/libs.js');
 self.importScripts('lang.js');
 self.importScripts('store.js');
+self.importScripts('utils.js');
 self.importScripts('c2fmzq-client.js');
+self.importScripts('cache-manager.js');
 
 self.store = new Store();
 self.initp = null;
@@ -73,6 +82,10 @@ async function initApp(storeKey) {
       }
       return reject(err);
     }
+    if (self.appInitialized) {
+      return resolve();
+    }
+    self.appInitialized = true;
     self.sodium = await self.SodiumPlus.auto();
     const app = new c2FmZQClient({
       pathPrefix: self.location.href.replace(/^(.*\/)[^\/]*/, '$1'),
@@ -159,77 +172,6 @@ function checkPushsubscriptionchanges() {
   });
 }
 
-function bytesFromString(s) {
-  return new TextEncoder('utf-8').encode(s);
-}
-
-function bytesToString(a) {
-  return new TextDecoder('utf-8').decode(a);
-}
-
-function bytesFromBinary(bin) {
-  let array = [];
-  for (let i = 0; i < bin.length; i++) {
-    array.push(bin.charCodeAt(i));
-  }
-  return new Uint8Array(array);
-}
-
-function bigEndian(n, size) {
-  let a = [];
-  while (size-- > 0) {
-    a.unshift(n & 0xff);
-    n >>= 8;
-  }
-  return new Uint8Array(a);
-}
-
-function base64RawUrlEncode(v) {
-  return base64StdEncode(v).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
-}
-
-function base64StdEncode(v) {
-  if (Array.isArray(v)) {
-    v = new Uint8Array(v);
-  }
-  return base64.fromByteArray(v);
-}
-
-function base64DecodeToBinary(s) {
-  return String.fromCharCode(...base64DecodeToBytes(s));
-}
-
-function base64DecodeToString(s) {
-  return self.bytesToString(base64DecodeToBytes(s));
-}
-
-function base64DecodeToBytes(v) {
-  v = v.replaceAll('-', '+').replaceAll('_', '/');
-  while (v.length % 4 !== 0) {
-    v += '=';
-  }
-  return base64.toByteArray(v);
-}
-
-async function stream2blob(rs) {
-  const reader = rs.getReader();
-  const buf = [];
-  while (true) {
-    let {done, value} = await reader.read();
-    if (done) break;
-    buf.push(value);
-  }
-  return new Blob(buf);
-}
-
-async function sodiumPublicKey(k) {
-  return sodiumKey(k, 'public');
-}
-
-async function sodiumSecretKey(k) {
-  return sodiumKey(k, 'secret');
-}
-
 async function sodiumKey(k, type) {
   k = await Promise.resolve(k);
   if (typeof k === 'object') {
@@ -285,6 +227,10 @@ function sendLoggedOut() {
 
 function sendUploadProgress(p) {
   self.sendMessage('', {type: 'upload-progress', progress: p});
+}
+
+function sendDownloadProgress(p) {
+  self.sendMessage('', {type: 'download-progress', progress: p});
 }
 
 async function sendMessage(id, m) {
@@ -432,6 +378,10 @@ self.addEventListener('statechange', event => {
   console.log('SW state change', event);
 });
 
+self.addEventListener('freeze', event => {
+  console.log('SW freeze', event);
+});
+
 self.addEventListener('resume', event => {
   console.log('SW resume', event);
 });
@@ -504,6 +454,12 @@ self.addEventListener('message', async event => {
         delete self.rpcWait_[event.data.id];
       }
       break;
+    case 'run-tests':
+      self.runTests()
+      .then(results => {
+        self.sendMessage(clientId, {type: 'test-results', results: results});
+      });
+      break;
     default:
       console.log('SW Received unexpected message', event.data);
       break;
@@ -555,4 +511,7 @@ self.addEventListener('fetch', event => {
 });
 
 initApp(null);
+if (self.includeTests) {
+  self.importScripts('sw-tests.js');
+}
 console.log(`SW loaded ${VERSION}`);

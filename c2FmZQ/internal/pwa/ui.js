@@ -1,5 +1,5 @@
 /*
- * Copyright 2021-2022 TTBT Enterprises LLC
+ * Copyright 2021-2023 TTBT Enterprises LLC
  *
  * This file is part of c2FmZQ (https://c2FmZQ.org/).
  *
@@ -36,7 +36,7 @@ class UI {
       lastDate: '',
       shown: SHOW_ITEMS_INCREMENT,
     };
-    this.enableNotifications = window.Notification?.permission === 'granted';
+    this.enableNotifications = localStorage.getItem('enableNotifications') === 'yes';
 
     _T = Lang.text;
 
@@ -288,6 +288,7 @@ class UI {
     });
     this.loggedInAccount_.addEventListener('click', this.showAccountMenu_.bind(this));
     this.loggedInAccount_.addEventListener('contextmenu', this.showAccountMenu_.bind(this));
+    this.loggedInAccount_.textContent = _T('account');
 
     const tabClick = event => {
       for (let tab of Object.values(this.tabs_)) {
@@ -360,7 +361,6 @@ class UI {
       if (account !== '') {
         this.accountEmail_ = account;
         this.isAdmin_ = isAdmin;
-        this.loggedInAccount_.textContent = account;
         this.showLoggedIn_();
         main.setServerFingerPrint('#server-fingerprint');
         if (needKey) {
@@ -393,6 +393,10 @@ class UI {
       x: event.x,
       y: event.y,
       items: [
+        {
+          text: this.accountEmail_,
+        },
+        {},
         {
           text: _T('profile'),
           onclick: this.showProfile_.bind(this),
@@ -585,7 +589,6 @@ class UI {
     .then(({isAdmin, needKey}) => {
       this.accountEmail_ = this.emailInput_.value;
       this.isAdmin_ = isAdmin;
-      document.querySelector('#loggedin-account').textContent = this.emailInput_.value;
       this.passwordInput_.value = '';
       this.passwordInput2_.value = '';
       this.backupPhraseInput_.value = '';
@@ -593,7 +596,8 @@ class UI {
       if (needKey) {
         return this.promptForBackupPhrase_();
       }
-      return this.getUpdates_()
+      const done = this.bitScroll_();
+      return this.getUpdates_().finally(done)
         .then(() => {
           this.showQuota_();
           this.refreshGallery_(true);
@@ -704,6 +708,7 @@ class UI {
   }
 
   async refreshGallery_(scrollToTop) {
+    const cachePref = await main.sendRPC('cachePreference');
     this.galleryState_.content = await main.sendRPC('getFiles', this.galleryState_.collection);
     if (!this.galleryState_.content) {
       this.galleryState_.content = {'total': 0, 'files': []};
@@ -736,6 +741,18 @@ class UI {
         y: event.y,
         items: [],
       };
+      if (cachePref.mode === 'encrypted') {
+        params.items.push({
+          text: c.isOffline ? _T('offline-on') : _T('offline-off'),
+          onclick: () => {
+             main.sendRPC('setCollectionOffline', c.collection, !c.isOffline)
+             .then(() => {
+               this.refresh_();
+             });
+          },
+        });
+        params.items.push({});
+      }
       if (this.galleryState_.collection !== c.collection) {
         params.items.push({
           text: _T('open'),
@@ -778,11 +795,16 @@ class UI {
       if (!currentCollection || this.galleryState_.collection === c.collection) {
         currentCollection = c;
       }
-      if (c.collection === 'trash') {
-        continue;
-      }
       if (c.name === 'gallery' || c.name === 'trash') {
         c.name = _T(c.name);
+      }
+      if (this.galleryState_.collection === c.collection) {
+        this.title_.textContent = c.name;
+        this.galleryState_.canDrag = c.isOwner || c.canCopy;
+        this.galleryState_.isOwner = c.isOwner;
+      }
+      if (c.collection === 'trash') {
+        continue;
       }
       const div = document.createElement('div');
       div.className = 'collectionThumbdiv';
@@ -807,10 +829,7 @@ class UI {
         this.switchView(c);
       });
       if (this.galleryState_.collection === c.collection) {
-        this.title_.textContent = c.name;
         scrollTo = div;
-        this.galleryState_.canDrag = c.isOwner || c.canCopy;
-        this.galleryState_.isOwner = c.isOwner;
       }
       const img = new Image();
       img.alt = c.name;
@@ -823,9 +842,21 @@ class UI {
       const imgdiv = document.createElement('div');
       img.style.height = sz;
       img.style.width = sz;
+      img.style.gridArea = '1 / 1 / 2 / 2';
+      imgdiv.style.display = 'grid';
       imgdiv.style.height = sz;
       imgdiv.style.width = sz;
       imgdiv.appendChild(img);
+      if (cachePref.mode === 'encrypted' && c.isOffline) {
+        const check = document.createElement('div');
+        check.style.gridArea = '1 / 1 / 2 / 2';
+        check.style.justifySelf = 'end';
+        check.style.alignSelf = 'start';
+        check.style.opacity = '0.75';
+        check.textContent = '☑';
+        check.className = 'collectionThumbOfflineCheck';
+        imgdiv.appendChild(check);
+      }
       div.appendChild(imgdiv);
       const n = document.createElement('div');
       n.className = 'collectionThumbLabel';
@@ -1103,7 +1134,7 @@ class UI {
     const up = [];
     this.cancelQueuedDropUploads_ = false;
     let abort = null;
-    this.popupMessage(_T('drop-received'), 'upload-progress');
+    this.popupMessage(_T('drop-received'), 'progress');
     for (let i = 0; i < files.length; i += MAX) {
       const toUpload = [];
       const tnp = [];
@@ -1309,14 +1340,15 @@ class UI {
 
     for (let i = 0; i < params.items.length; i++) {
       if (!params.items[i].text) {
-        const space = document.createElement('div');
-        space.className = 'context-menu-space';
-        space.innerHTML = '&nbsp;';
-        menu.appendChild(space);
+        if (i !== 0 && i !== params.items.length - 1) {
+          const space = document.createElement('hr');
+          space.className = 'context-menu-space';
+          menu.appendChild(space);
+        }
         continue;
       }
       const item = document.createElement(params.items[i].onclick ? 'button' : 'div');
-      item.className = 'context-menu-item';
+      item.className = params.items[i].onclick ? 'context-menu-item' : 'context-menu-div';
       item.textContent = params.items[i].text;
       if (params.items[i].id) {
         item.id = params.items[i].id;
@@ -1425,14 +1457,14 @@ class UI {
 
     const buttons = document.createElement('div');
     buttons.className = 'prompt-button-row';
-    const conf = document.createElement('button');
-    conf.className = 'prompt-confirm-button';
-    conf.textContent = params.confirmText || _T('confirm');
-    buttons.appendChild(conf);
     const canc = document.createElement('button');
     canc.className = 'prompt-cancel-button';
     canc.textContent = params.cancelText || _T('cancel');
     buttons.appendChild(canc);
+    const conf = document.createElement('button');
+    conf.className = 'prompt-confirm-button';
+    conf.textContent = params.confirmText || _T('confirm');
+    buttons.appendChild(conf);
     win.appendChild(buttons);
 
     const body = document.querySelector('body');
@@ -2362,12 +2394,12 @@ class UI {
       }
     } else {
       const msg = document.createElement('div');
-      msg.className = 'thumbnail-progress-div';
+      msg.className = 'progress-div';
       const span = document.createElement('span');
       span.id = 'thumbnail-progress-data';
       span.textContent = info;
       msg.appendChild(span);
-      span.remove = this.popupMessage(msg, 'upload-progress', {sticky: sz > 0});
+      span.remove = this.popupMessage(msg, 'progress', {sticky: sz > 0});
     }
   }
 
@@ -2378,11 +2410,14 @@ class UI {
       e.textContent = info;
       if (progress.done || progress.err) {
         document.querySelector('#upload-progress-cancel-button').style.display = 'none';
-        setTimeout(e.remove, 2000);
+        e.clear = setTimeout(e.remove, 2000);
+      } else if (e.clear) {
+        clearTimeout(e.clear);
+        delete e.clear;
       }
     } else {
       const msg = document.createElement('div');
-      msg.className = 'upload-progress-div';
+      msg.className = 'progress-div';
       const span = document.createElement('span');
       span.id = 'upload-progress-data';
       span.textContent = info;
@@ -2396,7 +2431,34 @@ class UI {
         main.sendRPC('cancelUpload');
       });
       msg.appendChild(button);
-      span.remove = this.popupMessage(msg, 'upload-progress', {sticky: !progress.done});
+      span.remove = this.popupMessage(msg, 'progress', {sticky: !progress.done});
+    }
+  }
+
+  showDownloadProgress(progress) {
+    let info = _T('download-progress', `${progress.count}/${progress.total}`);
+    if (progress.err) {
+      info = progress.err;
+    }
+    const e = document.querySelector('#download-progress-data');
+    if (e) {
+      if (progress.err || progress.total > 0) {
+        e.textContent = info;
+      }
+      if (progress.done) {
+        e.clear = setTimeout(e.remove, 2000);
+      } else if (e.clear) {
+        clearTimeout(e.clear);
+        delete e.clear;
+      }
+    } else {
+      const msg = document.createElement('div');
+      msg.className = 'progress-div';
+      const span = document.createElement('span');
+      span.id = 'download-progress-data';
+      span.textContent = info;
+      msg.appendChild(span);
+      span.remove = this.popupMessage(msg, 'progress', {sticky: !progress.done});
     }
   }
 
@@ -3011,7 +3073,6 @@ class UI {
       }))
       .then(() => {
         this.accountEmail_ = email.value;
-        this.loggedInAccount_.textContent = email.value;
         close();
       })
       .catch(err => {
@@ -3166,9 +3227,7 @@ class UI {
   }
 
   async showPreferences_() {
-    const {content, close} = this.commonPopup_({
-      title: _T('prefs'),
-    });
+    const content = document.createElement('div');
     content.id = 'preferences-content';
 
     const text = document.createElement('div');
@@ -3192,27 +3251,43 @@ class UI {
       },
     ];
 
-    const changeCachePref = choice => {
+    const changeCachePref = (mode) => {
+      const all = allthumbs.checked;
+      const mob = mobile.checked;
+      const size = Math.max(parseInt(cacheSize.value), 1);
       choices.forEach(c => {
         c.input.disabled = true;
       });
-      main.sendRPC('setCachePreference', choice)
+      mobile.disabled = true;
+      cacheSize.disabled = true;
+      main.sendRPC('setCachePreference', {mode:mode,allthumbs:all,mobile:mob,maxSize:size})
       .then(() => {
+        current.mode = mode;
+        current.allthumbs = all;
+        current.mobile = mob;
+        current.maxSize = size;
         this.popupMessage(_T('saved'), 'info');
       })
       .catch(err => {
-        choices.forEach(c => {
-          c.input.checked = current === c.value;
-        });
         this.popupMessage(err);
       })
       .finally(() => {
         choices.forEach(c => {
           c.input.disabled = false;
+          c.input.checked = current.mode === c.value;
         });
+        allthumbs.checked = current.allthumbs;
+        allthumbs.disabled = current.mode !== 'encrypted';
+        mobile.checked = current.mobile;
+        mobile.disabled = current.mode !== 'encrypted';
+        cacheSize.value = current.maxSize;
+        cacheSize.disabled = current.mode !== 'encrypted';
       });
     };
 
+    let allthumbs;
+    let mobile;
+    let cacheSize;
     const opts = document.createElement('div');
     opts.id = 'preferences-cache-choices';
     choices.forEach(choice => {
@@ -3220,12 +3295,59 @@ class UI {
       input.type = 'radio';
       input.id = `preferences-cache-${choice.value}`;
       input.name = 'preferences-cache-option';
-      input.checked = current === choice.value;
+      input.checked = current.mode === choice.value;
       input.addEventListener('change', () => changeCachePref(choice.value));
       choice.input = input;
       const label = document.createElement('label');
       label.htmlFor = `preferences-cache-${choice.value}`;
       label.innerHTML = choice.label;
+      if (choice.value === 'encrypted') {
+        const adiv = document.createElement('div');
+        allthumbs = document.createElement('input');
+        allthumbs.id = 'preferences-cache-allthumbs';
+        allthumbs.type = 'checkbox';
+        allthumbs.checked = current.allthumbs;
+        allthumbs.disabled = current.mode !== 'encrypted';
+        allthumbs.addEventListener('change', () => changeCachePref(choice.value));
+        const allthumbsLabel = document.createElement('label');
+        allthumbsLabel.htmlFor = `preferences-cache-allthumbs`;
+        allthumbsLabel.textContent = _T('prefetch-all-thumbnails');
+        adiv.appendChild(allthumbsLabel);
+        adiv.appendChild(allthumbs);
+        label.appendChild(adiv);
+
+        const mdiv = document.createElement('div');
+        mobile = document.createElement('input');
+        mobile.id = 'preferences-cache-mobile';
+        mobile.type = 'checkbox';
+        mobile.checked = current.mobile;
+        mobile.disabled = current.mode !== 'encrypted';
+        mobile.addEventListener('change', () => changeCachePref(choice.value));
+        const mobileLabel = document.createElement('label');
+        mobileLabel.htmlFor = `preferences-cache-mobile`;
+        mobileLabel.textContent = _T('use-mobile');
+        mdiv.appendChild(mobileLabel);
+        mdiv.appendChild(mobile);
+        label.appendChild(mdiv);
+
+        const sdiv = document.createElement('div');
+        cacheSize = document.createElement('input');
+        cacheSize.id = 'preferences-cache-size';
+        cacheSize.type = 'number';
+        cacheSize.min = '1';
+        cacheSize.value = current.maxSize;
+        cacheSize.disabled = current.mode !== 'encrypted';
+        cacheSize.addEventListener('change', () => changeCachePref(choice.value));
+        const sizeLabel = document.createElement('label');
+        sizeLabel.htmlFor = `preferences-cache-size`;
+        sizeLabel.textContent = _T('max-cache-size');
+        const usage = document.createElement('div');
+        usage.textContent = _T('cache-usage', current.usage);
+        sdiv.appendChild(sizeLabel);
+        sdiv.appendChild(cacheSize);
+        sdiv.appendChild(usage);
+        label.appendChild(sdiv);
+      }
       opts.appendChild(input);
       opts.appendChild(label);
     });
@@ -3260,6 +3382,7 @@ class UI {
         .then(v => {
           input.checked = v;
           this.enableNotifications = v;
+          localStorage.setItem('enableNotifications', v ? 'yes' : 'no');
         })
         .catch(() => {
           input.checked = false;
@@ -3272,6 +3395,11 @@ class UI {
       notifopt.appendChild(input);
       notifopt.appendChild(label);
       content.appendChild(notifopt);
+    });
+
+    const {close} = this.commonPopup_({
+      title: _T('prefs'),
+      content: content,
     });
   }
 

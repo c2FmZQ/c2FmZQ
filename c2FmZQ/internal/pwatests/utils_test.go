@@ -1,5 +1,5 @@
 //
-// Copyright 2021-2022 TTBT Enterprises LLC
+// Copyright 2021-2023 TTBT Enterprises LLC
 //
 // This file is part of c2FmZQ (https://c2FmZQ.org/).
 //
@@ -64,7 +64,7 @@ func startServer(t *testing.T) (*wrapper, func()) {
 	if err := wd.ResizeWindow("", 1000, 800); err != nil {
 		t.Fatalf("wd.ResizeWindow: %v", err)
 	}
-	if err := wd.Get(url); err != nil {
+	if err := wd.Get(url + "?tests"); err != nil {
 		t.Fatalf("wd.Get: %v", err)
 	}
 	return wd, func() {

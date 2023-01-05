@@ -23,6 +23,8 @@
     "ByteLengthQueuingStrategy": true,
     "bytesFromBinary": true,
     "c2FmZQClient": true,
+    "CacheManager": true,
+    "CacheStream": true,
     "CryptographyKey": true,
     "DEVEL": true,
     "EXIF": true,

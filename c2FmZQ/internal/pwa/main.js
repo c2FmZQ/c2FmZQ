@@ -1,5 +1,5 @@
 /*
- * Copyright 2021-2022 TTBT Enterprises LLC
+ * Copyright 2021-2023 TTBT Enterprises LLC
  *
  * This file is part of c2FmZQ (https://c2FmZQ.org/).
  *
@@ -37,6 +37,14 @@ window.addEventListener('load', () => {
   });
 });
 
+function swTests() {
+  if (!navigator.serviceWorker.controller) {
+    console.log('No controller');
+    return;
+  }
+  navigator.serviceWorker.controller.postMessage({type: 'run-tests'});
+}
+
 class Main {
   constructor() {
     this.salt_ = null;
@@ -65,7 +73,11 @@ class Main {
       console.log('Controller Change');
       this.sendHello_();
     };
-    navigator.serviceWorker.register('service-worker.js')
+    let swUrl = 'service-worker.js';
+    if (window.location.search.includes('tests')) {
+      swUrl += '?tests';
+    }
+    navigator.serviceWorker.register(swUrl)
     .then(r => r.update())
     .then(() => {
       console.log('Service worker updated');
@@ -116,7 +128,7 @@ class Main {
           break;
         case 'rpc-result':
           if (event.data.func !== 'backupPhrase') {
-            console.log('Received rpc-result', event.data);
+            //console.log('Received rpc-result', event.data);
           }
           if (event.data.id in this.rpcWait_) {
             if (event.data.reject !== undefined) {
@@ -129,6 +141,10 @@ class Main {
           break;
         case 'upload-progress':
           ui.showUploadProgress(event.data.progress);
+          navigator.serviceWorker.controller.postMessage({type: 'nop'});
+          break;
+        case 'download-progress':
+          ui.showDownloadProgress(event.data.progress);
           navigator.serviceWorker.controller.postMessage({type: 'nop'});
           break;
         case 'keep-alive':

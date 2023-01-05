@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<!--
+Copyright 2021-2023 TTBT Enterprises LLC
+
+This file is part of c2FmZQ (https://c2FmZQ.org/).
+
+c2FmZQ is free software: you can redistribute it and/or modify it under the
+terms of the GNU General Public License as published by the Free Software
+Foundation, either version 3 of the License, or (at your option) any later
+version.
+
+c2FmZQ is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along with
+c2FmZQ. If not, see <https://www.gnu.org/licenses/>.
+-->
+<html>
+<head>
+<title>Service worker tests</title>
+<meta http-equiv="content-type" content="text/html; charset=utf-8" />
+<link rel="icon" type="image/png" href="c2.png" />
+<script src="version.js"></script>
+<script src="utils.js"></script>
+<script src="thirdparty/browser-libs.js"></script>
+<style>
+body {
+  font-family: monospace;
+}
+.summary {
+  margin-top: 3em;
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  width: fit-content;
+  border: 4px double black;
+}
+.summary div {
+  border: 1px solid black;
+  padding: 0.3em;
+  min-width: 10em;
+  text-align: center;
+}
+.summary div:nth-child(odd) {
+  background-color: #eee;
+}
+.summary div:nth-child(even) {
+  background-color: #ddd;
+}
+</style>
+</head>
+<body>
+<script>
+function sendHello() {
+  console.log(`Sending hello ${VERSION}`);
+  if (!navigator.serviceWorker.controller) {
+    console.log('No controller');
+    return;
+  }
+
+  (async () => {
+    const p = localStorage.getItem('_') || 'foo';
+    let salt;
+    try {
+      const s = window.localStorage.getItem('salt');
+      if (s) {
+        salt = base64DecodeToBytes(s);
+      }
+    } catch (err) {
+      salt = null;
+    }
+    if (salt === null) {
+      salt = window.crypto.getRandomValues(new Uint8Array(16));
+      window.localStorage.setItem('salt', base64RawUrlEncode(salt));
+    }
+    const km = await window.crypto.subtle.importKey('raw', new TextEncoder().encode(p), 'PBKDF2', false, ['deriveBits']);
+    const bits = await window.crypto.subtle.deriveBits(
+      {'name': 'PBKDF2', salt: salt, 'iterations': 200000, 'hash': 'SHA-256'}, km, 256);
+    const a = new Uint8Array(bits);
+    const k = base64.fromByteArray(a);
+
+    navigator.serviceWorker.controller.postMessage({
+      type: 'hello',
+      storeKey: k,
+      version: VERSION,
+      lang: 'en',
+      capabilities: [],
+    });
+  })();
+}   
+navigator.serviceWorker.oncontrollerchange = () => {
+  sendHello();
+};
+
+let once = false;
+navigator.serviceWorker.onmessage = event => {
+  if (event.data?.type === 'hello') {
+    console.log(`Received hello ${event.data.version}`);
+    if (!event.data.storeKey) {
+      sendHello();
+    } else if (!once) {
+      once = true;
+      navigator.serviceWorker.controller.postMessage({type: 'run-tests'});
+    }
+  }
+  if (event.data?.type === 'test-results') {
+    const e = document.createElement('div');
+    e.id = 'results';
+    e.textContent = JSON.stringify(event.data.results);
+    const body = document.querySelector('body');
+    body.appendChild(e);
+    const d = document.createElement('div');
+    d.className = 'summary';
+    body.appendChild(d);
+    const push = c => {
+      const t = document.createElement('div');
+      t.textContent = c;
+      d.appendChild(t);
+    };
+    for (const r of event.data.results) {
+      push(r.test);
+      push(r.result);
+      push(r.err||'-');
+    }
+  }
+};
+navigator.serviceWorker.register('service-worker.js?tests')
+  .then(r => r.update())
+  .then(() => {
+    console.log('Service worker updated');
+  })
+  .catch(err => {
+    console.error('Service worker update failed', err);
+  })
+  .finally(() => {
+    sendHello();
+  });
+</script>
+</body>
+</html>

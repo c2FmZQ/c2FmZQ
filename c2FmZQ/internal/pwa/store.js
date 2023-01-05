@@ -1,5 +1,5 @@
 /*
- * Copyright 2021-2022 TTBT Enterprises LLC
+ * Copyright 2021-2023 TTBT Enterprises LLC
  *
  * This file is part of c2FmZQ (https://c2FmZQ.org/).
  *
@@ -40,7 +40,7 @@ class Store {
     this.refs++;
     if (this.store) {
       if (DEBUG) console.log(`SW Store refs++ ${this.refs} exists`);
-      return this.store;
+      return true;
     }
     if (this.storep) {
       if (DEBUG) console.log(`SW Store refs++ ${this.refs} pending`);
@@ -57,7 +57,11 @@ class Store {
         }
         store = new SecureStore.Store(this.name, key);
         if (DEBUG) console.log(`SW store init`);
-        await store.init();
+        const x = window.addEventListener;
+        window.addEventListener=(t, l, o) => t !== 'freeze' ? window.addEventListener(t, l, o) : null;
+        await store.init().finally(() => {
+          window.addEventListener = x;
+        });
         this.passphrase = key;
         if (DEBUG) console.log(`SW store init done`);
       } catch (err) {

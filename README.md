@@ -20,23 +20,25 @@
 
 # <a name="overview"></a>Overview
 
-This repo contains an application that can securely encrypt, store, and share
+c2FmZQ is an application that can securely encrypt, store, and share
 files, including but not limited to pictures and videos.
 
-There is a command-line client application, and a server application.
+There is a command-line client application, a server application, and an
+experimental Progressive Web App that can run in most modern browsers.
 
 The server is the central repository where all the encrypted data can be stored.
 It has no way to access the client's plaintext data.
 
-The command-line client is used to import, export, organize, and share files.
+The PWA and the command-line clients are used to import, export, organize, and share files.
 
 They use an API that's compatible with the Stingle Photos app
-(https://github.com/stingle/stingle-photos-android) published by [stingle.org](https://stingle.org).
+(https://github.com/stingle/stingle-photos-android) published by [stingle.org](https://stingle.org),
+which can also be used with c2FmZQ.
 
-This project is **NOT** associated with stingle.org. This is not the code used
+_This project is **NOT** associated with stingle.org. This is not the code used
 by stingle.org. We have no knowledge of how their server is actually implemented.
 The code in this repo was developed by studying the client app's code and
-reverse engineering the API.
+reverse engineering the API._
 
 ---
 
@@ -49,7 +51,7 @@ The server has no way to decrypt the files that are uploaded by the clients.
 It only knows how many files you have, how big they are, and who they're
 shared with.
 
-The client has to trust the server when sharing albums. The server provides
+The clients have to trust the server when sharing albums. The server provides
 the contact search feature (/v2/sync/getContact), which returns a User ID and 
 a public key for the contact. Then, the album is shared with that User ID and
 public key (via /v2/sync/share).
@@ -57,12 +59,12 @@ public key (via /v2/sync/share).
 A malicious server _could_ replace the contact's User ID and public key with
 someone else's, and make the user think they're sharing with their friend while
 actually sharing with an attacker. The command-line client application lets the
-user verify the contact's public key before sharing. (The android app doesn't)
+user verify the contact's public key before sharing.
 
-When viewing a shared album, the client has to trust that the shared content is
+When viewing a shared album, the clients have to trust that the shared content is
 "safe". Since the server can't decrypt the content, it has no way to sanitize it
 either. A malicious user _could_ share content that aims to exploit some unpatched
-vulnerability in the client's code.
+vulnerability in the client code.
 
 Once an album is shared, there is really no way to completely _unshare_ it. The
 permissions on the album can be changed, but it is impossible to control what
@@ -92,7 +94,7 @@ Additionally, it uses [AES256-GCM](https://en.wikipedia.org/wiki/Galois/Counter_
 
 c2FmZQ-server is an API server with a relatively small footprint. It can run
 just about anywhere, as long as it has access to a lot of storage space, and a modern
-CPU. It must be reachable by the client(s) via HTTPS.
+CPU. It must be reachable by the clients via HTTPS.
 
 The server needs at least two pieces of information: the name of the directory where
 its data will be stored, and a passphrase to protect the data. The passphrase
@@ -252,13 +254,14 @@ The following features are experimental and could change or disappear in the fut
 
 ### <a name="webapp"></a>Progressive Web App
 
-When the `--enable-webapp` flag is set on the server (default), it enables a Progressive Web Application
-written entirely in HTML and javascript. All the cryptographic operations are performed
-in the browser using [Sodium-Plus](https://github.com/paragonie/sodium-plus)
+The PWA is a full-featured client app for c2FmZQ implemented entirely in HTML and javascript.
+
+All the cryptographic operations are performed in the browser using 
+[Sodium-Plus](https://github.com/paragonie/sodium-plus)
 and [Secure webstore](https://github.com/AKASHAorg/secure-webstore), and the app
 implements the same protocol as the c2FmZQ client and the Stingle Photos app.
 
-There are multiple ways to access the PWA:
+To access the PWA:
 
 * Open your server URL in a browser: `https://${DOMAIN}/${path-prefix}/`. This requires `--enable-webapp` to be set on the server. Or,
 * Open https://c2fmzq.org/pwa/ and enter your server URL in the `Server` field. This works with or without `--enable-webapp`, Or,
@@ -266,20 +269,14 @@ There are multiple ways to access the PWA:
 
 Currently implemented:
 
-* Account management
-  * Account creation, deletion, recovery
-  * Login / logout
-  * Email / password change
-* Album management
-  * Creating / deleting albums
-  * Moving / copying files
-  * Sharing
-* Browsing albums with photos and videos
-* Uploading files (note: browsers that support streaming uploads, e.g. Chrome 105+, can upload files of any size. With browsers that don't support streaming uploads, files need to fit in memory)
-* Photo editing, using [Filerobot Image Editor](https://scaleflex.github.io/filerobot-image-editor/)
+* All account management features (account creation, recovery, etc).
+* All album management features (creating, sharing, moving files, etc).
+* Browsing albums with photos and videos with local encrypted caching for speed or offline conditions.
+* Uploading files with streaming encryption.
+* Photo editing, using a local [Filerobot Image Editor](https://scaleflex.github.io/filerobot-image-editor/)
 * Optional push notification when new content or new members are added to shared albums.
 
-Push notification is disabled by default. To enable it, use the `inspect edit ps`
+Push notification is disabled by default on the server. To enable it, use the `inspect edit ps`
 command, and set the top-level `enable` option to `true` and set `jwtSubject` to a
 valid `mailto:` or `https://` URL \([rfc8292](https://www.rfc-editor.org/rfc/rfc8292#section-2.1)).
 Some push services require a valid email address or web site address.

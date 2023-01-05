@@ -19,6 +19,9 @@ h1 {
 a {
   color: black;
 }
+button {
+  font-family: monospace;
+}
 .hidden {
   display: none;
 }
@@ -80,7 +83,7 @@ a {
   min-width: 25vw;
   max-width: 75vw;
 }
-.upload-progress {
+.progress {
   animation: slideIn 1s;
   padding: 8px;
   margin: 2px;
@@ -89,11 +92,7 @@ a {
   font-size: 125%;
   cursor: pointer;
 }
-.upload-progress-div {
-  white-space: nowrap;
-  padding-right: 3em;
-}
-.thumbnail-progress-div {
+.progress-div {
   white-space: nowrap;
   padding-right: 3em;
 }
@@ -127,6 +126,9 @@ a {
 }
 .collectionThumbdiv * {
   pointer-events: none;
+}
+.collectionThumbOfflineCheck {
+  background-color: white;
 }
 .thumbdiv {
   animation: fadeIn 1s;
@@ -438,6 +440,10 @@ a {
 .context-menu-item:hover {
   background-color: lightgray;
 }
+.context-menu-div {
+  padding: 0.2em;
+  font-weight: bold;
+}
 button.context-menu-item {
   text-align: left;
   border: 0px;
@@ -445,7 +451,13 @@ button.context-menu-item {
   background-color: white;
 }
 .context-menu-space {
-  height: 0.75em;
+  height: 0.5em;
+  border: none;
+  border-top: 2px dotted lightgray;
+  width: 100%;
+  padding: 0;
+  margin: 0;
+  margin-top: 0.25em;
 }
 .blur {
   animation: fadeIn 0.25s;
@@ -657,6 +669,10 @@ button.deleted-key {
   align-items: start;
   row-gap: 0.5em;
   min-width: 75vw;
+}
+#preferences-cache-size {
+  width: 5em;
+  text-align: right;
 }
 #preferences-notifications-choices {
   display: grid;
