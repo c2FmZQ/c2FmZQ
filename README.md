@@ -235,7 +235,7 @@ GOOS=darwin GOARCH=arm64 go build -o c2FmZQ-server-darwin
 
 ## <a name="demo"></a>DEMO / test drive
 
-For DEMO or testing purpose, the server can be launched on a gitlab codespace.
+For DEMO or testing purpose, the server can be launched on a github codespace.
 
 Create a [codespace](https://github.com/codespaces) for the `c2FmZQ/c2FmZQ` repository, open the terminal, and run:
 ```
