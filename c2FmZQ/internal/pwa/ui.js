@@ -1796,11 +1796,22 @@ class UI {
       video.poster = f.thumbUrl;
       video.controls = 'controls';
       params.content = video;
+    } else if (f.contentType.startsWith('audio/')) {
+      const audio = document.createElement('audio');
+      audio.className = 'popup-media';
+      audio.src = f.url;
+      audio.controls = 'controls';
+      params.content = audio;
+    } else if (f.contentType !== 'application/octet-stream') {
+      const iframe = document.createElement('iframe');
+      iframe.title = f.fileName;
+      iframe.src = f.url;
+      params.content = iframe;
     } else {
       const anchor = document.createElement('a');
       anchor.href = f.url;
-      anchor.target = '_blank';
-      anchor.textContent = _T('open-doc');
+      anchor.download = f.fileName;
+      anchor.textContent = _T('download-doc');
       params.content = anchor;
     }
     const {content, close, info} = this.commonPopup_(params);

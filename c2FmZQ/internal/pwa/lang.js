@@ -177,7 +177,7 @@ window.Lang = {
       'admin': 'Admin',
       'quota': 'Quota',
       'open': 'Open',
-      'open-doc': 'Open document',
+      'download-doc': 'Download document',
       'copy-selected': 'Copy selected files',
       'move-selected': 'Move selected files',
       'edit': 'Edit',

@@ -814,3 +814,11 @@ div.offline-overlay {
   border: 1px solid black;
   border-radius: 0.3em;
 }
+audio.popup-media {
+  padding-left: 5em;
+  padding-right: 5em;
+}
+.popup-download iframe {
+  width: 85vw;
+  height: 85vh;
+}

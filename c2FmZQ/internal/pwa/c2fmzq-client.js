@@ -1011,6 +1011,7 @@ class c2FmZQClient {
         'dateCreated': f.dateCreated,
         'dateModified': f.dateModified,
       };
+      obj.contentType = this.contentType_(obj.fileName.replace(/^.*(\.[^.]+)$/, '$1').toLowerCase());
       if (obj.isVideo) {
         obj.duration =  f.headers[0].duration;
       }
@@ -1922,6 +1923,59 @@ class c2FmZQClient {
     }
   }
 
+  contentType_(ext) {
+    let ctype = 'application/octet-stream';
+    switch (ext) {
+      case '.jpg': case '.jpeg':
+        ctype = 'image/jpeg'; break;
+      case '.png':
+        ctype = 'image/png'; break;
+      case '.gif':
+        ctype = 'image/gif'; break;
+      case '.webp':
+        ctype = 'image/webp'; break;
+      case '.avif':
+        ctype = 'image/avif'; break;
+      case '.mp4':
+        ctype = 'video/mp4'; break;
+      case '.avi':
+        ctype = 'video/avi'; break;
+      case '.wmv':
+        ctype = 'video/x-ms-wmv'; break;
+      case '.3gp':
+        ctype = 'video/3gpp'; break;
+      case '.m1v': case '.m2v': case '.mp2': case '.mpg': case '.mpeg':
+        ctype = 'video/mpeg'; break;
+      case '.qt': case '.mov': case '.moov':
+        ctype = 'video/quicktime'; break;
+      case '.mjpg':
+        ctype = 'video/x-motion-jpeg'; break;
+      case '.webm':
+        ctype = 'video/webm'; break;
+      case '.aac':
+        ctype = 'audio/aac'; break;
+      case '.mid': case '.midi':
+        ctype = 'audio/midi'; break;
+      case '.mp3':
+        ctype = 'audio/mpeg'; break;
+      case '.oga': case '.ogg': case '.ogv':
+        ctype = 'audio/ogg'; break;
+      case '.opus':
+        ctype = 'audio/opus'; break;
+      case '.wav':
+        ctype = 'audio/wav'; break;
+      case '.weba':
+        ctype = 'audio/webm'; break;
+      case '.pdf':
+        ctype = 'application/pdf'; break;
+      case '.txt': case '.text':
+        ctype = 'text/plain'; break;
+      default:
+        console.log(`SW Using default content-type for ${ext}`); break;
+    }
+    return ctype;
+  }
+
   /*
    */
   async handleFetchEvent(event) {
@@ -1993,6 +2047,7 @@ class c2FmZQClient {
 
     const p = new Promise(async (resolve, reject) => {
       const ext = url.pathname.replace(/^.*(\.[^.]+)$/, '$1').toLowerCase();
+      const ctype = this.contentType_(ext);
       const params = url.searchParams;
       const f = {
         collection: params.get('collection'),
@@ -2019,42 +2074,6 @@ class c2FmZQClient {
           chunkOffset = reqOffset % file.headers[0].chunkSize;
           startOffset += chunkNum * (file.headers[0].chunkSize+40);
         }
-      }
-
-      let ctype = 'application/octet-stream';
-      switch (ext) {
-        case '.jpg': case '.jpeg':
-          ctype = 'image/jpeg'; break;
-        case '.png':
-          ctype = 'image/png'; break;
-        case '.gif':
-          ctype = 'image/gif'; break;
-        case '.webp':
-          ctype = 'image/webp'; break;
-        case '.avif':
-          ctype = 'image/avif'; break;
-        case '.mp4':
-          ctype = 'video/mp4'; break;
-        case '.avi':
-          ctype = 'video/avi'; break;
-        case '.wmv':
-          ctype = 'video/x-ms-wmv'; break;
-        case '.3gp':
-          ctype = 'video/3gpp'; break;
-        case '.m1v': case '.m2v': case '.mp2': case '.mpg': case '.mpeg':
-          ctype = 'video/mpeg'; break;
-        case '.qt': case '.mov': case '.moov':
-          ctype = 'video/quicktime'; break;
-        case '.mjpg':
-          ctype = 'video/x-motion-jpeg'; break;
-        case '.pdf':
-          ctype = 'application/pdf'; break;
-        case '.txt':
-          ctype = 'text/plain'; break;
-        case '.gz': case '.tgz':
-          ctype = 'application/gzip'; break;
-        default:
-          console.log(`SW Using default content-type for ${ext}`); break;
       }
 
       const strategy = new ByteLengthQueuingStrategy({
@@ -2125,6 +2144,9 @@ class c2FmZQClient {
         'cache-control': 'no-store, immutable',
         'content-type': ctype,
       };
+      if (ctype === 'application/octet-stream') {
+        h['content-disposition'] = 'attachment';
+      }
       if (cachePref.mode === 'private') {
         h['cache-control'] = 'private, max-age=3600';
       }
