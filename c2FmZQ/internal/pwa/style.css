@@ -15,6 +15,7 @@ body.noscroll {
 }
 h1 {
   overflow-wrap: break-word;
+  text-align: center;
 }
 a {
   color: black;
@@ -132,7 +133,6 @@ button {
 }
 .thumbdiv {
   animation: fadeIn 1s;
-  float: left;
   margin: 1em;
   border: 1px solid black;
   padding: 0;
@@ -166,6 +166,51 @@ button {
   background-color: rgba(255, 255, 255, 0.5);
   padding: 3px;
 }
+.date {
+  margin-top: 2em;
+}
+#gallery-list-div {
+  display: grid;
+  grid-template-columns: auto 2fr 1fr 1fr 1fr 1fr;
+  align-items: stretch;
+  border: 1px solid black;
+  margin: 1em;
+  width: 95vw;
+  overflow-x: scroll;
+}
+#gallery-list-div div {
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+#gallery-list-div div img {
+  border: 1px solid black;
+  object-fit: cover;
+  width: 48px;
+  height: 48px;
+}
+#gallery-list-div .filename {
+  overflow-x: hidden;
+  max-width: 75vw;
+  min-width: 20em;;
+}
+#gallery-list-div .size {
+  justify-content: end;
+}
+#gallery-list-div .time,.content-type {
+  justify-content: center;
+}
+#gallery-list-div span {
+  padding-left: 1em;
+  padding-right: 1em;
+}
+#gallery-list-div>div:nth-child(-n+6) {
+  font-weight: bold;
+}
+#gallery-list-div>div:nth-child(12n+1),#gallery-list-div>div:nth-child(12n+2),#gallery-list-div>div:nth-child(12n+3),#gallery-list-div>div:nth-child(12n+4),#gallery-list-div>div:nth-child(12n+5),#gallery-list-div>div:nth-child(12n+6) {
+  background-color: #eee;
+}
 .resetdb-button {
   position: absolute;
   right: 0;
@@ -190,10 +235,13 @@ button {
 #gallery {
   margin: 5px;
 }
-#settings-button {
+#collection-buttons {
   position: absolute;
   right: 0;
   font-size: 12pt;
+}
+#collection-buttons button {
+  margin: 0.25em;
 }
 #messages {
   position: fixed;
@@ -352,7 +400,7 @@ button {
   box-shadow: 5px 5px 5px black;
   max-width: 95vw;
   max-height: 95vh;
-  overflow: hidden;
+  overflow: visible;
   display: flex;
   flex-direction: column;
 }
@@ -384,6 +432,9 @@ button {
   object-fit: contain;
   display: block;
 }
+.popup-content {
+  overflow: hidden;
+}
 .popup-content > .arrow {
   position: absolute;
   top: 1em;
@@ -398,18 +449,15 @@ button {
   justify-content: center;
 }
 .popup-content > .arrow:hover {
-  background-color: white;
-  opacity: 0.5;
+  opacity: 0.75;
 }
 .popup-content > .arrow.left {
-  border-top-right-radius: 1em;
-  border-bottom-right-radius: 1em;
   left: 0%;
+  transform: translate(-50%, 0);
 }
 .popup-content > .arrow.right {
-  border-top-left-radius: 1em;
-  border-bottom-left-radius: 1em;
   right: 0%;
+  transform: translate(50%, 0);
 }
 .upload {
   width: 90vw;
@@ -793,7 +841,7 @@ button.deleted-key {
   white-space: pre;
 }
 #server-fingerprint {
-  z-index: 0;
+  z-index: -1;
   position: fixed;
   bottom: 0.25em;
   width: 100%;

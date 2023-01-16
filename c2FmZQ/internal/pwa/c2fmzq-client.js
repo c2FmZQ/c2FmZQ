@@ -1010,6 +1010,7 @@ class c2FmZQClient {
         'fileName': await this.decryptString_(f.headers[0].encFileName),
         'dateCreated': f.dateCreated,
         'dateModified': f.dateModified,
+        'size': f.headers[0].dataSize,
       };
       obj.contentType = this.contentType_(obj.fileName.replace(/^.*(\.[^.]+)$/, '$1').toLowerCase());
       if (obj.isVideo) {

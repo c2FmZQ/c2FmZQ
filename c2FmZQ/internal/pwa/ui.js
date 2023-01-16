@@ -668,7 +668,7 @@ class UI {
       this.addingFiles_ = true;
       window.requestAnimationFrame(() => {
         this.showMoreFiles_(SHOW_ITEMS_INCREMENT)
-        .then(() => {
+        .finally(() => {
           this.addingFiles_ = false;
         });
       });
@@ -709,6 +709,9 @@ class UI {
 
   async refreshGallery_(scrollToTop) {
     const cachePref = await main.sendRPC('cachePreference');
+    if (!this.galleryState_.format) {
+      this.galleryState_.format = 'grid';
+    }
     this.galleryState_.content = await main.sendRPC('getFiles', this.galleryState_.collection);
     if (!this.galleryState_.content) {
       this.galleryState_.content = {'total': 0, 'files': []};
@@ -808,6 +811,7 @@ class UI {
       }
       const div = document.createElement('div');
       div.className = 'collectionThumbdiv';
+      div.title = c.name;
       if (!c.isOwner) {
         div.classList.add('not-owner');
       }
@@ -866,15 +870,37 @@ class UI {
       cd.appendChild(div);
     }
 
+    const collButtons = document.createElement('div');
+    collButtons.id = 'collection-buttons';
+    const formatButton = document.createElement('button');
+    formatButton.id = 'format-button';
+    formatButton.textContent = this.galleryState_.format === 'list' ? _T('grid') : _T('list');
+    formatButton.title = this.galleryState_.format === 'list' ? _T('grid-title') : _T('list-title');
+    formatButton.addEventListener('click', () => {
+      this.galleryState_.format = this.galleryState_.format === 'list' ? 'grid' : 'list';
+      this.refreshGallery_(true);
+    });
+    collButtons.appendChild(formatButton);
+    if (this.galleryState_.collection === 'trash') {
+      const emptyButton = document.createElement('button');
+      emptyButton.className = 'empty-trash';
+      emptyButton.textContent = _T('empty');
+      emptyButton.addEventListener('click', e => {
+        this.emptyTrash_(e.target);
+      });
+      collButtons.appendChild(emptyButton);
+    }
     if (this.galleryState_.collection !== 'gallery' && this.galleryState_.collection !== 'trash') {
       const settingsButton = document.createElement('button');
       settingsButton.id = 'settings-button';
       settingsButton.textContent = '⚙';
+      settingsButton.title = _T('settings-title');
       settingsButton.addEventListener('click', () => {
         this.collectionProperties_(currentCollection);
       });
-      g.appendChild(settingsButton);
+      collButtons.appendChild(settingsButton);
     }
+    g.appendChild(collButtons);
 
     if (currentCollection.isOwner || currentCollection.canAdd) {
       const addDiv = document.createElement('div');
@@ -890,15 +916,6 @@ class UI {
     g.appendChild(br);
     const h1 = document.createElement('h1');
     h1.textContent = _T('collection:', currentCollection.name);
-    if (this.galleryState_.collection === 'trash') {
-      const button = document.createElement('button');
-      button.className = 'empty-trash';
-      button.textContent = _T('empty');
-      button.addEventListener('click', e => {
-        this.emptyTrash_(e.target);
-      });
-      h1.appendChild(button);
-    }
     g.appendChild(h1);
     if (currentCollection?.members?.length > 0) {
       UI.sortBy(currentCollection.members, 'email');
@@ -910,7 +927,11 @@ class UI {
     this.galleryState_.lastDate = '';
     const n = Math.max(this.galleryState_.shown, SHOW_ITEMS_INCREMENT);
     this.galleryState_.shown = 0;
-    this.showMoreFiles_(n, oldScrollTop);
+    const dist = () => document.documentElement.scrollHeight - document.documentElement.scrollTop - window.innerHeight;
+    do {
+      await this.showMoreFiles_(n, oldScrollTop);
+    } while (dist() <= 0 && this.galleryState_.shown < this.galleryState_.content.total);
+
     if (scrollTo) {
       if (oldScrollLeft) {
         cd.scrollLeft = oldScrollLeft;
@@ -1051,6 +1072,17 @@ class UI {
       f.elem.classList.remove('dragging');
     };
 
+    let listDiv;
+    if (this.galleryState_.format === 'list') {
+      listDiv = document.querySelector('#gallery-list-div');
+      if (!listDiv) {
+        listDiv = document.createElement('div');
+        listDiv.id = 'gallery-list-div';
+        listDiv.innerHTML = '<div></div><div><span>'+_T('filename')+'</span></div><div class="size"><span>'+_T('filesize')+'</span></div><div class="time"><span>'+_T('creation-time')+'</span></div><div class="content-type"><span>'+_T('filetype')+'</span></div><div class="duration"><span>'+_T('duration')+'</span></div>';
+        g.appendChild(listDiv);
+      }
+    }
+
     const scroll = event => {
       event.target.style.width = '';
       if (opt_scrollTop && opt_scrollTop !== document.documentElement.scrollTop) {
@@ -1061,44 +1093,106 @@ class UI {
     for (let i = this.galleryState_.shown; i < last; i++) {
       this.galleryState_.shown++;
       const f = this.galleryState_.content.files[i];
-      const date = (new Date(f.dateCreated)).toLocaleDateString(undefined, {weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'});
-      if (date !== this.galleryState_.lastDate) {
-        this.galleryState_.lastDate = date;
-        const span = document.createElement('span');
-        span.className = 'date';
-        span.innerHTML = '<br clear="all" />'+date+'<br clear="all" />';
-        g.appendChild(span);
+      if (this.galleryState_.format === 'grid') {
+        const date = (new Date(f.dateCreated)).toLocaleDateString(undefined, {weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'});
+        if (date !== this.galleryState_.lastDate) {
+          this.galleryState_.lastDate = date;
+          const dateDiv = document.createElement('div');
+          dateDiv.className = 'date';
+          dateDiv.innerHTML = '<br clear="all" />'+date+'<br clear="all" />';
+          g.appendChild(dateDiv);
+        }
+        const img = new Image();
+        img.addEventListener('load', scroll);
+        img.alt = f.fileName;
+        img.src = f.thumbUrl;
+        img.style.height = UI.px_(320);
+        img.style.width = UI.px_(240);
+
+        const d = document.createElement('div');
+        d.className = 'thumbdiv';
+        d.title = f.fileName;
+        f.elem = d;
+        f.select = () => selectItem(i);
+
+        d.appendChild(img);
+        if (f.isVideo) {
+          const div = document.createElement('div');
+          div.className = 'duration';
+          const dur = document.createElement('span');
+          dur.className = 'duration';
+          dur.textContent = this.formatDuration_(f.duration);
+          div.appendChild(dur);
+          d.appendChild(div);
+        }
+
+        d.draggable = true;
+        d.addEventListener('click', e => click(i, e));
+        d.addEventListener('dragstart', e => dragStart(f, e, img));
+        d.addEventListener('dragend', e => dragEnd(f, e));
+        d.addEventListener('contextmenu', e => contextMenu(i, e));
+
+        g.appendChild(d);
+      } else {
+        const imgDiv = document.createElement('div');
+        const img = new Image();
+        img.addEventListener('load', scroll);
+        img.alt = f.fileName;
+        img.src = f.thumbUrl;
+        imgDiv.appendChild(img);
+        imgDiv.draggable = true;
+        imgDiv.addEventListener('click', e => click(i, e));
+        imgDiv.addEventListener('dragstart', e => dragStart(f, e, img));
+        imgDiv.addEventListener('dragend', e => dragEnd(f, e));
+        imgDiv.addEventListener('contextmenu', e => contextMenu(i, e));
+
+        f.elem = imgDiv;
+        f.select = () => selectItem(i);
+        listDiv.appendChild(imgDiv);
+
+        const fname = document.createElement('div');
+        fname.className = 'filename';
+        fname.addEventListener('click', e => click(i, e));
+        const fnameSpan = document.createElement('span');
+        fnameSpan.textContent = f.fileName;
+        fname.appendChild(fnameSpan);
+        listDiv.appendChild(fname);
+
+        const size = document.createElement('div');
+        size.className = 'size';
+        size.addEventListener('click', e => click(i, e));
+        const sizeSpan = document.createElement('span');
+        sizeSpan.textContent = this.formatSize_(f.size);
+        size.appendChild(sizeSpan);
+        listDiv.appendChild(size);
+
+        const ts = document.createElement('div');
+        ts.className = 'time';
+        ts.addEventListener('click', e => click(i, e));
+        const tsSpan = document.createElement('span');
+        tsSpan.textContent = (new Date(f.dateCreated)).toLocaleString();
+        ts.appendChild(tsSpan);
+        listDiv.appendChild(ts);
+
+        const ctype = document.createElement('div');
+        ctype.className = 'content-type';
+        ctype.addEventListener('click', e => click(i, e));
+        const ctypeSpan = document.createElement('span');
+        ctypeSpan.textContent = f.contentType;
+        ctype.appendChild(ctypeSpan);
+        listDiv.appendChild(ctype);
+
+        const durDiv = document.createElement('div');
+        durDiv.addEventListener('click', e => click(i, e));
+        durDiv.className = 'duration';
+        if (f.isVideo) {
+          const dur = document.createElement('span');
+          dur.className = 'duration';
+          dur.textContent = this.formatDuration_(f.duration);
+          durDiv.appendChild(dur);
+        }
+        listDiv.appendChild(durDiv);
       }
-      const img = new Image();
-      img.addEventListener('load', scroll);
-      img.alt = f.fileName;
-      img.src = f.thumbUrl;
-      img.style.height = UI.px_(320);
-      img.style.width = UI.px_(240);
-
-      const d = document.createElement('div');
-      d.className = 'thumbdiv';
-      f.elem = d;
-      f.select = () => selectItem(i);
-
-      d.appendChild(img);
-      if (f.isVideo) {
-        const div = document.createElement('div');
-        div.className = 'duration';
-        const dur = document.createElement('span');
-        dur.className = 'duration';
-        dur.textContent = this.formatDuration_(f.duration);
-        div.appendChild(dur);
-        d.appendChild(div);
-      }
-
-      d.draggable = true;
-      d.addEventListener('click', e => click(i, e));
-      d.addEventListener('dragstart', e => dragStart(f, e, img));
-      d.addEventListener('dragend', e => dragEnd(f, e));
-      d.addEventListener('contextmenu', e => contextMenu(i, e));
-
-      g.appendChild(d);
     }
   }
 
