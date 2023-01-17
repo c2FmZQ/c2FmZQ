@@ -113,7 +113,7 @@ async function testCache() {
     checkCachedFiles_: c2FmZQClient.prototype.checkCachedFiles_,
     checkCachedFilesNow_: c2FmZQClient.prototype.checkCachedFilesNow_,
     fetchCachedFile_: async (name, collection, isThumb) => {
-      app.cache_.add(`local/${isThumb?'tn':'fs'}/${name}`);
+      app.cache_.add(`local/${isThumb?'tn':'fs'}/${name}/0`);
       app.cm_.update(`${isThumb?'tn':'fs'}/${name}`, {add:true,stick:true,size:100});
     },
   };
@@ -167,43 +167,43 @@ async function testCache() {
   await expectCacheSet('');
 
   for (let i = 0; i < 9; i++) {
-    app.cache_.add(`local/tn/file${i}`);
+    app.cache_.add(`local/tn/file${i}/0`);
     await update(`tn/file${i}`, {use:true, size:100});
   }
   await expectCacheData('tn/file0,tn/file1,tn/file2,tn/file3,tn/file4,tn/file5,tn/file6,tn/file7,tn/file8');
-  await expectCacheSet('tn/file0,tn/file1,tn/file2,tn/file3,tn/file4,tn/file5,tn/file6,tn/file7,tn/file8');
+  await expectCacheSet('tn/file0/0,tn/file1/0,tn/file2/0,tn/file3/0,tn/file4/0,tn/file5/0,tn/file6/0,tn/file7/0,tn/file8/0');
 
   await update('tn/file0', {use:true, size:100});
-  app.cache_.add(`local/tn/file9`);
+  app.cache_.add(`local/tn/file9/0`);
   await update('tn/file9', {use:true, size:100});
 
   await expectCacheData('tn/file2,tn/file3,tn/file4,tn/file5,tn/file6,tn/file7,tn/file8,tn/file0,tn/file9');
-  await expectCacheSet('tn/file0,tn/file2,tn/file3,tn/file4,tn/file5,tn/file6,tn/file7,tn/file8,tn/file9');
+  await expectCacheSet('tn/file0/0,tn/file2/0,tn/file3/0,tn/file4/0,tn/file5/0,tn/file6/0,tn/file7/0,tn/file8/0,tn/file9/0');
 
   await update('tn/file5', {delete:true});
   await expectCacheData('tn/file2,tn/file3,tn/file4,tn/file6,tn/file7,tn/file8,tn/file0,tn/file9');
-  await expectCacheSet('tn/file0,tn/file2,tn/file3,tn/file4,tn/file6,tn/file7,tn/file8,tn/file9');
+  await expectCacheSet('tn/file0/0,tn/file2/0,tn/file3/0,tn/file4/0,tn/file6/0,tn/file7/0,tn/file8/0,tn/file9/0');
 
   await update('tn/file2', {stick:true, size:100});
-  app.cache_.add(`local/tn/file11`);
+  app.cache_.add(`local/tn/file11/0`);
   await update('tn/file11', {add:true, stick:true, size:100});
-  app.cache_.add(`local/tn/file12`);
+  app.cache_.add(`local/tn/file12/0`);
   await update('tn/file12', {use:true, size:100});
-  app.cache_.add(`local/tn/file13`);
+  app.cache_.add(`local/tn/file13/0`);
   await update('tn/file13', {use:true, size:100});
 
   await expectCacheData('TN/FILE11,TN/FILE2,tn/file6,tn/file7,tn/file8,tn/file0,tn/file9,tn/file12,tn/file13');
-  await expectCacheSet('tn/file0,tn/file11,tn/file12,tn/file13,tn/file2,tn/file6,tn/file7,tn/file8,tn/file9');
+  await expectCacheSet('tn/file0/0,tn/file11/0,tn/file12/0,tn/file13/0,tn/file2/0,tn/file6/0,tn/file7/0,tn/file8/0,tn/file9/0');
 
   await check();
   await expectCacheData('tn/file11,tn/file2,tn/file6,tn/file7,tn/file8,tn/file0,tn/file9,tn/file12,tn/file13');
-  await expectCacheSet('tn/file0,tn/file11,tn/file12,tn/file13,tn/file2,tn/file6,tn/file7,tn/file8,tn/file9');
+  await expectCacheSet('tn/file0/0,tn/file11/0,tn/file12/0,tn/file13/0,tn/file2/0,tn/file6/0,tn/file7/0,tn/file8/0,tn/file9/0');
 
   app.db_.albums.FOO.isOffline = true;
   // Expect files0-3 to be added to the cache (or updated) as sticky.
   await check();
   await expectCacheData('FS/FILE0,FS/FILE1,FS/FILE2,FS/FILE3,TN/FILE1,TN/FILE3,TN/FILE2,TN/FILE0,tn/file13');
-  await expectCacheSet('fs/file0,fs/file1,fs/file2,fs/file3,tn/file0,tn/file1,tn/file13,tn/file2,tn/file3');
+  await expectCacheSet('fs/file0/0,fs/file1/0,fs/file2/0,fs/file3/0,tn/file0/0,tn/file1/0,tn/file13/0,tn/file2/0,tn/file3/0');
 
   await app.cm_.delete();
 }

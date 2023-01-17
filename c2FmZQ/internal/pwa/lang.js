@@ -208,7 +208,7 @@ window.Lang = {
       'copied-one-file': 'Copied 1 file',
       'copied-many-files': 'Copied $1 files',
       'deleted-one-file': 'Deleted 1 file',
-      'deleted-many-file': 'Deleted $1 files',
+      'deleted-many-files': 'Deleted $1 files',
       'confirm-leave': '⚠️ Are you sure you want to leave this collection?',
       'delete': 'Delete',
       'confirm-delete': '⚠️ Are you sure you want to delete this collection?',

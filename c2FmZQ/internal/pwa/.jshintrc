@@ -50,6 +50,7 @@
     "ui": true,
     "VERSION": true,
     "X25519PublicKey": true,
-    "X25519SecretKey": true
+    "X25519SecretKey": true,
+    "XCHACHA20POLY1305_OVERHEAD": true
   }
 }

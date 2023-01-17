@@ -101,10 +101,6 @@ class c2FmZQClient {
   resetDB_() {
     this.db_ = {
       albums: {},
-      files: {
-        'gallery': {},
-        'trash': {},
-      },
       contacts: {},
     };
   }
@@ -1845,12 +1841,18 @@ class c2FmZQClient {
     }
     const total = queue.length;
     let count = 0;
-    for (const it of queue) {
-      if (++count % 10 === 0) {
-        console.log(`SW downloading files: ${count}/${total}`);
-      }
-      await this.fetchCachedFile_(it.f, it.c, it.t);
+    const id = setInterval(() => {
       self.sendDownloadProgress({count:count,total:total,done:false});
+    }, 500);
+    try {
+      for (const it of queue) {
+        if (++count % 10 === 0) {
+          console.log(`SW downloading files: ${count}/${total}`);
+        }
+        await this.fetchCachedFile_(it.f, it.c, it.t);
+      }
+    } finally {
+      clearInterval(id);
     }
     if (count > 0) {
       console.log(`SW downloaded files: ${count}/${total}`);
@@ -1879,13 +1881,15 @@ class c2FmZQClient {
       throw new Error(_T('cache-full'));
     }
 
-    const startOffset = file.headers[isThumb?1:0].headerSize;
+    const headers = file.headers[isThumb?1:0];
+    const startOffset = headers.headerSize;
+    const symKey = await sodiumKey(this.decrypt_(headers.encKey));
+    const chunkSize = headers.chunkSize;
+    const encChunkSize = chunkSize+XCHACHA20POLY1305_OVERHEAD;
+    const fileSize = headers.dataSize;
     const strategy = new ByteLengthQueuingStrategy({
-      highWaterMark: 5*(file.headers[isThumb?1:0].chunkSize+40),
+      highWaterMark: 5*encChunkSize,
     });
-    const symKey = await sodiumKey(this.decrypt_(file.headers[isThumb?1:0].encKey));
-    const chunkSize = file.headers[isThumb?1:0].chunkSize;
-    const fileSize = file.headers[isThumb?1:0].dataSize;
 
     return this.getContentUrl_({file:name,collection:collection,isThumb:isThumb})
     .then(url => fetch(url, {
@@ -1903,7 +1907,7 @@ class c2FmZQClient {
         throw new Error(`Status: ${resp.status}`);
       }
       const rs = new ReadableStream(new CacheStream(resp.body, this.checkCachedFileState_));
-      return this.cm_.put(cmName, new Response(rs, {status:200, statusText:'OK', headers:resp.headers}), {add:true,stick:true,size:fileSize})
+      return this.cm_.put(cmName, new Response(rs, {status:200, statusText:'OK', headers:resp.headers}), {add:true,stick:true,size:fileSize,chunkSize:25*encChunkSize})
         .catch(err => {
           console.log('SW cache error', err);
           throw err;
@@ -2059,7 +2063,10 @@ class c2FmZQClient {
       if (!file) {
         return resolve(new Response('Not found', {'status': 404, 'statusText': 'Not found'}));
       }
-      let startOffset = file.headers[0].headerSize;
+      const headers = file.headers[f.isThumb?1:0];
+      const chunkSize = headers.chunkSize;
+      const encChunkSize = chunkSize+XCHACHA20POLY1305_OVERHEAD;
+      let startOffset = headers.headerSize;
       let chunkNum = 0;
       let chunkOffset = 0;
       let reqOffset = 0;
@@ -2071,16 +2078,13 @@ class c2FmZQClient {
         const m = re.exec(range);
         reqOffset = m ? parseInt(m[1]) : 0;
         if (reqOffset > 0) {
-          chunkNum = Math.floor(reqOffset / file.headers[0].chunkSize);
-          chunkOffset = reqOffset % file.headers[0].chunkSize;
-          startOffset += chunkNum * (file.headers[0].chunkSize+40);
+          chunkNum = Math.floor(reqOffset / chunkSize);
+          chunkOffset = reqOffset % chunkSize;
+          startOffset += chunkNum * encChunkSize;
         }
       }
 
-      const strategy = new ByteLengthQueuingStrategy({
-        highWaterMark: 5*(file.headers[0].chunkSize+40),
-      });
-      const fileSize = file.headers[f.isThumb?1:0].dataSize;
+      const fileSize = headers.dataSize;
       if (fileSize <= 0) {
         resolve(new Response(new Blob(), {'status': 200, 'statusText': 'OK'}));
         return;
@@ -2090,8 +2094,10 @@ class c2FmZQClient {
           {'status': 416, 'statusText': 'Range Not Satisfiable'}));
         return;
       }
-      const symKey = await sodiumKey(this.decrypt_(file.headers[f.isThumb?1:0].encKey));
-      const chunkSize = file.headers[f.isThumb?1:0].chunkSize;
+      const symKey = await sodiumKey(this.decrypt_(headers.encKey));
+      const strategy = new ByteLengthQueuingStrategy({
+        highWaterMark: 5*encChunkSize,
+      });
 
       const cachePref = await this.cachePreference();
       const useCache = cachePref.mode === 'encrypted';
@@ -2101,9 +2107,15 @@ class c2FmZQClient {
       let addToCache = false;
       let resp;
       if (useCache) {
-        resp = await this.cm_.match(cmName, {use:true,size:fileSize});
-        if (resp) {
-          skipChunks = chunkNum;
+        const pos = startOffset - headers.headerSize;
+        const r = await this.cm_.match(cmName, {use:true,offset:pos});
+        if (r) {
+          if (r.offset % encChunkSize !== 0) {
+            console.error('SW invalid cached offset', r.offset);
+          } else {
+            skipChunks = chunkNum - r.offset / encChunkSize;
+            resp = r.response;
+          }
         }
       }
       if (!resp) {
@@ -2134,7 +2146,7 @@ class c2FmZQClient {
         onAbort = () => {
           state.cancel = true;
         };
-        this.cm_.put(cmName, new Response(new ReadableStream(new CacheStream(rs2, state)), {status:200, statusText:'OK', headers:resp.headers}), {use:true,size:fileSize})
+        this.cm_.put(cmName, new Response(new ReadableStream(new CacheStream(rs2, state)), {status:200, statusText:'OK', headers:resp.headers}), {use:true,size:fileSize,chunkSize:25*encChunkSize})
         .catch(err => {
           console.log(`SW ${cmName} not cached`);
         });
@@ -2404,7 +2416,7 @@ class Decrypter {
     this.reader_ = reader;
     this.symmetricKey_ = symKey;
     this.chunkSize_ = chunkSize;
-    this.encChunkSize_ = chunkSize + 40;
+    this.encChunkSize_ = chunkSize + XCHACHA20POLY1305_OVERHEAD;
     this.buf_ = new Uint8Array(0);
     this.n_ = n;
     this.offset_ = offset;
@@ -2463,9 +2475,9 @@ class Decrypter {
     }
     try {
       this.n_++;
-      const nonce = Uint8Array.from(this.buf_.slice(0, 24));
+      const nonce = Uint8Array.from(this.buf_.slice(0, sodium.CRYPTO_AEAD_XCHACHA20POLY1305_IETF_NPUBBYTES));
       const end = this.buf_.byteLength >= this.encChunkSize_ ? this.encChunkSize_ : this.buf_.byteLength;
-      const enc = this.buf_.slice(24, end);
+      const enc = this.buf_.slice(sodium.CRYPTO_AEAD_XCHACHA20POLY1305_IETF_NPUBBYTES, end);
       const ck = await sodium.crypto_kdf_derive_from_key(32, this.n_, '__data__', this.symmetricKey_);
       let dec = new Uint8Array(await sodium.crypto_aead_xchacha20poly1305_ietf_decrypt(enc, nonce, ck, ''));
       this.buf_ = this.buf_.slice(end);
@@ -2608,7 +2620,7 @@ class UploadStream {
   }
 
   async encryptChunk_(n, data, key) {
-    const nonce = await sodium.randombytes_buf(24);
+    const nonce = await sodium.randombytes_buf(sodium.CRYPTO_AEAD_XCHACHA20POLY1305_IETF_NPUBBYTES);
     const ck = await sodium.crypto_kdf_derive_from_key(32, n, '__data__', key);
     const enc = await sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(data, nonce, ck, '');
     const out = new Uint8Array(nonce.byteLength + enc.byteLength);

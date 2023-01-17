@@ -87,6 +87,7 @@ async function initApp(storeKey) {
     }
     self.appInitialized = true;
     self.sodium = await self.SodiumPlus.auto();
+    self.XCHACHA20POLY1305_OVERHEAD = sodium.CRYPTO_AEAD_XCHACHA20POLY1305_IETF_NPUBBYTES + sodium.CRYPTO_AEAD_XCHACHA20POLY1305_IETF_ABYTES;
     const app = new c2FmZQClient({
       pathPrefix: self.location.href.replace(/^(.*\/)[^\/]*/, '$1'),
     });

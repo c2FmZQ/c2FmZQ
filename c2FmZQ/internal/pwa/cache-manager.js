@@ -90,29 +90,112 @@ class CacheManager {
   async put(name, resp, opt) {
     opt = opt || {};
     opt.add = true;
-    return this.cache_.put(this.cachePrefix_ + name, resp)
-      .then(() => this.update(name, opt));
+    const reader = resp.body.getReader();
+    let buf = new Uint8Array(0);
+    let leftInChunk = 0;
+    let readDone = false;
+    let writeDone = false;
+    const stream = {
+      async pull(controller) {
+        if (!readDone) {
+          const {done, value} = await reader.read();
+          if (done) {
+            readDone = true;
+          }
+          if (value) {
+            const tmp = new Uint8Array(buf.byteLength + value.byteLength);
+            tmp.set(buf);
+            tmp.set(value, buf.byteLength);
+            buf = tmp;
+          }
+        }
+        if (readDone && buf.byteLength === 0) {
+          controller.close();
+          writeDone = true;
+        } else {
+          const sz = Math.min(buf.byteLength, leftInChunk);
+          controller.enqueue(buf.slice(0, sz));
+          buf = buf.slice(sz);
+          leftInChunk -= sz;
+          if (leftInChunk === 0) {
+            controller.close();
+          }
+        }
+      },
+    };
+    const n = i => this.cachePrefix_ + name + '/' + i;
+    let count = 0;
+    while (!writeDone) {
+      leftInChunk = opt.chunkSize;
+      try {
+        await this.cache_.put(n(count), new Response(new ReadableStream(stream), {status:resp.status, statusText:resp.statusText, headers:resp.headers}));
+      } catch (err) {
+        for (let i = 0; i < count; i++) {
+          await this.cache_.delete(n(i)).catch(err => console.log(`SW undo put ${n(i)} failed`, err));
+        }
+        throw err;
+      }
+      count++;
+    }
+    opt.numChunks = count;
+    return this.update(name, opt);
   }
 
   async exists(name) {
-    return this.cache_.keys(this.cachePrefix_ + name)
-      .then(result => result.length !== 0);
+    return this.store_.get(this.storePrefix_ + name)
+      .then(result => result !== undefined);
   }
 
   async match(name, opt) {
-    return this.cache_.match(this.cachePrefix_ + name)
-      .then(resp => {
-        if (resp) {
-          this.update(name, opt)
-          .catch(err => console.log('SW cache error', err));
+    const item = await this.store_.get(this.storePrefix_ + name);
+    if (!item) {
+      return;
+    }
+    await this.update(name, opt).catch(err => console.log('SW cache error', err));
+
+    const startChunk = opt.offset ? Math.floor(opt.offset/item.chunkSize) : 0;
+    const numChunks = item.numChunks;
+    let count = 0;
+    let canceled = false;
+    const m = async i => this.cache_.match(this.cachePrefix_ + name + '/' + i);
+    let resp = await m(startChunk);
+    const stream = {
+      async start(controller) {
+        for (let i = startChunk; i < numChunks; i++) {
+          if (i > startChunk) {
+            resp = await m(i);
+          }
+          const reader = resp.body.getReader();
+          while (true) {
+            const {done, value} = await reader.read();
+            if (canceled) {
+              controller.error(new Error('canceled'));
+              return;
+            }
+            if (value) {
+              controller.enqueue(value);
+            }
+            if (done) {
+              break;
+            }
+          }
         }
-        return resp;
-      });
+        controller.close();
+      },
+      cancel() {
+        canceled = true;
+      },
+    };
+    return {
+      response: new Response(new ReadableStream(stream), {status:resp.status, statusText:resp.statusText, headers:resp.headers}),
+      offset: startChunk * item.chunkSize,
+    };
   }
 
   async keys() {
-    return this.cache_.keys()
-      .then(keys => keys.map(req => req.url.substring(req.url.lastIndexOf(this.cachePrefix_) + this.cachePrefix_.length)));
+    return this.store_.keys()
+      .then(keys => keys.filter(k => k.startsWith(this.storePrefix_) && k !== this.summaryKey_))
+      .then(keys => keys.map(k => k.substring(this.storePrefix_.length)));
   }
 
   async update(name, opt) {
@@ -203,15 +286,21 @@ class CacheManager {
           this.cacheSummary_.numEvictable--;
           this.cacheSummary_.changed = true;
         }
-        await this.store_.del(storeKey).catch(err => console.log(`SW deleting ${storeKey} failed`, err));
+        const p = [];
+        p.push(this.store_.del(storeKey).catch(err => console.log(`SW deleting ${storeKey} failed`, err)));
+        for (let i = 0; i < item.numChunks; i++) {
+          p.push(this.cache_.delete(cacheKey + '/' + i).catch(err => console.log(`SW deleting ${cacheKey}/${i} failed`, err)));
+        }
+        await Promise.all(p);
       }
-      await this.cache_.delete(cacheKey).catch(err => console.log(`SW deleting ${cacheKey} failed`, err));
     } else {
       if (!item && (opt.add || opt.use)) {
         item = {
           size: opt.size || 0,
           sticky: false,
           lastSeen: 0,
+          numChunks: opt.numChunks || 1,
+          chunkSize: opt.chunkSize,
           changed: true,
         };
         this.cacheSummary_.totalSize += item.size;
@@ -271,7 +360,9 @@ class CacheManager {
             const storeKey = this.storePrefix_ + it.key;
             const cacheKey = this.cachePrefix_ + it.key;
             p.push(this.store_.del(storeKey).catch(err => console.log(`SW deleting ${storeKey} failed`, err)));
-            p.push(this.cache_.delete(cacheKey).catch(err => console.log(`SW deleting ${cacheKey} failed`, err)));
+            for (let i = 0; i < it.value.numChunks; i++) {
+              p.push(this.cache_.delete(cacheKey + '/' + i).catch(err => console.log(`SW deleting ${cacheKey}/${i} failed`, err)));
+            }
             this.cacheSummary_.totalSize -= it.value.size;
             this.cacheSummary_.numEvictable--;
             console.log(`SW evicted ${it.key} size ${it.value.size}`);
