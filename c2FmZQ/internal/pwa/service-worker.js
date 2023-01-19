@@ -44,9 +44,9 @@ let MANIFEST = [
   'thirdparty/libs.js',
 ];
 if (self.location.search.includes('tests')) {
-  self.includeTests = true;
   MANIFEST.push('sw-tests.js');
   MANIFEST.push('sw-tests.html');
+  self.importScripts('sw-tests.js');
 }
 
 self.importScripts('thirdparty/libs.js');
@@ -56,463 +56,454 @@ self.importScripts('utils.js');
 self.importScripts('c2fmzq-client.js');
 self.importScripts('cache-manager.js');
 
-self.store = new Store();
-self.initp = null;
 self._T = Lang.text;
 
-self.notifs = new Store('notifications');
-self.notifs.passphrase = 'notifications';
+class ServiceWorker {
+  #app;
+  #state;
+  #store;
+  #notifs;
+  constructor() {
+    this.#state = {};
+    this.#state.initp = null;
+    this.#state.rpcId = Math.floor(Math.random() * 1000000000);
+    this.#state.rpcWait = {};
+    this.#store = new Store();
+    this.#notifs = new Store('notifications');
+    this.#notifs.setPassphrase('notifications');
+  }
 
-self.rpcId_ = Math.floor(Math.random() * 1000000000);
-self.rpcWait_ = {};
+  static start() {
+    const sw = new ServiceWorker();
+    self.addEventListener('install', event => sw.#oninstall(event));
+    self.addEventListener('activate', event => sw.#onactivate(event));
+    self.addEventListener('freeze', event => sw.#onfreeze(event));
+    self.addEventListener('resume', event => sw.#onresume(event));
+    self.addEventListener('statechange', event => sw.#onstatechange(event));
+    self.addEventListener('unhandledrejection', event => sw.#onunhandledrejection(event));
+    self.addEventListener('message', event => sw.#onmessage(event));
+    self.addEventListener('notificationclick', event => sw.#onnotificationclick(event));
+    self.addEventListener('push', event => sw.#onpush(event));
+    self.addEventListener('pushsubscriptionchange', event => sw.#onpushsubscriptionchange(event));
+    self.addEventListener('fetch', event => sw.#onfetch(event));
+    (async () => sw.#initApp(null))();
+  }
 
-async function initApp(storeKey) {
-  const p = new Promise(async (resolve, reject) => {
-    if (self.store.passphrase || !storeKey) {
-      sendHello();
-      return resolve();
-    }
-    try {
-      await store.open(storeKey);
-    } catch (err) {
-      if (err.message === 'Wrong passphrase') {
-        console.log('SW Wrong passphrase');
-        sendHello(err.message);
+  async #initApp(storeKey, capabilities) {
+    const p = new Promise(async (resolve, reject) => {
+      if (this.#store.passphrase() || !storeKey) {
+        this.#sendHello();
         return resolve();
       }
-      return reject(err);
-    }
-    if (self.appInitialized) {
-      return resolve();
-    }
-    self.appInitialized = true;
-    self.sodium = await self.SodiumPlus.auto();
-    self.XCHACHA20POLY1305_OVERHEAD = sodium.CRYPTO_AEAD_XCHACHA20POLY1305_IETF_NPUBBYTES + sodium.CRYPTO_AEAD_XCHACHA20POLY1305_IETF_ABYTES;
-    const app = new c2FmZQClient({
-      pathPrefix: self.location.href.replace(/^(.*\/)[^\/]*/, '$1'),
-    });
-    await app.init();
-    self.app = app;
-    console.log('SW app ready');
-    sendHello();
-    await self.store.release();
-    setTimeout(self.checkNotifications.bind(self), 500);
-    setTimeout(self.checkPushsubscriptionchanges.bind(self), 500);
-    return resolve();
-  })
-  .finally(() => {
-    self.initp = null;
-  });
-  if (self.initp) {
-    console.log('SW initApp called concurrently');
-    return self.initp.then(() => p);
-  }
-  self.initp = p;
-  return p;
-}
-
-function fixme() {
-  self.sendMessage('', {type: 'fixme'});
-  setInterval(() => {
-    self.sendMessage('', {type: 'fixme'});
-  }, 5000);
-}
-
-function checkNotifications() {
-  if (self.checkingNotifications) {
-    setTimeout(self.checkNotifications.bind(self), 500);
-    return;
-  }
-  self.checkingNotifications = true;
-  self.notifs.keys()
-  .then(keys => keys.filter(k => k.startsWith("notifs/")))
-  .then(keys => {
-    if (keys.length === 0) {
-      return;
-    }
-    if (!self.app) {
-      self.showNotif(_T('notification-encrypted-title', keys.length), {
-        tag: 'encrypted',
-        body: _T('notification-encrypted-body'),
-        requireInteraction: true,
-      });
-      return;
-    }
-    self.registration.getNotifications({tag:'encrypted'}).then(nn => nn.forEach(n => n.close()));
-    keys.forEach(k => {
-      self.notifs.get(k)
-        .then(v => self.app.onpush(v))
-        .finally(() => self.notifs.del(k));
-    });
-  })
-  .finally(() => {
-    self.checkingNotifications = false;
-  });
-}
-
-function checkPushsubscriptionchanges() {
-  if (self.checkingPushsubscriptionchanges) {
-    setTimeout(self.checkPushsubscriptionchanges.bind(self), 500);
-    return;
-  }
-  self.checkingPushsubscriptionchanges = true;
-  self.notifs.keys()
-  .then(keys => keys.filter(k => k.startsWith("pushsubscriptionchange/")))
-  .then(keys => {
-    if (keys.length === 0 || !self.app) {
-      return;
-    }
-    keys.forEach(k => {
-      self.notifs.get(k)
-        .then(v => self.app.enableNotifications('', true))
-        .then(() => self.notifs.del(k));
-    });
-  })
-  .finally(() => {
-    self.checkingPushsubscriptionchanges = false;
-  });
-}
-
-async function sodiumKey(k, type) {
-  k = await Promise.resolve(k);
-  if (typeof k === 'object') {
-    if (k instanceof X25519SecretKey) return k;
-    if (k instanceof X25519PublicKey) return k;
-    if (k instanceof CryptographyKey) return k;
-    if (k.type === 'Buffer') {
-      k = new Uint8Array(k.data);
-    } else if (k[0] !== undefined && k[31] !== undefined) {
-      const kk = new Array(32);
-      for (let i = 0; i < 32; i++) {
-        kk[i] = k[i];
-      }
-      k = kk;
-    }
-  }
-  if (typeof k === 'string' && k.length !== 32) {
-    k = base64DecodeToBytes(k);
-  }
-  if (Array.isArray(k)) {
-    k = new Uint8Array(k);
-  }
-  try {
-    switch (type) {
-      case 'public': return X25519PublicKey.from(k);
-      case 'secret': return X25519SecretKey.from(k);
-      default: return CryptographyKey.from(k);
-    }
-  } catch (e) {
-    console.error('SW sodiumKey', k, e);
-    return null;
-  }
-}
-
-function sendHello(err) {
-  const key = self.store.passphrase;
-  console.log(`SW Sending hello ${VERSION}`);
-  let msg = {
-    type: 'hello',
-    storeKey: key,
-    version: VERSION,
-  };
-  if (err) {
-    msg.err = err;
-  }
-  self.sendMessage('', msg);
-}
-
-function sendLoggedOut() {
-  console.log('SW Sending logged out');
-  self.sendMessage('', {type: 'loggedout'});
-}
-
-function sendUploadProgress(p) {
-  self.sendMessage('', {type: 'upload-progress', progress: p});
-}
-
-function sendDownloadProgress(p) {
-  self.sendMessage('', {type: 'download-progress', progress: p});
-}
-
-async function sendMessage(id, m) {
-  const clients = await self.clients.matchAll({type: 'window'});
-  if (clients.length === 0) {
-    console.log(`SW no clients ${VERSION}`);
-    return;
-  }
-  for (let c of clients) {
-    if (id === '' || c.id === id) {
       try {
-        c.postMessage(m);
+        await this.#store.open(storeKey);
       } catch (err) {
-        console.log('SW sendMessage failed', m, err);
+        if (err.message === 'Wrong passphrase') {
+          console.log('SW Wrong passphrase');
+          this.#sendHello(err.message);
+          return resolve();
+        }
+        return reject(err);
+      }
+      if (this.#state.appInitialized) {
+        return resolve();
+      }
+      this.#state.appInitialized = true;
+      self.sodium = await self.SodiumPlus.auto();
+      self.XCHACHA20POLY1305_OVERHEAD = sodium.CRYPTO_AEAD_XCHACHA20POLY1305_IETF_NPUBBYTES + sodium.CRYPTO_AEAD_XCHACHA20POLY1305_IETF_ABYTES;
+      const app = new c2FmZQClient({
+        store: this.#store,
+        sw: this,
+        capabilities: capabilities,
+        pathPrefix: self.location.href.replace(/^(.*\/)[^\/]*/, '$1'),
+      });
+      await app.init();
+      this.#app = app;
+      console.log('SW app ready');
+      this.#sendHello();
+      await this.#store.release();
+      setTimeout(this.#checkNotifications.bind(this), 500);
+      setTimeout(this.#checkPushsubscriptionchanges.bind(this), 500);
+      return resolve();
+    })
+    .finally(() => {
+      this.#state.initp = null;
+    });
+    if (this.#state.initp) {
+      console.log('SW initApp called concurrently');
+      return this.#state.initp.then(() => p);
+    }
+    this.#state.initp = p;
+    return p;
+  }
+
+  #checkNotifications() {
+    if (this.#state.checkingNotifications) {
+      setTimeout(this.#checkNotifications.bind(this), 500);
+      return;
+    }
+    this.#state.checkingNotifications = true;
+    this.#notifs.keys()
+    .then(keys => keys.filter(k => k.startsWith("notifs/")))
+    .then(keys => {
+      if (keys.length === 0) {
+        return;
+      }
+      if (!this.#app) {
+        self.showNotif(_T('notification-encrypted-title', keys.length), {
+          tag: 'encrypted',
+          body: _T('notification-encrypted-body'),
+          requireInteraction: true,
+        });
+        return;
+      }
+      self.registration.getNotifications({tag:'encrypted'}).then(nn => nn.forEach(n => n.close()));
+      keys.forEach(k => {
+        this.#notifs.get(k)
+          .then(v => this.#app.onpush(v))
+          .finally(() => this.#notifs.del(k));
+      });
+    })
+    .finally(() => {
+      this.#state.checkingNotifications = false;
+    });
+  }
+
+  #checkPushsubscriptionchanges() {
+    if (this.#state.checkingPushsubscriptionchanges) {
+      setTimeout(this.#checkPushsubscriptionchanges.bind(this), 500);
+      return;
+    }
+    this.#state.checkingPushsubscriptionchanges = true;
+    this.#notifs.keys()
+    .then(keys => keys.filter(k => k.startsWith("pushsubscriptionchange/")))
+    .then(keys => {
+      if (keys.length === 0 || !this.#app) {
+        return;
+      }
+      keys.forEach(k => {
+        this.#notifs.get(k)
+          .then(v => this.#app.enableNotifications('', true))
+          .then(() => this.#notifs.del(k));
+      });
+    })
+    .finally(() => {
+      this.#state.checkingPushsubscriptionchanges = false;
+    });
+  }
+
+  #sendHello(err) {
+    const key = this.#store.passphrase();
+    console.log(`SW Sending hello ${VERSION}`);
+    let msg = {
+      type: 'hello',
+      storeKey: key,
+      version: VERSION,
+    };
+    if (err) {
+      msg.err = err;
+    }
+    this.sendMessage('', msg);
+  }
+
+  async sendRPC(clientId, f, ...args) {
+    const id = this.#state.rpcId++;
+    return new Promise((resolve, reject) => {
+      this.#state.rpcWait[id] = {resolve, reject};
+      return this.sendMessage(clientId, {
+        type: 'rpc',
+        id: id,
+        func: f,
+        args: args,
+      });
+    });
+  }
+
+  sendLoggedOut() {
+    console.log('SW Sending logged out');
+    this.sendMessage('', {type: 'loggedout'});
+  }
+
+  sendUploadProgress(p) {
+    this.sendMessage('', {type: 'upload-progress', progress: p});
+  }
+
+  sendDownloadProgress(p) {
+    this.sendMessage('', {type: 'download-progress', progress: p});
+  }
+
+  async sendMessage(id, m) {
+    const clients = await self.clients.matchAll({type: 'window'});
+    if (clients.length === 0) {
+      console.log(`SW no clients ${VERSION}`);
+      return;
+    }
+    for (let c of clients) {
+      if (id === '' || c.id === id) {
+        try {
+          c.postMessage(m);
+        } catch (err) {
+          console.log('SW sendMessage failed', m, err);
+        }
       }
     }
   }
-}
 
-async function showNotif(title, options) {
-  options.badge = './c2.png';
-  return self.registration.showNotification(title, options);
-}
-
-async function sendRPC(clientId, f, ...args) {
-  const id = self.rpcId_++;
-  return new Promise((resolve, reject) => {
-    self.rpcWait_[id] = {resolve, reject};
-    return sendMessage(clientId, {
-      type: 'rpc',
-      id: id,
-      func: f,
-      args: args,
-    });
-  });
-}
-
-self.addEventListener('push', event => {
-  const data = event.data ? event.data.text() : null;
-  event.waitUntil(
-    self.notifs.set('notifs/' + new Date().getTime(), data)
-    .then(() => self.checkNotifications())
-  );
-});
-
-self.addEventListener('pushsubscriptionchange', event => {
-  console.log('SW pushsubscriptionchange', event);
-  event.waitUntil(
-    self.notifs.set('pushsubscriptionchange/' + new Date().getTime(), event.oldSubscription.options)
-    .then(() => self.checkPushsubscriptionchanges())
-  );
-});
-
-self.addEventListener('notificationclick', event => {
-  const tag = event.notification.tag;
-  let jumpTo;
-  if (tag.startsWith('new-content:') || tag.startsWith('new-member:') || tag.startsWith('new-collection:')) {
-    jumpTo = tag.substring(tag.indexOf(':')+1);
+  async showNotif(title, options) {
+    options.badge = './c2.png';
+    return self.registration.showNotification(title, options);
   }
-  event.notification.close();
-  event.waitUntil(
-    self.clients.matchAll({type: "window"})
-    .then(list => {
-      if (tag.startsWith('remote-mfa:')) {
-        if (event.action && event.action === 'deny') {
-          console.log('SW Remove MFA denied');
-          return;
-        }
-        if (!self.app) {
-          throw new Error('app is not ready');
-        }
-        return self.app.approveRemoteMFA(tag.substring(tag.indexOf(':')+1));
-      }
 
-      let url = self.registration.scope;
-      if (jumpTo) {
-        url += '#' + btoa(JSON.stringify({collection: jumpTo}));
-      }
-      let client;
-      for (const c of list) {
-        if (c.url.startsWith(self.registration.scope) && c.focus) {
-          client = c;
-          break;
-        }
-      }
-      if (!client) {
-        return self.clients.openWindow(url);
-      }
-      return client.focus()
-        .catch(err => console.log('SW focus:', err))
-        .then(() => new Promise((resolve) => setTimeout(resolve, 500)))
-        .then(() => {
-          if (jumpTo) {
-            return client.navigate(url).catch(err => console.log('SW navigate:', err));
-          }
-        })
-        .then(() => {
-          if (jumpTo) {
-            return self.sendMessage(client.id, {type: 'jumpto', collection: jumpTo});
-          }
-        });
+  async #handleRpcRequest(clientId, event) {
+    if (!this.#app) {
+      console.log('SW handleRpcRequest not ready');
+      setTimeout(() => {
+        self.#handleRpcRequest(clientId, event);
+      }, 100);
+      return;
+    }
+    const methods = [
+      'login',
+      'createAccount',
+      'recoverAccount',
+      'upload',
+      'cancelUpload',
+      'backupPhrase',
+      'changeKeyBackup',
+      'restoreSecretKey',
+      'updateProfile',
+      'deleteAccount',
+      'generateOTP',
+      'addSecurityKey',
+      'listSecurityKeys',
+      'adminUsers',
+      'mfaCheck',
+    ];
+    if (!methods.includes(event.data.func)) {
+      console.log('SW RPC method not allowed', event.data.func);
+      this.sendMessage(clientId, {type: 'rpc-result', id: event.data.id, func: event.data.func, reject: 'method not allowed'});
+      return;
+    }
+    await this.#store.open();
+    this.#app[event.data.func](clientId, ...event.data.args)
+    .then(e => {
+      this.sendMessage(clientId, {type: 'rpc-result', id: event.data.id, func: event.data.func, resolve: e});
     })
-  );
-});
-
-self.addEventListener('install', event => {
-  if (DEVEL) {
-    console.log(`SW install ${VERSION} DEVEL`);
-    event.waitUntil(self.skipWaiting());
-    return;
+    .catch(e => {
+      this.sendMessage(clientId, {type: 'rpc-result', id: event.data.id, func: event.data.func, reject: e});
+    })
+    .finally(() => this.#store.release());
   }
-  console.log(`SW install ${VERSION}`);
-  event.waitUntil(
-    self.caches.open(VERSION).then(c => c.addAll(MANIFEST))
-  );
-});
 
-self.addEventListener('activate', event => {
-  if (DEVEL) {
-    console.log(`SW activate ${VERSION} DEVEL`);
+  async #handleRpcResult(clientId, event) {
+    if (event.data.id in this.#state.rpcWait) {
+      if (event.data.reject !== undefined) {
+        this.#state.rpcWait[event.data.id].reject(event.data.reject);
+      } else {
+        this.#state.rpcWait[event.data.id].resolve(event.data.resolve);
+      }
+      delete this.#state.rpcWait[event.data.id];
+    }
+  }
+
+  #oninstall(event) {
+    if (DEVEL) {
+      console.log(`SW install ${VERSION} DEVEL`);
+      event.waitUntil(self.skipWaiting());
+      return;
+    }
+    console.log(`SW install ${VERSION}`);
+    event.waitUntil(
+      self.caches.open(VERSION).then(c => c.addAll(MANIFEST))
+    );
+  }
+
+  #onactivate(event) {
+    if (DEVEL) {
+      console.log(`SW activate ${VERSION} DEVEL`);
+      event.waitUntil(
+        self.caches.keys()
+        .then(keys => keys.filter(k => k !== 'local').map(k => self.caches.delete(k)))
+        .then(p => Promise.all(p))
+        .then(r => console.log('SW cache deletes', r))
+        .then(() => self.clients.claim())
+      );
+      return;
+    }
+    console.log(`SW activate ${VERSION}`);
     event.waitUntil(
       self.caches.keys()
-      .then(keys => keys.filter(k => k !== 'local').map(k => self.caches.delete(k)))
+      .then(keys => keys.filter(k => k !== VERSION && k !== 'local').map(k => self.caches.delete(k)))
       .then(p => Promise.all(p))
       .then(r => console.log('SW cache deletes', r))
       .then(() => self.clients.claim())
     );
-    return;
   }
-  console.log(`SW activate ${VERSION}`);
-  event.waitUntil(
-    self.caches.keys()
-    .then(keys => keys.filter(k => k !== VERSION && k !== 'local').map(k => self.caches.delete(k)))
-    .then(p => Promise.all(p))
-    .then(r => console.log('SW cache deletes', r))
-    .then(() => self.clients.claim())
-  );
-});
 
-self.addEventListener('unhandledrejection', event => {
-  self.sendMessage('', {type: 'error', msg: event.reason});
-});
-
-self.addEventListener('statechange', event => {
-  console.log('SW state change', event);
-});
-
-self.addEventListener('freeze', event => {
-  console.log('SW freeze', event);
-});
-
-self.addEventListener('resume', event => {
-  console.log('SW resume', event);
-});
-
-async function handleRpcRequest(clientId, event) {
-  if (!self.app) {
-    console.log('SW handleRpcRequest not ready');
-    setTimeout(() => {
-      self.handleRpcRequest(clientId, event);
-    }, 100);
-    return;
+  #onfreeze(event) {
+    console.log('SW freeze', event);
   }
-  const methods = [
-    'login',
-    'createAccount',
-    'recoverAccount',
-    'upload',
-    'cancelUpload',
-    'backupPhrase',
-    'changeKeyBackup',
-    'restoreSecretKey',
-    'updateProfile',
-    'deleteAccount',
-    'generateOTP',
-    'addSecurityKey',
-    'listSecurityKeys',
-    'adminUsers',
-    'mfaCheck',
-  ];
-  if (!methods.includes(event.data.func)) {
-    console.log('SW RPC method not allowed', event.data.func);
-    self.sendMessage(clientId, {type: 'rpc-result', id: event.data.id, func: event.data.func, reject: 'method not allowed'});
-    return;
-  }
-  await store.open();
-  self.app[event.data.func](clientId, ...event.data.args)
-  .then(e => {
-    self.sendMessage(clientId, {type: 'rpc-result', id: event.data.id, func: event.data.func, resolve: e});
-  })
-  .catch(e => {
-    self.sendMessage(clientId, {type: 'rpc-result', id: event.data.id, func: event.data.func, reject: e});
-  })
-  .finally(() => store.release());
-}
 
-self.addEventListener('message', async event => {
-  const clientId = event.source.id;
-  switch(event.data?.type) {
-    case 'nop':
-      break;
-    case 'hello':
-      console.log(`SW Received hello ${event.data.version}`);
-      if (event.data.version !== VERSION) {
-        console.log(`SW Version mismatch: ${event.data.version} != ${VERSION}`);
-      }
-      Lang.current = event.data.lang || 'en-US';
-      self.capabilities = event.data.capabilities;
-      initApp(event.data.storeKey);
-      break;
-    case 'rpc':
-      self.handleRpcRequest(clientId, event);
-      break;
-    case 'rpc-result':
-      if (event.data.id in self.rpcWait_) {
-        if (event.data.reject !== undefined) {
-          self.rpcWait_[event.data.id].reject(event.data.reject);
-        } else {
-          self.rpcWait_[event.data.id].resolve(event.data.resolve);
+  #onresume(event) {
+    console.log('SW resume', event);
+  }
+
+  #onstatechange(event) {
+    console.log('SW state change', event);
+  }
+
+  #onunhandledrejection(event) {
+    this.sendMessage('', {type: 'error', msg: event.reason});
+  }
+
+  async #onmessage(event) {
+    const clientId = event.source.id;
+    switch(event.data?.type) {
+      case 'nop':
+        break;
+      case 'hello':
+        console.log(`SW Received hello ${event.data.version}`);
+        if (event.data.version !== VERSION) {
+          console.log(`SW Version mismatch: ${event.data.version} != ${VERSION}`);
         }
-        delete self.rpcWait_[event.data.id];
-      }
-      break;
-    case 'run-tests':
-      self.runTests()
-      .then(results => {
-        self.sendMessage(clientId, {type: 'test-results', results: results});
-      });
-      break;
-    default:
-      console.log('SW Received unexpected message', event.data);
-      break;
+        Lang.current = event.data.lang || 'en-US';
+        this.#initApp(event.data.storeKey, event.data.capabilities);
+        break;
+      case 'rpc':
+        this.#handleRpcRequest(clientId, event);
+        break;
+      case 'rpc-result':
+        this.#handleRpcResult(clientId, event);
+        break;
+      case 'run-tests':
+        self.runTests()
+        .then(results => {
+          this.sendMessage(clientId, {type: 'test-results', results: results});
+        });
+        break;
+      default:
+        console.log('SW Received unexpected message', event.data);
+        break;
+    }
   }
-});
 
-self.addEventListener('fetch', event => {
-  const reqUrl = event.request.url.replace(/#.*$/, '');
-  if (!reqUrl.startsWith(self.registration.scope)) {
-    console.error('SW fetch req out of scope', reqUrl, self.registration.scope);
-    event.respondWith('request out of scope', {'status': 403, 'statusText': 'Permission denied'});
-    return;
-  }
-  const url = new URL(reqUrl);
-  const scope = new URL(self.registration.scope);
-  let rel = url.pathname.slice(scope.pathname.length);
-  if (rel === '') {
-    rel = 'index.html';
-  }
-  if (MANIFEST.includes(rel)) {
-    event.respondWith(
-      self.caches.match(rel).then(resp => {
-        if (resp) return resp;
-        console.log(`SW fetch ${rel}, no cache`);
-        return fetch(event.request);
+  #onnotificationclick(event) {
+    const tag = event.notification.tag;
+    let jumpTo;
+    if (tag.startsWith('new-content:') || tag.startsWith('new-member:') || tag.startsWith('new-collection:')) {
+      jumpTo = tag.substring(tag.indexOf(':')+1);
+    }
+    event.notification.close();
+    event.waitUntil(
+      self.clients.matchAll({type: "window"})
+      .then(list => {
+        if (tag.startsWith('remote-mfa:')) {
+          if (event.action && event.action === 'deny') {
+            console.log('SW Remove MFA denied');
+            return;
+          }
+          if (!this.#app) {
+            throw new Error('app is not ready');
+          }
+          return this.#app.approveRemoteMFA(tag.substring(tag.indexOf(':')+1));
+        }
+
+        let url = self.registration.scope;
+        if (jumpTo) {
+          url += '#' + btoa(JSON.stringify({collection: jumpTo}));
+        }
+        let client;
+        for (const c of list) {
+          if (c.url.startsWith(self.registration.scope) && c.focus) {
+            client = c;
+            break;
+          }
+        }
+        if (!client) {
+          return self.clients.openWindow(url);
+        }
+        return client.focus()
+          .catch(err => console.log('SW focus:', err))
+          .then(() => new Promise((resolve) => setTimeout(resolve, 500)))
+          .then(() => {
+            if (jumpTo) {
+              return client.navigate(url).catch(err => console.log('SW navigate:', err));
+            }
+          })
+          .then(() => {
+            if (jumpTo) {
+              return this.sendMessage(client.id, {type: 'jumpto', collection: jumpTo});
+            }
+          });
       })
     );
-    return;
   }
 
-  let count = 0;
-  const p = new Promise(async (resolve, reject) => {
-    const handler = async () => {
-      if (self.app) {
-        await store.open();
-        return resolve(self.app.handleFetchEvent(event));
-      }
-      if (count++ > 100) {
-        fixme();
-        console.log(event.request);
-        return reject(new Error('timeout'));
-      }
-      setTimeout(handler, 100);
-    };
-    handler();
-  })
-  .finally(() => store.release());
-  event.respondWith(p);
-});
+  #onpush(event) {
+    const data = event.data ? event.data.text() : null;
+    event.waitUntil(
+      this.#notifs.set('notifs/' + new Date().getTime(), data)
+      .then(() => this.#checkNotifications())
+    );
+  }
 
-initApp(null);
-if (self.includeTests) {
-  self.importScripts('sw-tests.js');
+  #onpushsubscriptionchange(event) {
+    console.log('SW pushsubscriptionchange', event);
+    event.waitUntil(
+      this.#notifs.set('pushsubscriptionchange/' + new Date().getTime(), event.oldSubscription.options)
+      .then(() => this.#checkPushsubscriptionchanges())
+    );
+  }
+
+  #onfetch(event) {
+    const reqUrl = event.request.url.replace(/#.*$/, '');
+    if (!reqUrl.startsWith(self.registration.scope)) {
+      console.error('SW fetch req out of scope', reqUrl, self.registration.scope);
+      event.respondWith('request out of scope', {'status': 403, 'statusText': 'Permission denied'});
+      return;
+    }
+    const url = new URL(reqUrl);
+    const scope = new URL(self.registration.scope);
+    let rel = url.pathname.slice(scope.pathname.length);
+    if (rel === '') {
+      rel = 'index.html';
+    }
+    if (MANIFEST.includes(rel)) {
+      event.respondWith(
+        self.caches.match(rel).then(resp => {
+          if (resp) return resp;
+          console.log(`SW fetch ${rel}, no cache`);
+          return fetch(event.request);
+        })
+      );
+      return;
+    }
+    let count = 0;
+    event.respondWith(new Promise(async (resolve, reject) => {
+      const handler = async () => {
+        if (this.#app) {
+          await this.#store.open();
+          return resolve(this.#app.handleFetchEvent(event));
+        }
+        if (count++ > 100) {
+          this.fixme();
+          console.log(event.request);
+          return reject(new Error('timeout'));
+        }
+        setTimeout(handler, 100);
+      };
+      handler();
+    })
+    .finally(() => this.#store.release()));
+  }
+
+  fixme() {
+    this.sendMessage('', {type: 'fixme'});
+    setInterval(() => {
+      this.sendMessage('', {type: 'fixme'});
+    }, 5000);
+  }
 }
+
+ServiceWorker.start();
 console.log(`SW loaded ${VERSION}`);

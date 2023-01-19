@@ -31,8 +31,16 @@ class Store {
     this.refs = 0;
     this.store = null;
     this.storep = null;
-    this.passphrase = null;
+    this.pp = null;
     this.name = name || 'c2FmZQ';
+  }
+
+  passphrase() {
+    return this.pp ? this.pp() : this.pp;
+  }
+
+  setPassphrase(pp) {
+    this.pp = () => pp;
   }
 
   async open(storeKey) {
@@ -50,7 +58,7 @@ class Store {
     this.storep = new Promise(async (resolve, reject) => {
       let store;
       try {
-        const key = storeKey || this.passphrase;
+        const key = storeKey || this.passphrase();
         if (!key) {
           this.storep = null;
           return reject(false);
@@ -62,7 +70,7 @@ class Store {
         await store.init().finally(() => {
           window.addEventListener = x;
         });
-        this.passphrase = key;
+        this.setPassphrase(key);
         if (DEBUG) console.log(`SW store init done`);
       } catch (err) {
         console.info('SW store.init failed', err);

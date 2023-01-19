@@ -96,35 +96,35 @@ class MockCache {
 }
 
 async function testCache() {
-  const app = {
-    store_: new MockStore(),
-    cache_: new MockCache(),
-    db_: {
-      albums: {
-        'FOO': {
-          isOffline: false,
-        },
+  const store = new MockStore();
+  const cache = new MockCache();
+  const sw = new ServiceWorker();
+  sw.sendMessage = (id, m) => console.log(`SW sendMessage(${id}, ${JSON.stringify(m)})`);
+  const app = new c2FmZQClient({store, sw});
+  app.cache_ = cache;
+  app.db_ = {
+    albums: {
+      'FOO': {
+        isOffline: false,
       },
     },
-    vars_: {
-      maxCacheSize: 1000,
-      cachePref: 'encrypted',
-    },
-    checkCachedFiles_: c2FmZQClient.prototype.checkCachedFiles_,
-    checkCachedFilesNow_: c2FmZQClient.prototype.checkCachedFilesNow_,
-    fetchCachedFile_: async (name, collection, isThumb) => {
-      app.cache_.add(`local/${isThumb?'tn':'fs'}/${name}/0`);
-      app.cm_.update(`${isThumb?'tn':'fs'}/${name}`, {add:true,stick:true,size:100});
-    },
   };
-  app.cm_ = new CacheManager(app.store_, app.cache_, app.vars_.maxCacheSize);
+  app.vars_ = {
+    maxCacheSize: 1000,
+    cachePref: 'encrypted',
+  };
+  app.cm_ = new CacheManager(store, cache, app.vars_.maxCacheSize);
+  app.fetchCachedFile_ = async (name, collection, isThumb) => {
+    cache.add(`local/${isThumb?'tn':'fs'}/${name}/0`);
+    app.cm_.update(`${isThumb?'tn':'fs'}/${name}`, {add:true,stick:true,size:100});
+  };
 
   const update = app.cm_.update.bind(app.cm_);
   const check = app.checkCachedFiles_.bind(app);
 
   const expectCacheData = async want => {
-    const keys = (await app.store_.keys()).filter(k => k.startsWith('cachedata/') && k !== 'cachedata/summary');
-    const cachedFiles = await Promise.all(keys.map(k => app.store_.get(k).then(v => ({key: k, value: v}))));
+    const keys = (await store.keys()).filter(k => k.startsWith('cachedata/') && k !== 'cachedata/summary');
+    const cachedFiles = await Promise.all(keys.map(k => store.get(k).then(v => ({key: k, value: v}))));
     const items = [];
     cachedFiles.forEach(({value, key}) => {
       const name = key.substring(10);
@@ -149,7 +149,7 @@ async function testCache() {
   };
   const expectCacheSet = async want => {
     const items = [];
-    app.cache_.cache.forEach(key => items.push(key.substring(6)));
+    cache.cache.forEach(key => items.push(key.substring(6)));
     items.sort();
     const got = items.join(',');
     if (want !== got) {
@@ -158,23 +158,23 @@ async function testCache() {
   };
 
   for (let i = 0; i < 20; i++) {
-    await app.store_.set(`files/gallery/file${i}`, `${i}`);
+    await store.set(`files/gallery/file${i}`, `${i}`);
     if (i < 4) {
-      await app.store_.set(`files/FOO/file${i}`, `${i}`);
+      await store.set(`files/FOO/file${i}`, `${i}`);
     }
   }
   await expectCacheData('');
   await expectCacheSet('');
 
   for (let i = 0; i < 9; i++) {
-    app.cache_.add(`local/tn/file${i}/0`);
+    cache.add(`local/tn/file${i}/0`);
     await update(`tn/file${i}`, {use:true, size:100});
   }
   await expectCacheData('tn/file0,tn/file1,tn/file2,tn/file3,tn/file4,tn/file5,tn/file6,tn/file7,tn/file8');
   await expectCacheSet('tn/file0/0,tn/file1/0,tn/file2/0,tn/file3/0,tn/file4/0,tn/file5/0,tn/file6/0,tn/file7/0,tn/file8/0');
 
   await update('tn/file0', {use:true, size:100});
-  app.cache_.add(`local/tn/file9/0`);
+  cache.add(`local/tn/file9/0`);
   await update('tn/file9', {use:true, size:100});
 
   await expectCacheData('tn/file2,tn/file3,tn/file4,tn/file5,tn/file6,tn/file7,tn/file8,tn/file0,tn/file9');
@@ -185,11 +185,11 @@ async function testCache() {
   await expectCacheSet('tn/file0/0,tn/file2/0,tn/file3/0,tn/file4/0,tn/file6/0,tn/file7/0,tn/file8/0,tn/file9/0');
 
   await update('tn/file2', {stick:true, size:100});
-  app.cache_.add(`local/tn/file11/0`);
+  cache.add(`local/tn/file11/0`);
   await update('tn/file11', {add:true, stick:true, size:100});
-  app.cache_.add(`local/tn/file12/0`);
+  cache.add(`local/tn/file12/0`);
   await update('tn/file12', {use:true, size:100});
-  app.cache_.add(`local/tn/file13/0`);
+  cache.add(`local/tn/file13/0`);
   await update('tn/file13', {use:true, size:100});
 
   await expectCacheData('TN/FILE11,TN/FILE2,tn/file6,tn/file7,tn/file8,tn/file0,tn/file9,tn/file12,tn/file13');

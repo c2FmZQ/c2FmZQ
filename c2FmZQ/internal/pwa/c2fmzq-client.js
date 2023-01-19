@@ -26,10 +26,21 @@
  * @class
  */
 class c2FmZQClient {
+  #options;
+  #skey;
+  #store;
+  #sw;
+  #capabilities;
+  #state;
+
   constructor(options) {
     options = options || {};
     options.pathPrefix = options.pathPrefix || '/';
-    this.options_ = options;
+    this.#options = options;
+    this.#store = options.store;
+    this.#sw = options.sw;
+    this.#capabilities = options.capabilities || [];
+    this.#state = {};
     this.vars_ = {};
     this.resetDB_();
   }
@@ -38,23 +49,30 @@ class c2FmZQClient {
    * Initialize / restore saved data.
    */
   async init() {
-    this.store_ = self.store;
     return Promise.all([
       this.loadVars_(),
-      this.store_.get('albums').then(v => {
+      this.#store.get('albums').then(v => {
         this.db_.albums = v || {};
       }),
-      this.store_.get('contacts').then(v => {
+      this.#store.get('contacts').then(v => {
         this.db_.contacts = v || {};
       }),
-    ]).then(async () => {
+    ])
+    .then(async () => {
+      if (this.vars_.sk) {
+        // Clear state from older version
+        this.resetDB_();
+        await this.#store.clear();
+        await self.caches.delete('local');
+        return this.init();
+      }
       this.cache_ = await self.caches.open('local');
       if ('connection' in navigator) {
-        this.currentNetworkType_ = navigator.connection.type;
+        this.#state.currentNetworkType = navigator.connection.type;
         navigator.connection.addEventListener('change', event => {
-          if (this.currentNetworkType_ !== navigator.connection.type) {
+          if (this.#state.currentNetworkType !== navigator.connection.type) {
             console.log(`SW network changed ${this.currentNetworkType_} -> ${navigator.connection.type}`);
-            this.currentNetworkType_ = navigator.connection.type;
+            this.#state.currentNetworkType = navigator.connection.type;
             this.onNetworkChange(event);
           }
         });
@@ -72,27 +90,27 @@ class c2FmZQClient {
         this.vars_.downloadOnMobile = false;
         this.vars_.prefetchThumbnails = false;
       }
-      this.cm_ = new CacheManager(this.store_, this.cache_, this.vars_.maxCacheSize);
+      this.cm_ = new CacheManager(this.#store, this.cache_, this.vars_.maxCacheSize);
     });
   }
 
   /*
    */
   async saveVars_() {
-    return this.store_.set('vars', this.vars_);
+    return this.#store.set('vars', this.vars_);
   }
 
   /*
    */
   async loadVars_() {
-    this.vars_ = await this.store_.get('vars') || {};
+    this.vars_ = await this.#store.get('vars') || {};
     for (let v of ['albumsTimeStamp', 'galleryTimeStamp', 'trashTimeStamp', 'albumFilesTimeStamp', 'contactsTimeStamp', 'deletesTimeStamp']) {
       if (this.vars_[v] === undefined) {
         this.vars_[v] = 0;
       }
     }
     if (this.vars_.server === undefined) {
-      this.vars_.server = this.options_.pathPrefix;
+      this.vars_.server = this.#options.pathPrefix;
     }
   }
 
@@ -105,11 +123,70 @@ class c2FmZQClient {
     };
   }
 
+  async #setSessionKey(opt) {
+    opt = opt || {};
+    if (!opt.reset && this.#skey) {
+      return;
+    }
+    let skey;
+    if (!opt.reset) {
+      skey = await this.#store.get('skey');
+    }
+    if (!skey) {
+      skey = self.base64StdEncode((await sodium.crypto_secretbox_keygen()).getBuffer());
+      this.#store.set('skey', skey);
+    }
+    this.#skey = () => skey;
+  }
+
+  async #encrypt(data) {
+    await this.#setSessionKey();
+    const nonce = await sodium.randombytes_buf(24);
+    const ct = new Uint8Array(await sodium.crypto_secretbox(new Uint8Array(data), nonce, await sodiumKey(this.#skey())));
+    const res = new Uint8Array(nonce.byteLength + ct.byteLength);
+    res.set(nonce);
+    res.set(ct, nonce.byteLength);
+    return self.base64StdEncode(res);
+  }
+
+  async #decrypt(data) {
+    await this.#setSessionKey();
+    data = self.base64DecodeToBytes(data);
+    try {
+      return sodium.crypto_secretbox_open(data.slice(24), data.slice(0, 24), await sodiumKey(this.#skey()));
+    } catch (error) {
+      console.error('SW #decrypt', error);
+      throw error;
+    }
+  }
+
+  async #encryptString(data) {
+    return this.#encrypt(self.bytesFromString(data));
+  }
+  async #decryptString(data) {
+    return this.#decrypt(data).then(r => self.bytesToString(r));
+  }
+
+  async #sk() {
+    if (!this.vars_.esk) {
+      return this.logout('');
+    }
+    return this.#decrypt(this.vars_.esk);
+  }
+
+  async #token() {
+    if (!this.vars_.etoken) {
+      return null;
+    }
+    return this.#decryptString(this.vars_.etoken);
+  }
+
   /*
    */
   async isLoggedIn(clientId) {
-    const loggedIn = typeof this.vars_.token === "string" && this.vars_.token.length > 0 ? this.vars_.email : '';
-    const needKey = this.vars_.sk === undefined;
+    const token = await this.#token();
+    const loggedIn = typeof token === "string" && token !== '' ? this.vars_.email : '';
+    const needKey = this.vars_.esk === undefined;
     return Promise.resolve({
       account: loggedIn,
       isAdmin: this.vars_.isAdmin,
@@ -163,7 +240,7 @@ class c2FmZQClient {
       this.vars_.server = server || this.vars_.server;
     }
 
-    return this.sendRequest_(clientId, 'v2/login/preLogin', {email: email})
+    return this.sendRequest_(clientId, 'v2/login/preLogin', {email})
       .then(async resp => {
         console.log('SW hashing password');
         this.vars_.loginSalt = resp.parts.salt;
@@ -175,13 +252,14 @@ class c2FmZQClient {
         if (resp.status !== 'ok') {
           throw resp.status;
         }
-        this.vars_.token = resp.parts.token;
+        await this.#setSessionKey({reset:args.resetSkey!==false});
+        this.vars_.etoken = await this.#encryptString(resp.parts.token);
         this.vars_.serverPK = resp.parts.serverPublicKey;
         console.log('SW decrypting secret key');
         const keys = await this.decodeKeyBundle_(password, resp.parts.keyBundle);
         this.vars_.pk = keys.pk;
         if (keys.sk !== undefined) {
-          this.vars_.sk = keys.sk;
+          this.vars_.esk = await this.#encrypt(keys.sk);
           this.vars_.keyIsBackedUp = true;
         } else {
           this.vars_.keyIsBackedUp = false;
@@ -203,7 +281,7 @@ class c2FmZQClient {
         return {
           account: email,
           isAdmin: this.vars_.isAdmin,
-          needKey: this.vars_.sk === undefined,
+          needKey: this.vars_.esk === undefined,
         };
       });
   }
@@ -222,8 +300,8 @@ class c2FmZQClient {
           const ep = sub.endpoint;
           sub.unsubscribe();
           return this.sendRequest_(clientId, 'v2x/config/push', {
-            token: this.vars_.token,
-            params: await this.makeParams_({endpoint: ep}),
+            token: this.#token(),
+            params: this.makeParams_({endpoint: ep}),
           })
           .then(() => false)
           .catch(() => false);
@@ -237,7 +315,7 @@ class c2FmZQClient {
         if (sub !== null) {
           return sub;
         }
-        return this.sendRequest_(clientId, 'v2x/config/push', {token: this.vars_.token})
+        return this.sendRequest_(clientId, 'v2x/config/push', {token: this.#token()})
           .then(resp => {
             if (resp.status !== 'ok') {
               throw resp.status;
@@ -255,8 +333,8 @@ class c2FmZQClient {
       })
       .then(async sub => {
         return this.sendRequest_(clientId, 'v2x/config/push', {
-          token: this.vars_.token,
-          params: await this.makeParams_({
+          token: this.#token(),
+          params: this.makeParams_({
             endpoint: sub.endpoint,
             auth: self.base64RawUrlEncode(new Uint8Array(sub.getKey('auth'))),
             p256dh: self.base64RawUrlEncode(new Uint8Array(sub.getKey('p256dh'))),
@@ -286,11 +364,11 @@ class c2FmZQClient {
     }
     console.log('SW reuploading keys');
     const params = {
-      keyBundle: await this.makeKeyBundle_(password, await sodiumPublicKey(this.vars_.pk), doBackup ? await sodiumSecretKey(this.vars_.sk) : undefined),
+      keyBundle: await this.makeKeyBundle_(password, await sodiumPublicKey(this.vars_.pk), doBackup ? await sodiumSecretKey(this.#sk()) : undefined),
     };
     return this.sendRequest_(clientId, 'v2/keys/reuploadKeys', {
-      token: this.vars_.token,
-      params: await this.makeParams_(params),
+      token: this.#token(),
+      params: this.makeParams_(params),
     }).then(resp => {
       if (resp.status !== 'ok') {
         throw resp.status;
@@ -305,19 +383,22 @@ class c2FmZQClient {
     return sodium.sodium_hex2bin(bip39.mnemonicToEntropy(backupPhrase.trim()))
       .then(sk => {
         return this.checkKey_(clientId, this.vars_.email, this.vars_.pk, sk)
-        .then(res => {
-          if (res !== true) {
-            throw new Error('incorrect backup phrase');
-          }
-          this.vars_.sk = sk;
-          this.enableNotifications(clientId, this.vars_.enableNotifications);
-          return this.saveVars_();
+          .then(res => {
+            if (res !== true) {
+              throw new Error('incorrect backup phrase');
+            }
+            this.enableNotifications(clientId, this.vars_.enableNotifications);
+            return this.#encrypt(sk);
         });
-      });
+      })
+      .then(esk => {
+        this.vars_.esk = esk;
+      })
+      .then(() => this.saveVars_());
   }
 
   async checkKey_(clientId, email, pk, sk) {
-    return this.sendRequest_(clientId, 'v2/login/checkKey', {'email': email})
+    return this.sendRequest_(clientId, 'v2/login/checkKey', {email})
       .then(async resp => {
         if (resp.status !== 'ok') {
           throw resp.status;
@@ -356,14 +437,21 @@ class c2FmZQClient {
         if (resp.status !== 'ok') {
           throw resp.status;
         }
-        this.vars_.pk = pk.getBuffer();
-        this.vars_.sk = sk.getBuffer();
+        return this.#setSessionKey({reset:true});
+      })
+      .then(() => {
+        args.resetSkey = false;
+        return this.#encrypt(sk.getBuffer());
+      })
+      .then(esk => {
+        this.vars_.esk = esk;
+        this.vars_.pk = self.base64StdEncode(pk.getBuffer());
         return this.saveVars_();
       })
       .then(() => this.login(clientId, args))
       .then(v => {
         if (!enableBackup) {
-          self.sendMessage(clientId, {type: 'info', msg: 'Your secret key is NOT backed up. You will need a backup phrase next time you login.'});
+          this.#sw.sendMessage(clientId, {type: 'info', msg: 'Your secret key is NOT backed up. You will need a backup phrase next time you login.'});
         }
         return v;
       });
@@ -380,8 +468,10 @@ class c2FmZQClient {
     if (await this.checkKey_(clientId, email, pk, sk) !== true) {
       throw new Error('incorrect backup phrase');
     }
-    this.vars_.pk = pk.getBuffer();
-    this.vars_.sk = sk.getBuffer();
+    await this.#setSessionKey({reset:true});
+    args.resetSkey = false;
+    this.vars_.pk = self.base64StdEncode(pk.getBuffer());
+    this.vars_.esk = await this.#encrypt(sk.getBuffer());
     await this.saveVars_();
     console.log('SW encrypting secret key');
     const bundle = await this.makeKeyBundle_(password, pk, enableBackup ? sk : undefined);
@@ -396,7 +486,7 @@ class c2FmZQClient {
     };
     const form = {
       email: email,
-      params: await this.makeParams_(params),
+      params: this.makeParams_(params),
     };
     console.log('SW recovering account');
     return this.sendRequest_(clientId, 'v2/login/recoverAccount', form)
@@ -408,7 +498,7 @@ class c2FmZQClient {
       })
       .then(v => {
         if (!enableBackup) {
-          self.sendMessage(clientId, {type: 'info', msg: _T('no-key-backup-warning')});
+          this.#sw.sendMessage(clientId, {type: 'info', msg: _T('no-key-backup-warning')});
         }
         return v;
       });
@@ -427,8 +517,8 @@ class c2FmZQClient {
           passKey: args.passKey ? '1' : '0',
         };
         const resp = await this.sendRequest_(clientId, 'v2x/mfa/enable', {
-          token: this.vars_.token,
-          params: await this.makeParams_(params),
+          token: this.#token(),
+          params: this.makeParams_(params),
         });
         if (resp.status !== 'ok') {
           throw new Error('MFA update failed');
@@ -445,8 +535,8 @@ class c2FmZQClient {
         code: ''+args.otpCode,
       };
       const resp = await this.sendRequest_(clientId, 'v2x/config/setOTP', {
-        token: this.vars_.token,
-        params: await this.makeParams_(params),
+        token: this.#token(),
+        params: this.makeParams_(params),
       });
       if (resp.status !== 'ok') {
         throw new Error('OTP update failed');
@@ -454,8 +544,8 @@ class c2FmZQClient {
     }
     if (this.vars_.email !== args.email) {
       const resp = await this.sendRequest_(clientId, 'v2/login/changeEmail', {
-        token: this.vars_.token,
-        params: await this.makeParams_({newEmail: args.email}),
+        token: this.#token(),
+        params: this.makeParams_({newEmail: args.email}),
       });
       if (resp.status !== 'ok') {
         throw new Error('email update failed');
@@ -465,7 +555,7 @@ class c2FmZQClient {
     if (args.newPassword !== '') {
       const salt = await sodium.randombytes_buf(16);
       const pk = await sodiumPublicKey(this.vars_.pk);
-      const sk = this.vars_.keyIsBackedUp ? await sodiumSecretKey(this.vars_.sk) : undefined;
+      const sk = this.vars_.keyIsBackedUp ? await sodiumSecretKey(this.#sk()) : undefined;
       const bundle = await this.makeKeyBundle_(args.newPassword, pk, sk);
       const hashed = await this.passwordForLogin_(salt, args.newPassword);
       const params = {
@@ -474,14 +564,14 @@ class c2FmZQClient {
         newSalt: salt.toString('hex').toUpperCase(),
       };
       const resp = await this.sendRequest_(clientId, 'v2/login/changePass', {
-        token: this.vars_.token,
-        params: await this.makeParams_(params),
+        token: this.#token(),
+        params: this.makeParams_(params),
       });
       if (resp.status !== 'ok') {
         throw new Error('password update failed');
       }
       this.vars_.loginSalt = salt.toString('hex').toUpperCase();
-      this.vars_.token = resp.parts.token;
+      this.vars_.etoken = await this.#encryptString(resp.parts.token);
       const salt2 = (await sodium.randombytes_buf(16)).toString('hex');
       this.vars_.passwordSalt = salt2;
       this.vars_.password = await this.passwordForValidation_(salt2, args.newPassword);
@@ -491,8 +581,8 @@ class c2FmZQClient {
         updates: JSON.stringify(args.keyChanges),
       };
       const resp = await this.sendRequest_(clientId, 'v2x/config/webauthn/updateKeys', {
-        token: this.vars_.token,
-        params: await this.makeParams_(params),
+        token: this.#token(),
+        params: this.makeParams_(params),
       });
       if (resp.status !== 'ok') {
         throw new Error('key update failed');
@@ -507,7 +597,7 @@ class c2FmZQClient {
   async listSecurityKeys(clientId) {
     console.log('SW listSecurityKeys');
     const resp = await this.sendRequest_(clientId, 'v2x/config/webauthn/keys', {
-      token: this.vars_.token,
+      token: this.#token(),
     });
     if (resp.status !== 'ok') {
       throw new Error('error');
@@ -531,8 +621,8 @@ class c2FmZQClient {
       params.passKey = args.usePassKey ? '1' : '0';
     }
     const resp = await this.sendRequest_(clientId, 'v2x/config/webauthn/register', {
-      token: this.vars_.token,
-      params: await this.makeParams_(params),
+      token: this.#token(),
+      params: this.makeParams_(params),
     });
     if (resp.status !== 'ok') {
       throw new Error('error');
@@ -542,7 +632,7 @@ class c2FmZQClient {
 
   async mfaStatus(clientId) {
     console.log('SW mfaStatus');
-    const resp = await this.sendRequest_(clientId, 'v2x/mfa/status', {token: this.vars_.token});
+    const resp = await this.sendRequest_(clientId, 'v2x/mfa/status', {token: this.#token()});
     if (resp.status !== 'ok') {
       throw new Error('error');
     }
@@ -552,8 +642,8 @@ class c2FmZQClient {
   async mfaCheck(clientId, passKey) {
     console.log('SW mfaCheck');
     const resp = await this.sendRequest_(clientId, 'v2x/mfa/check', {
-      token: this.vars_.token,
-      params: await this.makeParams_({
+      token: this.#token(),
+      params: this.makeParams_({
         passKey: passKey ? '1' : '0',
       }),
     });
@@ -570,8 +660,8 @@ class c2FmZQClient {
       password: await this.passwordForLogin_(salt, password),
     };
     const resp = await this.sendRequest_(clientId, 'v2/login/deleteUser', {
-      token: this.vars_.token,
-      params: await this.makeParams_(params),
+      token: this.#token(),
+      params: this.makeParams_(params),
     });
     if (resp.status !== 'ok') {
       throw resp.status;
@@ -602,8 +692,9 @@ class c2FmZQClient {
       if (!ok) {
         throw new Error('incorrect password');
       }
-      return sodiumSecretKey(this.vars_.sk);
+      return this.#sk();
     })
+    .then(sk => sodiumSecretKey(sk))
     .then(sk => bip39.entropyToMnemonic(sk.getBuffer()));
   }
 
@@ -613,13 +704,13 @@ class c2FmZQClient {
   async logout(clientId) {
     console.log('SW logout');
     return this.enableNotifications(clientId, false)
-      .then(() => this.sendRequest_(clientId, 'v2/login/logout', {'token': this.vars_.token}))
+      .then(async () => this.sendRequest_(clientId, 'v2/login/logout', {token: this.#token()}))
       .then(() => console.log('SW logged out'))
       .catch(console.error)
       .finally(async () => {
         this.vars_ = {};
         this.resetDB_();
-        await this.store_.clear();
+        await this.#store.clear();
         await this.deleteCache_();
         this.loadVars_();
         console.log('SW internal data cleared');
@@ -630,18 +721,18 @@ class c2FmZQClient {
    * Send a getUpdates request, and process the response.
    */
   async getUpdates(clientId) {
-    if (this.gettingUpdates_) {
+    if (this.#state.gettingUpdates) {
       return;
     }
-    this.gettingUpdates_ = true;
+    this.#state.gettingUpdates = true;
     const data = {
-      'token': this.vars_.token,
-      'filesST': this.vars_.galleryTimeStamp,
-      'trashST': this.vars_.trashTimeStamp,
-      'albumsST': this.vars_.albumsTimeStamp,
-      'albumFilesST': this.vars_.albumFilesTimeStamp,
-      'cntST': this.vars_.contactsTimeStamp,
-      'delST': this.vars_.deletesTimeStamp,
+      token: this.#token(),
+      filesST: this.vars_.galleryTimeStamp,
+      trashST: this.vars_.trashTimeStamp,
+      albumsST: this.vars_.albumsTimeStamp,
+      albumFilesST: this.vars_.albumFilesTimeStamp,
+      cntST: this.vars_.contactsTimeStamp,
+      delST: this.vars_.deletesTimeStamp,
     };
     return this.sendRequest_(clientId, 'v2/sync/getUpdates', data)
       .then(async resp => {
@@ -664,14 +755,14 @@ class c2FmZQClient {
 
         /*  albums */
         const pk = await sodiumPublicKey(this.vars_.pk);
-        const sk = await sodiumSecretKey(this.vars_.sk);
+        const sk = await sodiumSecretKey(this.#sk());
         for (let a of resp.parts.albums) {
           try {
-            const apk = base64DecodeToBytes(a.publicKey);
-            const ask = await sodium.crypto_box_seal_open(base64DecodeToBytes(a.encPrivateKey), pk, sk);
+            const apk = self.base64DecodeToBytes(a.publicKey);
+            const ask = await sodium.crypto_box_seal_open(self.base64DecodeToBytes(a.encPrivateKey), pk, sk);
 
             const md = await Promise.all([
-              base64DecodeToBytes(a.metadata),
+              self.base64DecodeToBytes(a.metadata),
               sodiumPublicKey(apk),
               sodiumSecretKey(ask),
             ]).then(v => sodium.crypto_box_seal_open(...v));
@@ -693,9 +784,9 @@ class c2FmZQClient {
             }
             const obj = {
               'albumId': a.albumId,
-              'pk': apk,
+              'pk': self.base64StdEncode(apk),
               'encSK': a.encPrivateKey,
-              'encName': await this.encrypt_(self.bytesFromString(name)),
+              'encName': await this.#encryptString(name),
               'cover': a.cover,
               'members': members,
               'isOwner': a.isOwner === 1,
@@ -811,8 +902,8 @@ class c2FmZQClient {
         }
         const p = [
           this.saveVars_(),
-          this.store_.set('albums', this.db_.albums),
-          this.store_.set('contacts', this.db_.contacts),
+          this.#store.set('albums', this.db_.albums),
+          this.#store.set('contacts', this.db_.contacts),
           Promise.all(Object.keys(changed).map(collection => this.indexCollection_(collection))),
         ];
         return Promise.all(p)
@@ -822,7 +913,7 @@ class c2FmZQClient {
           });
       })
       .finally(() => {
-        this.gettingUpdates_ = false;
+        this.#state.gettingUpdates = false;
       });
   }
 
@@ -831,8 +922,8 @@ class c2FmZQClient {
       time: ''+Date.now(),
     };
     return this.sendRequest_(clientId, 'v2/sync/emptyTrash', {
-      'token': this.vars_.token,
-      'params': await this.makeParams_(params),
+      token: this.#token(),
+      params: this.makeParams_(params),
     }).then(resp => {
       if (resp.status !== 'ok') {
         throw resp.status;
@@ -849,8 +940,8 @@ class c2FmZQClient {
       params[`filename${i}`] = files[i];
     }
     return this.sendRequest_(clientId, 'v2/sync/delete', {
-      'token': this.vars_.token,
-      'params': await this.makeParams_(params),
+      token: this.#token(),
+      params: this.makeParams_(params),
     }).then(resp => {
       if (resp.status !== 'ok') {
         throw resp.status;
@@ -865,8 +956,8 @@ class c2FmZQClient {
       cover: cover,
     };
     return this.sendRequest_(clientId, 'v2/sync/changeAlbumCover', {
-      'token': this.vars_.token,
-      'params': await this.makeParams_(params),
+      token: this.#token(),
+      params: this.makeParams_(params),
     }).then(resp => {
       if (resp.status !== 'ok') {
         throw resp.status;
@@ -882,7 +973,7 @@ class c2FmZQClient {
     if (fromAlbumId !== '' || toAlbumId !== '') {
       // Need new headers
       const pk = await sodiumPublicKey(fromAlbumId === '' ? this.vars_.pk : this.db_.albums[fromAlbumId].pk);
-      const sk = await sodiumSecretKey(fromAlbumId === '' ? this.vars_.sk : this.decryptAlbumSK_(fromAlbumId));
+      const sk = await sodiumSecretKey(fromAlbumId === '' ? this.#sk() : this.decryptAlbumSK_(fromAlbumId));
       const pk2 = await sodiumPublicKey(toAlbumId === '' ? this.vars_.pk : this.db_.albums[toAlbumId].pk);
 
       for (let i = 0; i < files.length; i++) {
@@ -908,8 +999,8 @@ class c2FmZQClient {
       }
     }
     return this.sendRequest_(clientId, 'v2/sync/moveFile', {
-      'token': this.vars_.token,
-      'params': await this.makeParams_(params),
+      token: this.#token(),
+      params: this.makeParams_(params),
     }).then(resp => {
       if (resp.status !== 'ok') {
         throw resp.status;
@@ -918,55 +1009,32 @@ class c2FmZQClient {
     });
   }
 
-  async encrypt_(data) {
-    const pk = await sodiumPublicKey(this.vars_.pk);
-    return sodium.crypto_box_seal(new Uint8Array(data), pk);
-  }
-
-  async decrypt_(data) {
-    const pk = await sodiumPublicKey(this.vars_.pk);
-    const sk = await sodiumSecretKey(this.vars_.sk);
-    if (typeof data === 'object' && data.type === 'Buffer') {
-      data = data.data;
-    }
-    try {
-      return sodium.crypto_box_seal_open(new Uint8Array(data), pk, sk);
-    } catch (error) {
-      console.error('SW decrypt_', error);
-      throw error;
-    }
-  }
-
-  async decryptString_(data) {
-    return this.decrypt_(data).then(r => self.bytesToString(r));
-  }
-
   async decryptAlbumSK_(albumId) {
     const pk = await sodiumPublicKey(this.vars_.pk);
-    const sk = await sodiumSecretKey(this.vars_.sk);
+    const sk = await sodiumSecretKey(this.#sk());
     if (!(albumId in this.db_.albums)) {
       throw new Error('invalid albumId');
     }
     const a = this.db_.albums[albumId];
-    return sodiumSecretKey(sodium.crypto_box_seal_open(base64DecodeToBytes(a.encSK), pk, sk));
+    return sodiumSecretKey(sodium.crypto_box_seal_open(self.base64DecodeToBytes(a.encSK), pk, sk));
   }
 
   async insertFile_(collection, file, obj) {
-    return this.store_.set(`files/${collection}/${file}`, obj);
+    return this.#store.set(`files/${collection}/${file}`, obj);
   }
 
   async deleteFile_(collection, file) {
-    return this.store_.del(`files/${collection}/${file}`);
+    return this.#store.del(`files/${collection}/${file}`);
   }
 
   async getFile_(collection, file) {
-    return this.store_.get(`files/${collection}/${file}`);
+    return this.#store.get(`files/${collection}/${file}`);
   }
 
   async deletePrefix_(prefix) {
-    return this.store_.keys()
+    return this.#store.keys()
       .then(keys => keys.filter(k => k.startsWith(prefix)))
-      .then(keys => Promise.all(keys.map(k => this.store_.del(k))));
+      .then(keys => Promise.all(keys.map(k => this.#store.del(k))));
   }
 
   /*
@@ -990,7 +1058,7 @@ class c2FmZQClient {
     await this.deletePrefix_(`index/${collection}`);
 
     const prefix = `files/${collection}/`;
-    const keys = (await this.store_.keys()).filter(k => k.startsWith(prefix));
+    const keys = (await this.#store.keys()).filter(k => k.startsWith(prefix));
     let out = [];
     for (let k of keys) {
       const file = k.substring(prefix.length);
@@ -1003,7 +1071,7 @@ class c2FmZQClient {
         'file': f.file,
         'isImage': f.headers[0].fileType === 2,
         'isVideo': f.headers[0].fileType === 3,
-        'fileName': await this.decryptString_(f.headers[0].encFileName),
+        'fileName': await this.#decryptString(f.headers[0].encFileName),
         'dateCreated': f.dateCreated,
         'dateModified': f.dateModified,
         'size': f.headers[0].dataSize,
@@ -1025,7 +1093,7 @@ class c2FmZQClient {
         total: out.length,
         files: out.slice(i, Math.min(i+100, out.length)),
       };
-      p.push(this.store_.set(`index/${collection}/${n}`, obj));
+      p.push(this.#store.set(`index/${collection}/${n}`, obj));
     }
     return Promise.all(p);
   }
@@ -1035,15 +1103,15 @@ class c2FmZQClient {
       email: email,
     };
     return this.sendRequest_(clientId, 'v2/sync/getContact', {
-      'token': this.vars_.token,
-      'params': await this.makeParams_(params),
+      token: this.#token(),
+      params: this.makeParams_(params),
     }).then(async resp => {
       if (resp.status !== 'ok') {
         throw resp.status;
       }
       const c = resp.parts.contact;
       this.db_.contacts[''+c.userId] = c;
-      await this.store_.set('contacts', this.db_.contacts);
+      await this.#store.set('contacts', this.db_.contacts);
       c.userId = ''+c.userId;
       return c;
     });
@@ -1066,7 +1134,7 @@ class c2FmZQClient {
    */
   async getFiles(clientId, collection, offset = 0) {
     const n = ('000000' + offset).slice(-6);
-    return this.store_.get(`index/${collection}/${n}`);
+    return this.#store.get(`index/${collection}/${n}`);
   }
 
   /*
@@ -1104,7 +1172,7 @@ class c2FmZQClient {
         let {url} = await this.getCover(clientId, a.albumId);
         albums.push({
           'collection': a.albumId,
-          'name': await this.decryptString_(a.encName),
+          'name': await this.#decryptString(a.encName),
           'cover': url,
           'members': a.members.map(m => {
             if (m === this.vars_.userId) return {userId: m, email: this.vars_.email, myself: true};
@@ -1139,7 +1207,7 @@ class c2FmZQClient {
     }
     let file = code || '';
     if (file === '') {
-      const idx = await this.store_.get(`index/${collection}/000000`);
+      const idx = await this.#store.get(`index/${collection}/000000`);
       if (idx?.files?.length > 0) {
         file = idx.files[0].file;
       }
@@ -1162,8 +1230,8 @@ class c2FmZQClient {
     let collection = f.albumId;
     if (f.set === 0) collection = 'gallery';
     else if (f.set === 1) collection = 'trash';
-    const fn = await this.decryptString_(f.headers[0].encFileName);
-    let url = `${this.options_.pathPrefix}jsdecrypt/${fn}?collection=${collection}&file=${f.file}`;
+    const fn = await this.#decryptString(f.headers[0].encFileName);
+    let url = `${this.#options.pathPrefix}jsdecrypt/${fn}?collection=${collection}&file=${f.file}`;
     if (isThumb) {
       url += '&isThumb=1';
     }
@@ -1173,10 +1241,10 @@ class c2FmZQClient {
   async getContentUrl_(f) {
     const file = await this.getFile_(f.collection, f.file);
     return this.sendRequest_(null, 'v2/sync/getUrl', {
-      'token': this.vars_.token,
-      'file': file.file,
-      'set': file.set,
-      'thumb': f.isThumb ? '1' : '0',
+      token: this.#token(),
+      file: file.file,
+      set: file.set,
+      thumb: f.isThumb ? '1' : '0',
     })
     .then(resp => {
       if (resp.status !== 'ok') {
@@ -1191,7 +1259,7 @@ class c2FmZQClient {
   async makeParams_(obj) {
     return Promise.all([
       sodium.randombytes_buf(24),
-      sodiumSecretKey(this.vars_.sk),
+      sodiumSecretKey(this.#sk()),
       sodiumPublicKey(this.vars_.serverPK),
     ])
     .then(async v => {
@@ -1207,7 +1275,7 @@ class c2FmZQClient {
   /*
    */
   async decodeKeyBundle_(password, bundle) {
-    const bytes = base64DecodeToBytes(bundle);
+    const bytes = self.base64DecodeToBytes(bundle);
     if (bytes.length !== 37 && bytes.length !== 125) {
       throw new Error('bundle is too short');
     }
@@ -1223,7 +1291,7 @@ class c2FmZQClient {
     if (bytes[4] !== 0 && bytes[4] !== 2) {
       throw new Error('unexpected bundle type');
     }
-    const pk = new Uint8Array(bytes.slice(5, 37));
+    const pk = self.base64StdEncode(new Uint8Array(bytes.slice(5, 37)));
 
     if (bytes[4] !== 0) {
       return {pk}; // secret key not in bundle.
@@ -1240,7 +1308,7 @@ class c2FmZQClient {
   /*
    */
   async decryptHeader_(encHeader, albumId) {
-    const bytes = base64DecodeToBytes(encHeader);
+    const bytes = self.base64DecodeToBytes(encHeader);
     if (String.fromCharCode(bytes[0], bytes[1]) !== 'SP') {
       throw new Error('invalid header');
     }
@@ -1252,9 +1320,12 @@ class c2FmZQClient {
     for (let i = 35; i < 39; i++) {
       size = (size << 8) + bytes[i];
     }
-    let pk = this.vars_.pk;
-    let sk = this.vars_.sk;
-    if (albumId !== '') {
+    let pk;
+    let sk;
+    if (albumId === '') {
+      pk = this.vars_.pk;
+      sk = this.#sk();
+    } else {
       pk = this.db_.albums[albumId].pk;
       sk = this.decryptAlbumSK_(albumId);
     }
@@ -1284,9 +1355,9 @@ class c2FmZQClient {
     const header = {
         chunkSize: chunkSize,
         dataSize: dataSize,
-        encKey: await this.encrypt_(symKey),
+        encKey: await this.#encrypt(symKey),
         fileType: fileType,
-        encFileName: await this.encrypt_(self.bytesFromString(fn.replace(/^ */, ''))),
+        encFileName: await this.#encryptString(fn.replace(/^ */, '')),
         duration: dur,
         headerSize: bytes.length,
     };
@@ -1294,7 +1365,7 @@ class c2FmZQClient {
   }
 
   async reEncryptHeader_(encHeader, pk, sk, toPK) {
-    const bytes = base64DecodeToBytes(encHeader);
+    const bytes = self.base64DecodeToBytes(encHeader);
     if (String.fromCharCode(bytes[0], bytes[1]) !== 'SP') {
       throw new Error('invalid header');
     }
@@ -1331,8 +1402,8 @@ class c2FmZQClient {
       metadata: await this.makeMetadata_(pk, name),
     };
     return this.sendRequest_(clientId, 'v2/sync/renameAlbum', {
-      'token': this.vars_.token,
-      'params': await this.makeParams_(params),
+      token: this.#token(),
+      params: this.makeParams_(params),
     }).then(resp => {
       if (resp.status !== 'ok') {
         throw resp.status;
@@ -1347,10 +1418,10 @@ class c2FmZQClient {
     } else if (collection in this.db_.albums) {
       this.db_.albums[collection].isOffline = isOffline;
     }
-    if (this.checkCachedFileState_) {
-      this.checkCachedFileState_.err = _T('canceled');
-      this.checkCachedFileState_.cancel = true;
-      await this.checkCachedFilesRunning_;
+    if (this.#state.checkCachedFileState) {
+      this.#state.checkCachedFileState.err = _T('canceled');
+      this.#state.checkCachedFileState.cancel = true;
+      await this.#state.checkCachedFilesRunning;
     }
     return this.saveVars_()
       .then(r => {
@@ -1377,7 +1448,7 @@ class c2FmZQClient {
       if (members[i] === this.vars_.userId) {
         continue;
       }
-      const pk = await sodiumPublicKey(base64DecodeToBytes(this.db_.contacts[''+members[i]].publicKey));
+      const pk = await sodiumPublicKey(self.base64DecodeToBytes(this.db_.contacts[''+members[i]].publicKey));
       const enc = await sodium.crypto_box_seal(sk, pk);
       sharingKeys[''+members[i]] = self.base64StdEncode(enc);
     }
@@ -1386,8 +1457,8 @@ class c2FmZQClient {
       sharingKeys: JSON.stringify(sharingKeys),
     };
     return this.sendRequest_(clientId, 'v2/sync/share', {
-      'token': this.vars_.token,
-      'params': await this.makeParams_(params),
+      token: this.#token(),
+      params: this.makeParams_(params),
     }).then(resp => {
       if (resp.status !== 'ok') {
         throw resp.status;
@@ -1401,8 +1472,8 @@ class c2FmZQClient {
       albumId: collection,
     };
     return this.sendRequest_(clientId, 'v2/sync/unshareAlbum', {
-      'token': this.vars_.token,
-      'params': await this.makeParams_(params),
+      token: this.#token(),
+      params: this.makeParams_(params),
     }).then(resp => {
       if (resp.status !== 'ok') {
         throw resp.status;
@@ -1422,8 +1493,8 @@ class c2FmZQClient {
         memberUserId: members[i],
       };
       p.push(this.sendRequest_(clientId, 'v2/sync/removeAlbumMember', {
-        'token': this.vars_.token,
-        'params': await this.makeParams_(params),
+        token: this.#token(),
+        params: this.makeParams_(params),
       }).then(resp => {
         if (resp.status !== 'ok') {
           throw resp.status;
@@ -1443,8 +1514,8 @@ class c2FmZQClient {
       album: JSON.stringify(album),
     };
     return this.sendRequest_(clientId, 'v2/sync/editPerms', {
-      'token': this.vars_.token,
-      'params': await this.makeParams_(params),
+      token: this.#token(),
+      params: this.makeParams_(params),
     }).then(resp => {
       if (resp.status !== 'ok') {
         throw resp.status;
@@ -1458,8 +1529,8 @@ class c2FmZQClient {
       albumId: collection,
     };
     return this.sendRequest_(clientId, 'v2/sync/leaveAlbum', {
-      'token': this.vars_.token,
-      'params': await this.makeParams_(params),
+      token: this.#token(),
+      params: this.makeParams_(params),
     }).then(resp => {
       if (resp.status !== 'ok') {
         throw resp.status;
@@ -1483,17 +1554,17 @@ class c2FmZQClient {
       publicKey: self.base64StdEncode(pk.getBuffer()),
     };
     return this.sendRequest_(clientId, 'v2/sync/addAlbum', {
-      'token': this.vars_.token,
-      'params': await this.makeParams_(params),
+      token: this.#token(),
+      params: this.makeParams_(params),
     }).then(async resp => {
       if (resp.status !== 'ok') {
         throw resp.status;
       }
       const obj = {
         'albumId': params.albumId,
-        'pk': pk.getBuffer(),
+        'pk': self.base64StdEncode(pk.getBuffer()),
         'encSK': params.encPrivateKey,
-        'encName': await this.encrypt_(self.bytesFromString(name)),
+        'encName': await this.#encryptString(name),
         'cover': '',
         'members': '',
         'isOwner': true,
@@ -1503,14 +1574,14 @@ class c2FmZQClient {
         'dateCreated': params.dateCreated,
       };
       this.db_.albums[obj.albumId] = obj;
-      await this.store_.set('albums', this.db_.albums);
+      await this.#store.set('albums', this.db_.albums);
       return params.albumId;
     });
   }
 
   async deleteCollection(clientId, collection) {
     const prefix = `files/${collection}/`;
-    const files = (await this.store_.keys()).filter(k => k.startsWith(prefix)).map(k => k.substring(prefix.length));
+    const files = (await this.#store.keys()).filter(k => k.startsWith(prefix)).map(k => k.substring(prefix.length));
     if (files.length > 0) {
       await this.moveFiles(clientId, collection, 'trash', files, true);
     }
@@ -1519,8 +1590,8 @@ class c2FmZQClient {
       albumId: collection,
     };
     return this.sendRequest_(clientId, 'v2/sync/deleteAlbum', {
-      'token': this.vars_.token,
-      'params': await this.makeParams_(params),
+      token: this.#token(),
+      params: this.makeParams_(params),
     }).then(resp => {
       if (resp.status !== 'ok') {
         throw resp.status;
@@ -1531,7 +1602,7 @@ class c2FmZQClient {
 
   async generateOTP(clientId) {
     return this.sendRequest_(clientId, 'v2x/config/generateOTP', {
-      'token': this.vars_.token,
+      token: this.#token(),
     }).then(resp => {
       if (resp.status !== 'ok') {
         throw resp.status;
@@ -1546,14 +1617,14 @@ class c2FmZQClient {
       params.changes = JSON.stringify(changes);
     }
     return this.sendRequest_(clientId, 'v2x/admin/users', {
-      token: this.vars_.token,
-      params: await this.makeParams_(params),
+      token: this.#token(),
+      params: this.makeParams_(params),
     }).then(async resp => {
       if (resp.status !== 'ok') {
         throw resp.status;
       }
       const enc = self.base64DecodeToBinary(resp.parts.users);
-      return sodium.crypto_box_seal_open(enc, await sodiumPublicKey(this.vars_.pk), await sodiumSecretKey(this.vars_.sk));
+      return sodium.crypto_box_seal_open(enc, await sodiumPublicKey(this.vars_.pk), await sodiumSecretKey(this.#sk()));
     })
     .then(j => JSON.parse(j));
   }
@@ -1563,13 +1634,13 @@ class c2FmZQClient {
       return;
     }
     const enc = self.base64DecodeToBinary(data);
-    const m = await sodium.crypto_box_seal_open(enc, await sodiumPublicKey(this.vars_.pk), await sodiumSecretKey(this.vars_.sk));
+    const m = await sodium.crypto_box_seal_open(enc, await sodiumPublicKey(this.vars_.pk), await sodiumSecretKey(this.#sk()));
     const js = JSON.parse(self.bytesToString(m));
     console.log('SW onpush:', js);
     let album;
     switch (js.type) {
       case 1: // New user registration
-        await self.showNotif(_T('new-user-title', js.target), {
+        await this.#sw.showNotif(_T('new-user-title', js.target), {
           tag: `new-user:${js.target}:${js.id}`,
         });
         break;
@@ -1577,8 +1648,8 @@ class c2FmZQClient {
         await this.getUpdates('');
         album = this.db_.albums[js.target];
         if (album) {
-          const name = await this.decryptString_(album.encName);
-          await self.showNotif(name, {
+          const name = await this.#decryptString(album.encName);
+          await this.#sw.showNotif(name, {
             tag: `new-content:${js.target}`,
             body: _T('new-content-body'),
           });
@@ -1587,22 +1658,22 @@ class c2FmZQClient {
       case 3: // New member in album
         await this.getUpdates('');
         album = this.db_.albums[js.target];
-        const name = album ? await this.decryptString_(album.encName) : _T('collection');
+        const name = album ? await this.#decryptString(album.encName) : _T('collection');
         const members = js.data.members;
         if (members && members.includes(this.vars_.userId)) {
-          await self.showNotif(name, {
+          await this.#sw.showNotif(name, {
             tag: `new-collection:${js.target}`,
             body: _T('new-collection-body'),
           });
         } else if (members && members.length) {
-          await self.showNotif(name, {
+          await this.#sw.showNotif(name, {
             tag: `new-member:${js.target}`,
             body: _T('new-members-body'),
           });
         }
         break;
       case 4: // Test notification
-        await self.showNotif(_T('push-notifications-title'), {
+        await this.#sw.showNotif(_T('push-notifications-title'), {
           tag: `test-notification:${js.id}`,
           body: _T('push-notifications-body'),
         });
@@ -1610,7 +1681,7 @@ class c2FmZQClient {
       case 5: // Remote MFA
         if (js.data.expires > Date.now()) {
           let tag = `remote-mfa:${js.data.session}`;
-          await self.showNotif(_T('remote-mfa-title'), {
+          await this.#sw.showNotif(_T('remote-mfa-title'), {
             tag: tag,
             body: _T('remote-mfa-body'),
             actions: [
@@ -1638,8 +1709,8 @@ class c2FmZQClient {
 
   async approveRemoteMFA(session) {
     return this.sendRequest_('', 'v2x/mfa/approve', {
-      token: this.vars_.token,
-      params: await this.makeParams_({session}),
+      token: this.#token(),
+      params: this.makeParams_({session}),
     });
   }
 
@@ -1652,14 +1723,14 @@ class c2FmZQClient {
       if (!data.hasOwnProperty(n)) {
         continue;
       }
-      enc.push(encodeURIComponent(n) + '=' + encodeURIComponent(data[n]));
+      enc.push(encodeURIComponent(n) + '=' + encodeURIComponent(await Promise.resolve(data[n])));
     }
     return fetch(this.vars_.server + endpoint, {
       method: 'POST',
       mode: SAMEORIGIN ? 'same-origin' : 'cors',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
-        'X-c2FmZQ-capabilities': (self.capabilities||[]).join(','),
+        'X-c2FmZQ-capabilities': this.#capabilities.join(','),
       },
       redirect: 'error',
       referrerPolicy: 'no-referrer',
@@ -1679,14 +1750,14 @@ class c2FmZQClient {
     })
     .then(resp => {
       if (resp.infos.length > 0) {
-        self.sendMessage(clientId, {type: 'info', msg: resp.infos.join('\n')});
+        this.#sw.sendMessage(clientId, {type: 'info', msg: resp.infos.join('\n')});
       }
       if (resp.errors.length > 0) {
-        self.sendMessage(clientId, {type: 'error', msg: resp.errors.join('\n')});
+        this.#sw.sendMessage(clientId, {type: 'error', msg: resp.errors.join('\n')});
       }
       if (!data.mfa && resp.status === 'nok' && resp.parts.mfa) {
         console.log(`SW got request for MFA on ${endpoint}`);
-        return self.sendRPC(clientId, 'getMFA', resp.parts.mfa)
+        return this.#sw.sendRPC(clientId, 'getMFA', resp.parts.mfa)
           .then(res => {
             data.mfa = JSON.stringify(res || {});
             return this.sendRequest_(clientId, endpoint, data);
@@ -1695,8 +1766,8 @@ class c2FmZQClient {
       if (resp.parts && resp.parts.logout === "1") {
         this.vars_ = {};
         this.resetDB_();
-        this.store_.clear();
-        sendLoggedOut();
+        this.#store.clear();
+        this.#sw.sendLoggedOut();
       }
       return resp;
     });
@@ -1713,10 +1784,10 @@ class c2FmZQClient {
     v.maxSize = parseInt(v.maxSize);
     this.vars_.maxCacheSize = Math.max(v.maxSize, 1) * 1024 * 1024;
     this.cm_.setMaxSize(this.vars_.maxCacheSize);
-    if (this.checkCachedFileState_) {
-      this.checkCachedFileState_.err = _T('canceled');
-      this.checkCachedFileState_.cancel = true;
-      await this.checkCachedFilesRunning_;
+    if (this.#state.checkCachedFileState) {
+      this.#state.checkCachedFileState.err = _T('canceled');
+      this.#state.checkCachedFileState.cancel = true;
+      await this.#state.checkCachedFilesRunning;
     }
     if (v.mode !== 'encrypted') {
       await this.deleteCache_();
@@ -1747,7 +1818,7 @@ class c2FmZQClient {
     await self.caches.delete('local');
     this.cache_ = await self.caches.open('local');
     await this.cm_.delete();
-    this.cm_ = new CacheManager(this.store_, this.cache_, this.vars_.maxCacheSize);
+    this.cm_ = new CacheManager(this.#store, this.cache_, this.vars_.maxCacheSize);
   }
 
   onNetworkChange(event) {
@@ -1758,30 +1829,30 @@ class c2FmZQClient {
   }
 
   async checkCachedFiles_() {
-    if (this.checkCachedFilesRunning_) {
-      return this.checkCachedFilesRunning_;
+    if (this.#state.checkCachedFilesRunning) {
+      return this.#state.checkCachedFilesRunning;
     }
-    this.checkCachedFilesRunning_ = new Promise(async (resolve, reject) => {
-      this.checkCachedFileState_ = {};
+    this.#state.checkCachedFilesRunning = new Promise(async (resolve, reject) => {
+      this.#state.checkCachedFileState = {};
       try {
         await this.checkCachedFilesNow_().catch(err => {
           console.log('SW checking cached files', err);
-          self.sendDownloadProgress({
+          this.#sw.sendDownloadProgress({
             count: 0,
             total: 0,
             done: true,
-            err: this.checkCachedFileState_.err || err.message,
+            err: this.#state.checkCachedFileState.err || err.message,
           });
         });
       } finally {
-        this.checkCachedFileState_ = null;
+        this.#state.checkCachedFileState = null;
       }
       this.cm_.flush().then(() => this.cm_.selfCheck()).then(resolve, reject);
     })
     .finally(() => {
-      this.checkCachedFilesRunning_ = null;
+      this.#state.checkCachedFilesRunning = null;
     });
-    return this.checkCachedFilesRunning_;
+    return this.#state.checkCachedFilesRunning;
   }
 
   async checkCachedFilesNow_() {
@@ -1805,7 +1876,7 @@ class c2FmZQClient {
     const wanttn = new Map();
 
     console.time('SW cache stick/unstick');
-    (await this.store_.keys()).filter(k => k.startsWith('files/')).map(k => {
+    (await this.#store.keys()).filter(k => k.startsWith('files/')).map(k => {
       const p = k.lastIndexOf('/');
       const c = k.substring(6, p);
       const f = k.substring(p+1);
@@ -1842,7 +1913,7 @@ class c2FmZQClient {
     const total = queue.length;
     let count = 0;
     const id = setInterval(() => {
-      self.sendDownloadProgress({count:count,total:total,done:false});
+      this.#sw.sendDownloadProgress({count:count,total:total,done:false});
     }, 500);
     try {
       for (const it of queue) {
@@ -1856,7 +1927,7 @@ class c2FmZQClient {
     }
     if (count > 0) {
       console.log(`SW downloaded files: ${count}/${total}`);
-      self.sendDownloadProgress({count:count,total:total,done:true});
+      this.#sw.sendDownloadProgress({count:count,total:total,done:true});
     }
     return count;
   }
@@ -1865,7 +1936,7 @@ class c2FmZQClient {
     if (this.vars_.cachePref !== 'encrypted') {
       throw new Error(_T('caching-disabled'));
     }
-    if (this.checkCachedFileState_.cancel) {
+    if (this.#state.checkCachedFileState.cancel) {
       throw new Error(_T('canceled'));
     }
     this.saveBandwidth_();
@@ -1883,7 +1954,7 @@ class c2FmZQClient {
 
     const headers = file.headers[isThumb?1:0];
     const startOffset = headers.headerSize;
-    const symKey = await sodiumKey(this.decrypt_(headers.encKey));
+    const symKey = await sodiumKey(this.#decrypt(headers.encKey));
     const chunkSize = headers.chunkSize;
     const encChunkSize = chunkSize+XCHACHA20POLY1305_OVERHEAD;
     const fileSize = headers.dataSize;
@@ -1906,7 +1977,7 @@ class c2FmZQClient {
       if (!resp.ok) {
         throw new Error(`Status: ${resp.status}`);
       }
-      const rs = new ReadableStream(new CacheStream(resp.body, this.checkCachedFileState_));
+      const rs = new ReadableStream(new CacheStream(resp.body, this.#state.checkCachedFileState));
       return this.cm_.put(cmName, new Response(rs, {status:200, statusText:'OK', headers:resp.headers}), {add:true,stick:true,size:fileSize,chunkSize:25*encChunkSize})
         .catch(err => {
           console.log('SW cache error', err);
@@ -2094,7 +2165,7 @@ class c2FmZQClient {
           {'status': 416, 'statusText': 'Range Not Satisfiable'}));
         return;
       }
-      const symKey = await sodiumKey(this.decrypt_(headers.encKey));
+      const symKey = await sodiumKey(this.#decrypt(headers.encKey));
       const strategy = new ByteLengthQueuingStrategy({
         highWaterMark: 5*encChunkSize,
       });
@@ -2178,8 +2249,8 @@ class c2FmZQClient {
   }
 
   async cancelUpload(clientId) {
-    this.cancelUpload_.cancel = true;
-    this.uploadData_.forEach(b => {
+    this.#state.cancelUpload.cancel = true;
+    this.#state.uploadData.forEach(b => {
       b.err = 'canceled';
     });
   }
@@ -2188,40 +2259,40 @@ class c2FmZQClient {
     if (files.length === 0) {
       return;
     }
-    if (this.cancelUpload_ === undefined) {
-      this.cancelUpload_ = { cancel: false };
+    if (this.#state.cancelUpload === undefined) {
+      this.#state.cancelUpload = { cancel: false };
     }
-    if (this.uploadData_?.length > 0 && this.cancelUpload_.cancel) {
+    if (this.uploadData_?.length > 0 && this.#state.cancelUpload.cancel) {
       return Promise.reject('canceled');
     }
-    this.cancelUpload_.cancel = false;
+    this.#state.cancelUpload.cancel = false;
 
-    if (this.streamingUploadWorks_ === undefined) {
+    if (this.#state.streamingUploadWorks === undefined) {
       try {
         const ok = await this.testUploadStream_();
-        this.streamingUploadWorks_ = ok === true;
+        this.#state.streamingUploadWorks = ok === true;
       } catch (e) {
-        this.streamingUploadWorks_ = false;
+        this.#state.streamingUploadWorks = false;
       }
     }
-    console.log(this.streamingUploadWorks_ ? 'SW streaming upload is supported by browser' : 'SW streaming upload is NOT supported by browser');
+    console.log(this.#state.streamingUploadWorks ? 'SW streaming upload is supported by browser' : 'SW streaming upload is NOT supported by browser');
 
     for (let i = 0; i < files.length; i++) {
       files[i].uploadedBytes = 0;
-      files[i].tn = base64DecodeToBytes(files[i].thumbnail.split(',')[1]);
+      files[i].tn = self.base64DecodeToBytes(files[i].thumbnail.split(',')[1]);
       files[i].tnSize = files[i].tn.byteLength;
       delete files[i].thumbnail;
     }
 
-    if (this.uploadData_) {
+    if (this.#state.uploadData) {
       return new Promise((resolve, reject) => {
-        this.uploadData_.push({collection, files, resolve, reject});
+        this.#state.uploadData.push({collection, files, resolve, reject});
       });
     }
-    this.uploadData_ = [];
+    this.#state.uploadData = [];
 
     const p = new Promise(async (resolve, reject) => {
-      this.uploadData_.push({collection, files, resolve, reject});
+      this.#state.uploadData.push({collection, files, resolve, reject});
 
       for (let b = 0; b < this.uploadData_?.length; b++) {
         let batch = this.uploadData_[b];
@@ -2245,7 +2316,7 @@ class c2FmZQClient {
     });
 
     const notify = () => {
-      if (!this.uploadData_) return;
+      if (!this.#state.uploadData) return;
       const state = {
         numFiles: 0,
         numBytes: 0,
@@ -2253,7 +2324,7 @@ class c2FmZQClient {
         numBytesDone: 0,
       };
       let allDone = true;
-      this.uploadData_.forEach(b => {
+      this.#state.uploadData.forEach(b => {
         if (!b.done && !b.err) allDone = false;
         b.files.forEach(f => {
           state.numFiles += 1;
@@ -2269,9 +2340,9 @@ class c2FmZQClient {
         });
       });
       state.done = allDone;
-      sendUploadProgress(state);
+      this.#sw.sendUploadProgress(state);
       if (allDone) {
-        this.uploadData_ = null;
+        this.#state.uploadData = null;
       } else {
         self.setTimeout(notify, 500);
       }
@@ -2294,14 +2365,14 @@ class c2FmZQClient {
     const [hdr, hdrBin, hdrBase64] = await this.makeHeaders_(pk, file);
 
     const boundary = Array.from(self.crypto.getRandomValues(new Uint8Array(32))).map(v => ('0'+v.toString(16)).slice(-2)).join('');
-    const rs = new ReadableStream(new UploadStream(boundary, hdr, hdrBin, hdrBase64, collection, file, this.vars_.token, this.cancelUpload_));
+    const rs = new ReadableStream(new UploadStream(boundary, hdr, hdrBin, hdrBase64, collection, file, await this.#token(), this.#state.cancelUpload));
 
-    if (this.cancelUpload_.cancel) {
+    if (this.#state.cancelUpload.cancel) {
       throw new Error('canceled');
     }
 
     let body = rs;
-    if (!this.streamingUploadWorks_) {
+    if (!this.#state.streamingUploadWorks) {
       // Streaming upload is supported in chrome 105+.
       // https://bugs.chromium.org/p/chromium/issues/detail?id=688906
       body = await self.stream2blob(rs);
@@ -2332,7 +2403,7 @@ class c2FmZQClient {
       return 'ok';
     })
     .catch(err => {
-      if (this.cancelUpload_.cancel) {
+      if (this.#state.cancelUpload.cancel) {
         return Promise.reject('canceled');
       }
       return Promise.reject(err);
