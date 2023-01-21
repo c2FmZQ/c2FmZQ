@@ -2262,7 +2262,7 @@ class c2FmZQClient {
     if (this.#state.cancelUpload === undefined) {
       this.#state.cancelUpload = { cancel: false };
     }
-    if (this.uploadData_?.length > 0 && this.#state.cancelUpload.cancel) {
+    if (this.#state.uploadData?.length > 0 && this.#state.cancelUpload.cancel) {
       return Promise.reject('canceled');
     }
     this.#state.cancelUpload.cancel = false;
@@ -2294,8 +2294,8 @@ class c2FmZQClient {
     const p = new Promise(async (resolve, reject) => {
       this.#state.uploadData.push({collection, files, resolve, reject});
 
-      for (let b = 0; b < this.uploadData_?.length; b++) {
-        let batch = this.uploadData_[b];
+      for (let b = 0; b < this.#state.uploadData?.length; b++) {
+        let batch = this.#state.uploadData[b];
         for (let i = 0; i < batch.files.length && !batch.err; i++) {
           try {
             await this.uploadFile_(clientId, batch.collection, batch.files[i]);
