@@ -445,17 +445,15 @@ class Main {
       'adminUsers',
       'mfaCheck',
     ];
-    const body = document.querySelector('body');
-    body.classList.add('waiting');
+    document.body.classList.add('waiting');
     let p;
     if (sensitiveMethods.includes(f)) {
       p = this.sendMessageRPC_(f, ...args);
     } else {
       p = this.sendWebRPC_(f, ...args);
     }
-    return p.finally(v => {
-      body.classList.remove('waiting');
-      return v;
+    return p.finally(() => {
+      document.body.classList.remove('waiting');
     });
   }
 

@@ -22,6 +22,7 @@ package pwa_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/tebeka/selenium"
 )
@@ -62,6 +63,8 @@ func TestRegisterRecoverLogin(t *testing.T) {
 	wd.click("#loggedin-account")
 	wd.click("#account-menu-logout")
 
+	wd.sleep(2 * time.Second)
+
 	t.Log("Recovering account")
 	wd.click("#recover-tab")
 	wd.sendKeys("#email-input", "test@c2fmzq.org")
@@ -74,6 +77,8 @@ func TestRegisterRecoverLogin(t *testing.T) {
 	t.Log("Logging out")
 	wd.click("#loggedin-account")
 	wd.click("#account-menu-logout")
+
+	wd.sleep(2 * time.Second)
 
 	t.Log("Logging in")
 	wd.click("#login-tab")
@@ -124,6 +129,8 @@ func TestNoBackupKeys(t *testing.T) {
 	wd.click("#loggedin-account")
 	wd.click("#account-menu-logout")
 
+	wd.sleep(2 * time.Second)
+
 	t.Log("Logging in")
 	wd.click("#login-tab")
 	wd.sendKeys("#email-input", "test@c2fmzq.org")
@@ -145,6 +152,8 @@ func TestNoBackupKeys(t *testing.T) {
 	t.Log("Logging out")
 	wd.click("#loggedin-account")
 	wd.click("#account-menu-logout")
+
+	wd.sleep(2 * time.Second)
 
 	t.Log("Logging in")
 	wd.click("#login-tab")

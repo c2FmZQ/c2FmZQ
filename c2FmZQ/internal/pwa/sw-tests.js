@@ -22,7 +22,8 @@
 
 console.log('SW loading tests');
 
-async function testSodium() {
+async function testSodium(t) {
+  const sodium = await self.SodiumPlus.auto();
   const kp = await sodium.crypto_box_keypair();
   const obj = {
     sk: await sodium.crypto_box_secretkey(kp),
@@ -43,6 +44,70 @@ async function testSodium() {
   if (self.bytesToString(dec) !== 'Hello!') {
     throw 'Unexpected decrypted message';
   }
+}
+
+async function testSodiumWrapper(t) {
+  const so = new SodiumWrapper();
+  await so.init();
+
+  // hex2bin
+  const bin = await so.hex2bin('666f6f');
+  t.is(bin, Uint8Array);
+  t.eq(bytesToString(bin), 'foo', 'so.hex2bin');
+
+  // secretbox (symmetric key)
+  const key = await so.secretbox_keygen();
+  t.is(key, Uint8Array);
+  t.eq(key.byteLength, 32, 'so.secretbox_keygen');
+
+  const nonce = await so.randombytes(24);
+  t.is(nonce, Uint8Array);
+  t.eq(nonce.byteLength, 24, 'so.randombytes');
+
+  const ciphertext = await so.secretbox(bytesFromString('Hello'), nonce, key);
+  t.is(ciphertext, Uint8Array);
+  const plaintext = await so.secretbox_open(ciphertext, nonce, key);
+  t.is(plaintext, Uint8Array);
+  t.eq(bytesToString(plaintext), 'Hello', 'so.secretbox_open');
+
+  // pwhash
+  const salt = new Uint8Array([0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]);
+  const ph = await so.pwhash(16, 'foo', salt, so.PWHASH_OPSLIMIT_MIN, so.PWHASH_MEMLIMIT_MIN, so.PWHASH_ALG_ARGON2ID13).then(h => h.toString('hex'));
+  t.eq(ph, '5bfd3164e49a0a9f0c1b40e0116fc46b', 'so.pwhash');
+
+  // box (authenticated public key)
+  const {pk, sk} = await so.box_keypair();
+  t.is(pk, Uint8Array);
+  t.is(sk, Uint8Array);
+  t.eq(pk.byteLength, 32, 'so.box_keypair pk');
+  t.eq(sk.byteLength, 32, 'so.box_keypair sk');
+
+  const authCiphertext = await so.box(bytesFromString('Hello'), nonce, sk, pk);
+  t.is(authCiphertext, Uint8Array);
+  const authPlaintext = await so.box_open(authCiphertext, nonce, sk, pk);
+  t.is(authPlaintext, Uint8Array);
+  t.eq(bytesToString(authPlaintext), 'Hello', 'so.box_open');
+
+  // box seal (anonymous public key)
+  const anonCiphertext = await so.box_seal(bytesFromString('Hello'), pk);
+  t.is(anonCiphertext, Uint8Array);
+  const anonPlaintext = await so.box_seal_open(anonCiphertext, pk, sk);
+  t.is(anonPlaintext, Uint8Array);
+  t.eq(bytesToString(anonPlaintext), 'Hello', 'so.box_seal_open');
+
+  // kdf
+  const nullKey = new Uint8Array(32);
+  const dkey = await so.kdf_derive_from_key(32, 1, '__data__', nullKey);
+  t.is(dkey, CryptographyKey);
+  const dkeyHex = dkey.toString('hex');
+  t.eq(dkeyHex, '8ad2b64d1db7c2e933a527dc7ec71f45c5a165555bc27f9076c88c5ca841b6a5', 'so.kdf_derive_from_key');
+
+  // xchacha20poly1305
+  const enc = await so.aead_xchacha20poly1305_ietf_encrypt(bytesFromString('Hello'), nonce, dkey, '');
+  t.is(enc, Uint8Array);
+  const dec = await so.aead_xchacha20poly1305_ietf_decrypt(enc, nonce, dkey, '');
+  t.is(dec, Uint8Array);
+  t.eq(bytesToString(dec), 'Hello', 'so.aead_xchacha20poly1305_ietf_decrypt');
 }
 
 class MockStore {
@@ -95,7 +160,7 @@ class MockCache {
   }
 }
 
-async function testCache() {
+async function testCache(t) {
   const store = new MockStore();
   const cache = new MockCache();
   const sw = new ServiceWorker();
@@ -207,14 +272,43 @@ async function testCache() {
 
   await app.cm_.delete();
 }
-  
+
+class Helper {
+  constructor() {
+    this.failed = false;
+    this.errors = [];
+  }
+  assert(v, m, obj) {
+    if (!v) {
+      this.failed = true;
+      this.errors.push(m);
+      if (obj) {
+        console.log(m, obj);
+      }
+    }
+  }
+  eq(v1, v2, m) {
+    this.assert(v1 === v2, `${m}: Expected ${v1} === ${v2}`);
+  }
+  is(v, cls) {
+    this.assert(v instanceof cls, `Got ${v.constructor.name}, but expected object to be ${cls.name}`, v);
+  }
+  result() {
+    if (this.failed) {
+      throw this.errors.join(',\n');
+    }
+  }
+}
+
 async function runTests() {
   const tests = Object.keys(self).filter(k => k.startsWith('test') && typeof self[k] === 'function');
   const results = [];
   for (const t of tests) {
     console.log(`SW running test: ${t}`);
     try {
-      await self[t]();
+      const h = new Helper();
+      await self[t](h);
+      h.result();
       console.log(`${t} PASS`);
       results.push({test:t, result:'PASS'});
     } catch (err) {

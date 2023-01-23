@@ -35,24 +35,18 @@ class UI {
       files: [],
       lastDate: '',
       shown: SHOW_ITEMS_INCREMENT,
+      EL: new EventListeners(),
     };
     this.enableNotifications = localStorage.getItem('enableNotifications') === 'yes';
 
     _T = Lang.text;
 
     const langSelect = document.querySelector('#language');
-    while (langSelect.firstChild) {
-      langSelect.removeChild(langSelect.firstChild);
-    }
+    langSelect.setAttribute('aria-label', _T('language'));
+    UI.clearElement_(langSelect);
     const languages = Lang.languages();
     for (let l of Object.keys(languages)) {
-      const opt = document.createElement('option');
-      opt.value = l;
-      opt.textContent = languages[l];
-      if (l === Lang.current) {
-        opt.selected = true;
-      }
-      langSelect.appendChild(opt);
+      UI.create('option', {value:l, text: languages[l], selected: l === Lang.current, parent: langSelect});
     }
     langSelect.addEventListener('change', () => {
       localStorage.setItem('lang', langSelect.options[langSelect.options.selectedIndex].value);
@@ -94,7 +88,7 @@ class UI {
     document.querySelector('label[for=server]').textContent = _T('form-server');
     document.querySelector('#login-button').textContent = _T('login');
 
-    this.passphraseInput_.addEventListener('keyup', e => {
+    this.passphraseInput_.addEventListener('keydown', e => {
       if (e.key === 'Enter') {
         this.setPassphrase_();
       }
@@ -122,6 +116,28 @@ class UI {
       });
     });
     this.resetDbButton_.addEventListener('click', main.resetServiceWorker.bind(main));
+  }
+
+  async loadFilerobot_() {
+    if (!this.fieLoaded_) {
+      this.fieLoaded_ = new Promise((resolve, reject) => {
+        console.log('Loading filerobot image editor...');
+        const e = UI.create('script');
+        e.addEventListener('load', () => {
+          console.log('filerobot image editor loaded');
+          resolve();
+        }, {once: true});
+        e.addEventListener('error', err => {
+          console.log('filerobot image editor failed to load', err);
+          reject();
+        }, {once: true});
+        e.src = 'thirdparty/filerobot-image-editor.min.js';
+        e.type = 'module';
+        e.async = true;
+        document.body.appendChild(e);
+      });
+    }
+    return this.fieLoaded_;
   }
 
   promptForPassphrase() {
@@ -187,9 +203,8 @@ class UI {
   async serverHash_(n, commit) {
     let e = document.querySelector('#server-fingerprint');
     if (!e) {
-      e = document.createElement('div');
-      e.id = 'server-fingerprint';
-      document.querySelector('body').appendChild(e);
+      e = UI.create('div', {id:'server-fingerprint', role:'none'});
+      document.body.appendChild(e);
     }
     return main.calcServerFingerPrint(n, '#server-fingerprint', commit);
   }
@@ -233,6 +248,8 @@ class UI {
       }
     });
 
+    this.trashButton_.title = _T('trash-title');
+    this.trashButton_.setAttribute('aria-label', _T('trash-title'));
     this.trashButton_.addEventListener('click', () => {
       this.switchView({collection: 'trash'});
     });
@@ -246,13 +263,15 @@ class UI {
       this.handleCollectionDropEvent_('trash', event);
     });
     this.loginButton_.addEventListener('click', this.login_.bind(this));
+    this.refreshButton_.title = _T('refresh-title');
+    this.refreshButton_.setAttribute('aria-label', _T('refresh-title'));
     this.refreshButton_.addEventListener('click', this.refresh_.bind(this));
-    this.emailInput_.addEventListener('keyup', e => {
+    this.emailInput_.addEventListener('keydown', e => {
       if (e.key === 'Enter') {
         this.passwordInput_.focus();
       }
     });
-    this.passwordInput_.addEventListener('keyup', e => {
+    this.passwordInput_.addEventListener('keydown', e => {
       if (e.key === 'Enter') {
         switch(this.selectedTab_) {
           case 'login':
@@ -265,7 +284,7 @@ class UI {
         }
       }
     });
-    this.passwordInput2_.addEventListener('keyup', e => {
+    this.passwordInput2_.addEventListener('keydown', e => {
       if (e.key === 'Enter') {
         switch(this.selectedTab_) {
           case 'login':
@@ -280,7 +299,7 @@ class UI {
       }
     });
 
-    this.serverInput_.addEventListener('keyup', () => {
+    this.serverInput_.addEventListener('keydown', () => {
       this.serverHash_(this.serverInput_.value, false);
     });
     this.serverInput_.addEventListener('change', () => {
@@ -289,6 +308,8 @@ class UI {
     this.loggedInAccount_.addEventListener('click', this.showAccountMenu_.bind(this));
     this.loggedInAccount_.addEventListener('contextmenu', this.showAccountMenu_.bind(this));
     this.loggedInAccount_.textContent = _T('account');
+    this.loggedInAccount_.title = _T('account-title');
+    this.loggedInAccount_.setAttribute('aria-label', _T('account-title'));
 
     const tabClick = event => {
       for (let tab of Object.values(this.tabs_)) {
@@ -354,6 +375,11 @@ class UI {
     for (let tab of Object.keys(this.tabs_)) {
       this.tabs_[tab].name = tab;
       this.tabs_[tab].elem.addEventListener('click', tabClick);
+      this.tabs_[tab].elem.addEventListener('keydown', event => {
+        if (event.key === 'Enter') {
+          tabClick(event);
+        }
+      });
     }
 
     main.sendRPC('isLoggedIn')
@@ -390,6 +416,7 @@ class UI {
   showAccountMenu_(event) {
     event.preventDefault();
     const params = {
+      target: event.target,
       x: event.x,
       y: event.y,
       items: [
@@ -432,37 +459,35 @@ class UI {
   }
 
   popupMessage(message, className, opt) {
-    const div = document.createElement('div');
-    div.className = className || 'error';
+    opt = opt || {};
+    const div = UI.create('div', {className:className || 'error', role:opt.role || 'status'});
     div.style.position = 'relative';
     div.style.zIndex = this.popupZindex_++;
-    const v = document.createElement('span');
-    v.textContent = '✖';
+    const v = UI.create('span', {text:'✖',parent:div});
     v.style = 'float: right;';
-    const m = document.createElement('div');
-    m.className = 'popup-message';
+    const m = UI.create('div', {className:'popup-message',parent:div});
     if (message instanceof Element) {
       m.appendChild(message);
     } else {
       m.textContent = message;
     }
-    div.appendChild(v);
-    div.appendChild(m);
+
+    const LE = new EventListeners();
 
     const container = document.querySelector('#popup-messages');
     const remove = () => {
+      LE.clear();
       div.style.animation = '1s linear slideOut';
       div.addEventListener('animationend', () => {
         try {
-          container.removeChild(div);
+          UI.removeChild_(container, div);
         } catch(e) {}
-      });
+      }, {once: true});
     };
-    div.addEventListener('click', remove);
+    LE.add(div, 'click', remove);
     container.appendChild(div);
-    m.remove = remove;
 
-    if (!opt || !opt.sticky) {
+    if (!opt.sticky) {
       setTimeout(remove, 5000);
     }
     return remove;
@@ -474,21 +499,58 @@ class UI {
     this.popupMessage(e.toString());
   }
 
-  clearElement_(id) {
-    const e = document.getElementById(id);
-    while (e && e.firstChild) {
-      e.removeChild(e.firstChild);
+  static create(type, opt) {
+    opt = opt || {};
+    const elem = document.createElement(type);
+    if (['input','select','textarea','button'].includes(type)) {
+      opt.tabindex = '0';
+    }
+    if (opt.title && !opt['aria-label']) {
+      opt['aria-label'] = opt.title;
+    }
+    for (const attr of Object.keys(opt)) {
+      if (attr === 'text') {
+        elem.textContent = opt.text;
+      } else if (attr === 'html') {
+        elem.innerHTML = opt.html;
+      } else if (['list','tabindex','role'].includes(attr) || attr.startsWith('aria')) {
+        elem.setAttribute(attr, opt[attr]);
+      } else if (attr === 'parent') {
+        opt.parent.appendChild(elem);
+      } else {
+        elem[attr] = opt[attr];
+      }
+    }
+    return elem;
+  }
+
+  static clearElement_(elem) {
+    if (!(elem instanceof Node)) return;
+    while (elem && elem.firstChild) {
+      UI.clearElement_(elem.firstChild);
+      elem.removeChild(elem.firstChild);
     }
   }
-  
-  clearView_() {
-    this.clearElement_('gallery');
-    this.clearElement_('popup-name');
-    this.clearElement_('popup-content');
+
+  static clearElementById_(id) {
+    UI.clearElement_(document.getElementById(id));
+  }
+
+  static removeChild_(parent, child) {
+    try {
+      UI.clearElement_(child);
+      parent.removeChild(child);
+    } catch(err) {}
+  }
+
+  static clearView_() {
+    UI.clearElementById_('gallery');
+    UI.clearElementById_('popup-name');
+    UI.clearElementById_('popup-content');
   }
 
   showPassphraseBox_() {
-    this.clearView_();
+    UI.clearView_();
     this.title_.textContent = 'c2FmZQ';
     document.querySelector('#loggedout-div').className = 'hidden';
     document.querySelector('#loggedin-div').className = 'hidden';
@@ -501,12 +563,12 @@ class UI {
     document.querySelector('#loggedout-div').className = 'hidden';
     document.querySelector('#passphrase-div').className = 'hidden';
     document.querySelector('#loggedin-div').className = '';
-    this.clearView_();
+    UI.clearView_();
   }
 
   showLoggedOut_() {
     this.title_.textContent = _T('login');
-    this.clearView_();
+    UI.clearView_();
     this.selectedTab_ = 'login';
     this.tabs_[this.selectedTab_].click();
 
@@ -519,16 +581,11 @@ class UI {
   }
 
   bitScroll_() {
-    const body = document.querySelector('body');
-    const div = document.createElement('div');
-    div.id = 'bit-scroller';
-    const a = document.createElement('div');
-    const b = document.createElement('div');
-    const c = document.createElement('div');
-    div.appendChild(a);
-    div.appendChild(b);
-    div.appendChild(c);
-    body.appendChild(div);
+    const body = document.body;
+    const div = UI.create('div', {id:'bit-scroller',role:'none',parent:body});
+    const a = UI.create('div', {parent:div});
+    const b = UI.create('div', {parent:div});
+    const c = UI.create('div', {parent:div});
 
     const spin = ['⨁','⨂'];
     const cr = ['▀','▄'];
@@ -544,13 +601,13 @@ class UI {
     }, 100);
     return () => {
       window.clearInterval(id);
-      body.removeChild(div);
+      UI.removeChild_(body, div);
     };
   }
 
   async login_() {
     if (this.selectedTab_ !== 'login' && this.passwordInput_.value !== this.passwordInput2_.value) {
-      this.popupMessage(_T('new-pass-doesnt-match'));
+      this.popupMessage(_T('new-pass-doesnt-match'), 'error', {role:'alert'});
       return;
     }
     if (!SAMEORIGIN) {
@@ -689,6 +746,7 @@ class UI {
   showAddMenu_(event) {
     event.preventDefault();
     const params = {
+      target: event.target,
       x: event.x,
       y: event.y,
       items: [
@@ -708,9 +766,15 @@ class UI {
   }
 
   async refreshGallery_(scrollToTop) {
+    const EL = this.galleryState_.EL;
     const cachePref = await main.sendRPC('cachePreference');
     if (!this.galleryState_.format) {
       this.galleryState_.format = 'grid';
+    }
+    if (this.galleryState_.content && this.galleryState_.content.files) {
+      for (const it of this.galleryState_.content.files) {
+        delete it.elem;
+      }
     }
     this.galleryState_.content = await main.sendRPC('getFiles', this.galleryState_.collection);
     if (!this.galleryState_.content) {
@@ -722,15 +786,11 @@ class UI {
       document.documentElement.scrollTo(0, 0);
     }
 
+    EL.clear();
     const cd = document.querySelector('#collections');
-    while (cd.firstChild) {
-      cd.removeChild(cd.firstChild);
-    }
-
+    UI.clearElement_(cd);
     let g = document.querySelector('#gallery');
-    while (g.firstChild) {
-      g.removeChild(g.firstChild);
-    }
+    UI.clearElement_(g);
 
     let collectionName = '';
     let members = [];
@@ -740,6 +800,7 @@ class UI {
 
     const showContextMenu = (event, c) => {
       let params = {
+        target: event.target,
         x: event.x,
         y: event.y,
         items: [],
@@ -759,12 +820,14 @@ class UI {
       if (this.galleryState_.collection !== c.collection) {
         params.items.push({
           text: _T('open'),
+          id: "context-menu-open",
           onclick: () => this.switchView({collection: c.collection}),
         });
       }
       if (c.collection !== 'trash' && c.collection !== 'gallery') {
         params.items.push({
           text: _T('properties'),
+          id: "context-menu-properties",
           onclick: () => this.collectionProperties_(c),
         });
       }
@@ -775,11 +838,13 @@ class UI {
           if (this.galleryState_.collection !== 'trash') {
             params.items.push({
               text: _T('copy-selected'),
+              id: "context-menu-copy",
               onclick: () => this.moveFiles_({file: f.file, collection: f.collection, move: false}, c.collection),
             });
           }
           params.items.push({
             text: _T('move-selected'),
+            id: "context-menu-move",
             onclick: () => this.moveFiles_({file: f.file, collection: f.collection, move: true}, c.collection),
           });
         }
@@ -809,29 +874,33 @@ class UI {
       if (c.collection === 'trash') {
         continue;
       }
-      const div = document.createElement('div');
-      div.className = 'collectionThumbdiv';
-      div.title = c.name;
+      const div = UI.create('div', {className:'collectionThumbdiv', tabindex:'0', role:'link', title:_T('collection-title', c.name)});
       if (!c.isOwner) {
         div.classList.add('not-owner');
       }
       if (c.isOwner || c.canAdd) {
-        div.addEventListener('dragover', event => {
+        EL.add(div, 'dragover', event => {
           event.preventDefault();
         });
-        div.addEventListener('drop', event => {
+        EL.add(div, 'drop', event => {
           event.preventDefault();
           event.stopPropagation();
           this.handleCollectionDropEvent_(c.collection, event);
         });
       }
-      div.addEventListener('contextmenu', event => {
+      EL.add(div, 'contextmenu', event => {
         event.preventDefault();
         showContextMenu(event, c);
       });
-      div.addEventListener('click', () => {
+      EL.add(div, 'click', () => {
         this.switchView(c);
       });
+      EL.add(div, 'keydown', e => {
+        if (e.key === 'Enter') {
+          e.stopPropagation();
+          this.switchView(c);
+        }
+      }, true);
       if (this.galleryState_.collection === c.collection) {
         scrollTo = div;
       }
@@ -843,7 +912,7 @@ class UI {
         img.src = 'clear.png';
       }
       const sz = this.galleryState_.collection === c.collection ? UI.px_(150) : UI.px_(120);
-      const imgdiv = document.createElement('div');
+      const imgdiv = UI.create('div');
       img.style.height = sz;
       img.style.width = sz;
       img.style.gridArea = '1 / 1 / 2 / 2';
@@ -852,50 +921,42 @@ class UI {
       imgdiv.style.width = sz;
       imgdiv.appendChild(img);
       if (cachePref.mode === 'encrypted' && c.isOffline) {
-        const check = document.createElement('div');
+        const check = UI.create('div', {text: '☑', className:'collectionThumbOfflineCheck', parent:imgdiv});
         check.style.gridArea = '1 / 1 / 2 / 2';
         check.style.justifySelf = 'end';
         check.style.alignSelf = 'start';
         check.style.opacity = '0.75';
-        check.textContent = '☑';
-        check.className = 'collectionThumbOfflineCheck';
-        imgdiv.appendChild(check);
       }
       div.appendChild(imgdiv);
-      const n = document.createElement('div');
-      n.className = 'collectionThumbLabel';
+      const n = UI.create('div', {text:c.name,className:'collectionThumbLabel',parent:div});
       n.style.width = sz;
-      n.textContent = c.name;
-      div.appendChild(n);
       cd.appendChild(div);
     }
 
-    const collButtons = document.createElement('div');
-    collButtons.id = 'collection-buttons';
-    const formatButton = document.createElement('button');
-    formatButton.id = 'format-button';
-    formatButton.textContent = this.galleryState_.format === 'list' ? _T('grid') : _T('list');
-    formatButton.title = this.galleryState_.format === 'list' ? _T('grid-title') : _T('list-title');
-    formatButton.addEventListener('click', () => {
+    const collButtons = UI.create('div', {id:'collection-buttons'});
+    const formatButton = UI.create('button', {
+      id: 'format-button',
+      text: this.galleryState_.format === 'list' ? _T('grid') : _T('list'),
+      title: this.galleryState_.format === 'list' ? _T('grid-title') : _T('list-title'),
+      parent: collButtons,
+    });
+    EL.add(formatButton, 'click', () => {
       this.galleryState_.format = this.galleryState_.format === 'list' ? 'grid' : 'list';
       this.refreshGallery_(true);
     });
-    collButtons.appendChild(formatButton);
     if (this.galleryState_.collection === 'trash') {
-      const emptyButton = document.createElement('button');
-      emptyButton.className = 'empty-trash';
-      emptyButton.textContent = _T('empty');
-      emptyButton.addEventListener('click', e => {
+      const emptyButton = UI.create('button', {className:'empty-trash',text:_T('empty'),parent:collButtons});
+      EL.add(emptyButton, 'click', e => {
         this.emptyTrash_(e.target);
       });
-      collButtons.appendChild(emptyButton);
     }
     if (this.galleryState_.collection !== 'gallery' && this.galleryState_.collection !== 'trash') {
-      const settingsButton = document.createElement('button');
-      settingsButton.id = 'settings-button';
-      settingsButton.textContent = '⚙';
-      settingsButton.title = _T('settings-title');
-      settingsButton.addEventListener('click', () => {
+      const settingsButton = UI.create('button', {
+        id: 'settings-button',
+        text: '⚙',
+        title: _T('settings-title'),
+      });
+      EL.add(settingsButton, 'click', () => {
         this.collectionProperties_(currentCollection);
       });
       collButtons.appendChild(settingsButton);
@@ -903,25 +964,21 @@ class UI {
     g.appendChild(collButtons);
 
     if (currentCollection.isOwner || currentCollection.canAdd) {
-      const addDiv = document.createElement('div');
-      addDiv.id = 'add-button';
-      addDiv.textContent = '＋';
-      addDiv.addEventListener('click', this.showAddMenu_.bind(this));
-      addDiv.addEventListener('contextmenu', this.showAddMenu_.bind(this));
-      g.appendChild(addDiv);
+      const addDiv = UI.create('div', {id:'add-button', text: '＋', tabindex:'0', role:'link', title: _T('add-button-title'), parent:g});
+      EL.add(addDiv, 'keydown', e => {
+        if (e.key === 'Enter') {
+          this.showAddMenu_(e);
+        }
+      });
+      EL.add(addDiv, 'click', this.showAddMenu_.bind(this));
+      EL.add(addDiv, 'contextmenu', this.showAddMenu_.bind(this));
     }
 
-    const br = document.createElement('br');
-    br.clear = 'all';
-    g.appendChild(br);
-    const h1 = document.createElement('h1');
-    h1.textContent = _T('collection:', currentCollection.name);
-    g.appendChild(h1);
+    UI.create('br', {clear:'all',parent:g});
+    UI.create('h1', {text:_T('collection:', currentCollection.name), parent:g});
     if (currentCollection?.members?.length > 0) {
       UI.sortBy(currentCollection.members, 'email');
-      const div = document.createElement('div');
-      div.textContent = _T('shared-with', currentCollection.members.map(m => m.email).join(', '));
-      g.appendChild(div);
+      UI.create('div', {text:_T('shared-with', currentCollection.members.map(m => m.email).join(', ')), parent:g});
     }
 
     this.galleryState_.lastDate = '';
@@ -933,6 +990,7 @@ class UI {
     } while (dist() <= 0 && this.galleryState_.shown < this.galleryState_.content.total);
 
     if (scrollTo) {
+      scrollTo.focus();
       if (oldScrollLeft) {
         cd.scrollLeft = oldScrollLeft;
       }
@@ -969,6 +1027,7 @@ class UI {
   }
 
   async showMoreFiles_(n, opt_scrollTop) {
+    const EL = this.galleryState_.EL;
     if (!this.galleryState_.content) {
       return;
     }
@@ -978,6 +1037,7 @@ class UI {
     const showContextMenu = (event, i) => {
       const f = this.galleryState_.content.files[i];
       let params = {
+        target: event.target,
         x: event.x,
         y: event.y,
         items: [],
@@ -990,11 +1050,13 @@ class UI {
         params.items.push({});
         params.items.push({
           text: _T('edit'),
+          id: 'context-menu-edit',
           onclick: () => this.showEdit_(f),
         });
       }
       params.items.push({
         text: f.selected ? _T('unselect') : _T('select'),
+        id: 'context-menu-select',
         onclick: f.select,
       });
       if (this.galleryState_.isOwner) {
@@ -1076,10 +1138,7 @@ class UI {
     if (this.galleryState_.format === 'list') {
       listDiv = document.querySelector('#gallery-list-div');
       if (!listDiv) {
-        listDiv = document.createElement('div');
-        listDiv.id = 'gallery-list-div';
-        listDiv.innerHTML = '<div></div><div><span>'+_T('filename')+'</span></div><div class="size"><span>'+_T('filesize')+'</span></div><div class="time"><span>'+_T('creation-time')+'</span></div><div class="content-type"><span>'+_T('filetype')+'</span></div><div class="duration"><span>'+_T('duration')+'</span></div>';
-        g.appendChild(listDiv);
+        listDiv = UI.create('div', {id:'gallery-list-div', html: '<div class="row"><div>&nbsp;</div><div><span>'+_T('filename')+'</span></div><div class="size"><span>'+_T('filesize')+'</span></div><div class="time"><span>'+_T('creation-time')+'</span></div><div class="content-type"><span>'+_T('filetype')+'</span></div><div class="duration"><span>'+_T('duration')+'</span></div></div>', parent: g});
       }
     }
 
@@ -1097,101 +1156,80 @@ class UI {
         const date = (new Date(f.dateCreated)).toLocaleDateString(undefined, {weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'});
         if (date !== this.galleryState_.lastDate) {
           this.galleryState_.lastDate = date;
-          const dateDiv = document.createElement('div');
-          dateDiv.className = 'date';
-          dateDiv.innerHTML = '<br clear="all" />'+date+'<br clear="all" />';
-          g.appendChild(dateDiv);
+          const dateDiv = UI.create('div', {className:'date', html:'<br clear="all" />'+date+'<br clear="all" />', parent:g});
         }
         const img = new Image();
-        img.addEventListener('load', scroll);
+        EL.add(img, 'load', scroll);
         img.alt = f.fileName;
         img.src = f.thumbUrl;
         img.style.height = UI.px_(320);
         img.style.width = UI.px_(240);
 
-        const d = document.createElement('div');
-        d.className = 'thumbdiv';
-        d.title = f.fileName;
+        const d = UI.create('div', {className:'thumbdiv', tabindex:'0', role:'link', title:_T('file-title', f.fileName)});
         f.elem = d;
         f.select = () => selectItem(i);
 
         d.appendChild(img);
         if (f.isVideo) {
-          const div = document.createElement('div');
-          div.className = 'duration';
-          const dur = document.createElement('span');
-          dur.className = 'duration';
-          dur.textContent = this.formatDuration_(f.duration);
-          div.appendChild(dur);
-          d.appendChild(div);
+          const div = UI.create('div',{className:'duration', parent:d});
+          UI.create('span', {className:'duration', text: this.formatDuration_(f.duration), parent: div});
         }
 
         d.draggable = true;
-        d.addEventListener('click', e => click(i, e));
-        d.addEventListener('dragstart', e => dragStart(f, e, img));
-        d.addEventListener('dragend', e => dragEnd(f, e));
-        d.addEventListener('contextmenu', e => contextMenu(i, e));
+        EL.add(d, 'click', e => click(i, e));
+        EL.add(d, 'keydown', e => {
+          if (e.key === 'Enter') {
+            e.stopPropagation();
+            contextMenu(i, e);
+          }
+        }, true);
+        EL.add(d, 'dragstart', e => dragStart(f, e, img));
+        EL.add(d, 'dragend', e => dragEnd(f, e));
+        EL.add(d, 'contextmenu', e => contextMenu(i, e));
 
         g.appendChild(d);
       } else {
-        const imgDiv = document.createElement('div');
+        const row = UI.create('div', {className:'row', parent:listDiv});
+
+        const imgDiv = UI.create('div', {tabindex:'0',role:'link', title:_T('file-title', f.fileName), parent:row});
+        imgDiv.draggable = true;
+        EL.add(imgDiv, 'dragstart', e => dragStart(f, e, img));
+        EL.add(imgDiv, 'dragend', e => dragEnd(f, e));
+
         const img = new Image();
-        img.addEventListener('load', scroll);
+        EL.add(img, 'load', scroll);
+        img.draggable = false;
         img.alt = f.fileName;
         img.src = f.thumbUrl;
         imgDiv.appendChild(img);
-        imgDiv.draggable = true;
-        imgDiv.addEventListener('click', e => click(i, e));
-        imgDiv.addEventListener('dragstart', e => dragStart(f, e, img));
-        imgDiv.addEventListener('dragend', e => dragEnd(f, e));
-        imgDiv.addEventListener('contextmenu', e => contextMenu(i, e));
 
-        f.elem = imgDiv;
+        EL.add(row, 'click', e => click(i, e));
+        EL.add(row, 'contextmenu', e => contextMenu(i, e));
+        EL.add(row, 'keydown', e => {
+          if (e.key === 'Enter') {
+            e.stopPropagation();
+            contextMenu(i, e);
+          }
+        }, true);
+        f.elem = row;
         f.select = () => selectItem(i);
-        listDiv.appendChild(imgDiv);
 
-        const fname = document.createElement('div');
-        fname.className = 'filename';
-        fname.addEventListener('click', e => click(i, e));
-        const fnameSpan = document.createElement('span');
-        fnameSpan.textContent = f.fileName;
-        fname.appendChild(fnameSpan);
-        listDiv.appendChild(fname);
+        const fname = UI.create('div', {className:'filename',parent:row});
+        UI.create('span', {text:f.fileName, parent:fname});
 
-        const size = document.createElement('div');
-        size.className = 'size';
-        size.addEventListener('click', e => click(i, e));
-        const sizeSpan = document.createElement('span');
-        sizeSpan.textContent = this.formatSize_(f.size);
-        size.appendChild(sizeSpan);
-        listDiv.appendChild(size);
+        const size = UI.create('div', {className:'size', parent:row});
+        UI.create('span', {text: this.formatSize_(f.size), parent: size});
 
-        const ts = document.createElement('div');
-        ts.className = 'time';
-        ts.addEventListener('click', e => click(i, e));
-        const tsSpan = document.createElement('span');
-        tsSpan.textContent = (new Date(f.dateCreated)).toLocaleString();
-        ts.appendChild(tsSpan);
-        listDiv.appendChild(ts);
+        const ts = UI.create('div', {className:'time', parent:row});
+        const tsSpan = UI.create('span', {text: (new Date(f.dateCreated)).toLocaleString(), parent:ts});
 
-        const ctype = document.createElement('div');
-        ctype.className = 'content-type';
-        ctype.addEventListener('click', e => click(i, e));
-        const ctypeSpan = document.createElement('span');
-        ctypeSpan.textContent = f.contentType;
-        ctype.appendChild(ctypeSpan);
-        listDiv.appendChild(ctype);
+        const ctype = UI.create('div', {className:'content-type', parent:row});
+        UI.create('span', {text:f.contentType, parent:ctype});
 
-        const durDiv = document.createElement('div');
-        durDiv.addEventListener('click', e => click(i, e));
-        durDiv.className = 'duration';
+        const durDiv = UI.create('div', {className:'duration', parent:row});
         if (f.isVideo) {
-          const dur = document.createElement('span');
-          dur.className = 'duration';
-          dur.textContent = this.formatDuration_(f.duration);
-          durDiv.appendChild(dur);
+          UI.create('span', {className:'duration', text: this.formatDuration_(f.duration), parent:durDiv});
         }
-        listDiv.appendChild(durDiv);
       }
     }
   }
@@ -1380,16 +1418,30 @@ class UI {
     if (this.closeContextMenu_) {
       this.closeContextMenu_();
     }
-    const menu = document.createElement('div');
-    menu.className = params.className || 'context-menu';
-    let x = params.x || 10;
-    let y = params.y || 10;
-    menu.addEventListener('contextmenu', event => {
+    const EL = new EventListeners();
+    const menu = UI.create('div', {className: params.className || 'context-menu'});
+    let x = params.x;
+    let y = params.y;
+    if (!x) {
+      let t = params.target;
+      x = t.offsetLeft + t.offsetWidth / 2;
+      y = t.offsetTop + t.offsetHeight / 2;
+      t = t.offsetParent;
+      while (t) {
+        x += t.offsetLeft;
+        y += t.offsetTop;
+        if (t === document.body) {
+          x -= document.documentElement.scrollLeft;
+          y -= document.documentElement.scrollTop;
+        }
+        t = t.offsetParent;
+      }
+    }
+    EL.add(menu, 'contextmenu', event => {
       event.preventDefault();
     });
-    const point = document.createElement('img');
+    const point = UI.create('img', {parent:menu});
     point.style.position = 'absolute';
-    menu.appendChild(point);
 
     let closeMenu;
     const handleEscape = e => {
@@ -1404,13 +1456,13 @@ class UI {
       }
     };
     setTimeout(() => {
-      this.setGlobalEventHandlers([
-        ['keyup', handleEscape],
+      this.setGlobalContext([
+        ['keydown', handleEscape, true],
         ['click', handleClickOutside, true],
-      ]);
+      ], menu);
     });
 
-    const body = document.querySelector('body');
+    const body = document.body;
     const collections = document.querySelector('#collections');
     body.classList.add('noscroll');
     collections.classList.add('noscroll');
@@ -1422,42 +1474,57 @@ class UI {
       body.classList.remove('noscroll');
       collections.classList.remove('noscroll');
       // Remove handlers.
-      this.setGlobalEventHandlers(null);
+      this.setGlobalContext(null);
+      EL.clear();
       menu.style.animation = 'fadeOut 0.25s';
       menu.addEventListener('animationend', () => {
         try {
-          body.removeChild(menu);
+          UI.removeChild_(body, menu);
         } catch (e) {}
-      });
+      }, {once: true});
       closeMenu = () => null;
+      params.target.focus();
     };
 
+    let focus;
     for (let i = 0; i < params.items.length; i++) {
       if (!params.items[i].text) {
         if (i !== 0 && i !== params.items.length - 1) {
-          const space = document.createElement('hr');
-          space.className = 'context-menu-space';
-          menu.appendChild(space);
+          UI.create('hr', {className:'context-menu-space',parent:menu});
         }
         continue;
       }
-      const item = document.createElement(params.items[i].onclick ? 'button' : 'div');
-      item.className = params.items[i].onclick ? 'context-menu-item' : 'context-menu-div';
-      item.textContent = params.items[i].text;
-      if (params.items[i].id) {
-        item.id = params.items[i].id;
-      }
       if (params.items[i].onclick) {
-        item.addEventListener('click', e => {
+        const item = UI.create('button', {
+          id: params.items[i].id,
+          className: 'context-menu-item',
+          text: params.items[i].text,
+          tabindex: '0',
+          role: 'menuitem',
+          parent: menu,
+        });
+        EL.add(item, 'click', e => {
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
           closeMenu();
-          if (params.items[i].onclick) {
-            params.items[i].onclick();
-          }
+          params.items[i].onclick(e);
+        });
+        if (!focus) {
+          focus = item;
+        }
+      } else {
+        UI.create('div', {
+          className: 'context-menu-div',
+          text: params.items[i].text,
+          parent: menu,
         });
       }
-      menu.appendChild(item);
     }
     body.appendChild(menu);
+    if (focus) {
+      focus.focus();
+    }
 
     let up, left;
     if (x > window.innerWidth / 2) {
@@ -1497,23 +1564,34 @@ class UI {
     return menu;
   }
 
-  setGlobalEventHandlers(handlers) {
+  static hasAncestor(node, parent) {
+    while (node) {
+      if (node === parent) return true;
+      node = node.parentElement;
+    }
+    return false;
+  }
+
+  setGlobalContext(handlers, parent) {
     if (!this.windowHandlers) {
       this.windowHandlers = [];
     }
     const add = h => {
-      h.forEach(args => document.addEventListener(...args));
+      h.handlers.forEach(args => document.addEventListener(...args));
+      h.tabs.forEach(e => e.setAttribute('tabindex', '-1'));
     };
     const remove = h => {
-      h.forEach(args => document.removeEventListener(...args));
+      h.handlers.forEach(args => document.removeEventListener(...args));
+      h.tabs.forEach(e => e.setAttribute('tabindex', '0'));
     };
     if (handlers) {
       // Add events.
       if (this.windowHandlers.length) {
         remove(this.windowHandlers[0]);
       }
-      this.windowHandlers.unshift(handlers);
-      add(handlers);
+      const tabs = Array.from(document.querySelectorAll('[tabindex="0"],button,select,a')).filter(node => !UI.hasAncestor(node, parent));
+      this.windowHandlers.unshift({handlers, tabs});
+      add(this.windowHandlers[0]);
     } else {
       // Remove events.
       remove(this.windowHandlers.shift());
@@ -1524,23 +1602,18 @@ class UI {
   }
 
   async prompt(params) {
-    const win = document.createElement('div');
-    win.className = 'prompt-div';
-    const bg = document.createElement('div');
-    bg.className = 'prompt-bg';
-
-    const text = document.createElement('div');
-    text.className = 'prompt-text';
-    text.textContent = params.message;
-    win.appendChild(text);
+    const body = document.body;
+    
+    const win = UI.create('div', {className: 'prompt-div', role:'alertdialog', 'aria-labelledby':'prompt-text'});
+    const bg = UI.create('div', {className: 'prompt-bg', role:'none', parent: body});
+    const text = UI.create('div', {className: 'prompt-text', id:'prompt-text', text: params.message, parent: win});
 
     let input;
     if (params.getValue) {
       if (params.password) {
-        input = document.createElement('input');
-        input.type = 'password';
+        input = UI.create('input', {type:'password'});
       } else {
-        input = document.createElement('textarea');
+        input = UI.create('textarea');
       }
       input.className = 'prompt-input';
       if (params.defaultValue) {
@@ -1549,54 +1622,49 @@ class UI {
       win.appendChild(input);
     }
 
-    const buttons = document.createElement('div');
-    buttons.className = 'prompt-button-row';
-    const canc = document.createElement('button');
-    canc.className = 'prompt-cancel-button';
-    canc.textContent = params.cancelText || _T('cancel');
-    buttons.appendChild(canc);
-    const conf = document.createElement('button');
-    conf.className = 'prompt-confirm-button';
-    conf.textContent = params.confirmText || _T('confirm');
-    buttons.appendChild(conf);
-    win.appendChild(buttons);
+    const buttons = UI.create('div', {className:'prompt-button-row',parent:win});
+    const canc = UI.create('button', {className:'prompt-cancel-button', text:params.cancelText || _T('cancel'), tabindex:'0', parent:buttons});
+    const conf = UI.create('button', {className:'prompt-confirm-button', text:params.confirmText || _T('confirm'), tabindex:'0', parent:buttons});
 
-    const body = document.querySelector('body');
-    body.appendChild(bg);
     body.appendChild(win);
     if (input) input.focus();
+    else canc.focus();
 
     const waiting = body.classList.contains('waiting');
     if (waiting) {
       body.classList.remove('waiting');
     }
     const p = new Promise((resolve, reject) => {
+      const EL = new EventListeners();
       const handleEscape = e => {
         if (e.key === 'Escape') {
+          e.stopPropagation();
           close();
           reject(_T('canceled'));
         }
         if (e.key === 'Enter') {
+          e.stopPropagation();
           close();
           resolve(params.getValue ? input.value.trim() : true);
         }
       };
-      this.setGlobalEventHandlers([
-        ['keyup', handleEscape],
-      ]);
+      this.setGlobalContext([
+        ['keydown', handleEscape, true],
+      ], win);
       const close = () => {
-        this.setGlobalEventHandlers(null);
-        body.removeChild(bg);
-        body.removeChild(win);
+        this.setGlobalContext(null);
+        EL.clear();
+        UI.removeChild_(body, bg);
+        UI.removeChild_(body, win);
         if (waiting) {
           body.classList.add('waiting');
         }
       };
-      conf.addEventListener('click', () => {
+      EL.add(conf, 'click', () => {
         close();
         resolve(params.getValue ? input.value.trim() : true);
       });
-      canc.addEventListener('click', () => {
+      EL.add(canc, 'click', () => {
         close();
         reject(_T('canceled'));
       });
@@ -1605,29 +1673,20 @@ class UI {
   }
 
   freeze(params) {
-    const win = document.createElement('div');
-    win.className = 'prompt-div';
-    const bg = document.createElement('div');
-    bg.className = 'prompt-bg';
-
-    const text = document.createElement('div');
-    text.className = 'prompt-text';
-    text.textContent = params.message;
-    win.appendChild(text);
-
-    const body = document.querySelector('body');
-    body.appendChild(bg);
-    body.appendChild(win);
+    const body = document.body;
+    const win = UI.create('div', {className: 'prompt-div', role:'alertdialog', 'aria-labelledby':'prompt-text'});
+    const bg = UI.create('div', {className:'prompt-bg', role:'none', parent:body});
+    const text = UI.create('div', {className:'prompt-text', id:'prompt-text', text:params.message, parent:win});
 
     const waiting = body.classList.contains('waiting');
     if (waiting) {
       body.classList.remove('waiting');
     }
-    this.setGlobalEventHandlers([]);
+    this.setGlobalContext([], win);
     return () => {
-      this.setGlobalEventHandlers(null);
-      body.removeChild(bg);
-      body.removeChild(win);
+      this.setGlobalContext(null);
+      UI.removeChild_(body, bg);
+      UI.removeChild_(body, win);
       if (waiting) {
         body.classList.add('waiting');
       }
@@ -1639,39 +1698,39 @@ class UI {
   }
 
   commonPopup_(params) {
-    const popup = document.createElement('div');
-    const popupHeader = document.createElement('div');
-    const popupName = document.createElement('div');
-    const popupClose = document.createElement('div');
-    const popupContent = document.createElement('div');
-    const popupInfo = document.createElement('div');
+    const EL = params.EL || new EventListeners();
+    const popup = UI.create('div', {className:params.className || 'popup'});
+    const popupHeader = UI.create('div', {className:'popup-header', parent:popup});
+    const popupName = UI.create('div', {className:'popup-name', text:params.title || 'Title', parent:popupHeader});
+    const popupInfo = UI.create('div', {className:'popup-info', text:'ⓘ', tabindex:'0', role:'button', title:_T('info')});
+    const popupClose = UI.create('div', {className:'popup-close', text:'✖', tabindex:'0', role:'button', title:_T('close')});
+    const popupContent = UI.create('div', {className:'popup-content', parent:popup});
 
-    popupContent.className = 'popup-content';
+    const body = document.body;
+    const g = document.querySelector('#gallery');
+
+    if (!this.popupBlur_ || this.popupBlur_.depth <= 0) {
+      this.popupBlur_ = {
+        depth: 0,
+        elem: UI.create('div', {className:'blur', parent:g}),
+      };
+    }
+    this.popupBlur_.depth++;
+
     if (params.content) {
       popupContent.appendChild(params.content);
     }
-    popup.className = params.className || 'popup';
-    popupHeader.className = 'popup-header';
-    popupName.className = 'popup-name';
-    popupName.textContent = params.title || 'Title';
-    popupInfo.className = 'popup-info';
-    popupInfo.textContent = 'ⓘ';
-    popupClose.className = 'popup-close';
-    popupClose.textContent = '✖';
-
-    popupHeader.appendChild(popupName);
     if (params.showInfo) {
       popupHeader.appendChild(popupInfo);
     }
     popupHeader.appendChild(popupClose);
-    popup.appendChild(popupHeader);
-    popup.appendChild(popupContent);
 
     const handleClickClose = () => {
       closePopup();
     };
     const handleEscape = e => {
       if (e.key === 'Escape') {
+        e.stopPropagation();
         closePopup();
       }
     };
@@ -1682,34 +1741,25 @@ class UI {
       }
     };
     // Add handlers.
-    popupClose.addEventListener('click', handleClickClose);
+    EL.add(popupClose, 'click', handleClickClose);
+    EL.add(popupClose, 'keydown', e => {
+      if (e.key === 'Enter') {
+        handleClickClose(e);
+      }
+    });
     setTimeout(() => {
       const handlers = params.handlers || [];
-      handlers.push(['keyup', handleEscape]);
+      handlers.push(['keydown', handleEscape, true]);
       handlers.push(['click', handleClickOutside, true]);
-      this.setGlobalEventHandlers(handlers);
+      this.setGlobalContext(handlers, popup);
     });
-
-    const body = document.querySelector('body');
-    const g = document.querySelector('#gallery');
-
-    if (!this.popupBlur_ || this.popupBlur_.depth <= 0) {
-      this.popupBlur_ = {
-        depth: 0,
-        elem: document.createElement('div'),
-      };
-      this.popupBlur_.elem.className = 'blur';
-      g.appendChild(this.popupBlur_.elem);
-    }
-    this.popupBlur_.depth++;
 
     let closed = false;
     const closePopup = opt_slide => {
       if (closed) return;
       closed = true;
       // Remove handlers.
-      popupClose.removeEventListener('click', handleClickClose);
-      this.setGlobalEventHandlers(null);
+      this.setGlobalContext(null);
       popup.style.width = '' + popup.offsetWidth + 'px';
       switch (opt_slide) {
         case 'left':
@@ -1723,16 +1773,17 @@ class UI {
           break;
       }
       popup.addEventListener('animationend', () => {
-        g.removeChild(popup);
+        UI.removeChild_(g, popup);
         if (--this.popupBlur_.depth <= 0) {
           const elem = this.popupBlur_.elem;
           this.popupBlur_.elem = null;
           elem.style.animation = 'fadeOut 0.25s';
           elem.addEventListener('animationend', () => {
-            g.removeChild(elem);
-          });
+            UI.removeChild_(g, elem);
+          }, {once: true});
         }
-      });
+      }, {once: true});
+      EL.clear();
       if (params.onclose) {
         params.onclose();
       }
@@ -1755,8 +1806,8 @@ class UI {
     popup.addEventListener('animationend', () => {
       popup.style.width = '';
       popup.style.animation = '';
-    });
-    return {popup: popup, content: popupContent, close: closePopup, info: popupInfo};
+    }, {once: true});
+    return {popup: popup, content: popupContent, close: closePopup, info: popupInfo, EL: EL};
   }
 
   preload_(url) {
@@ -1807,8 +1858,9 @@ class UI {
         this.setUpPopup_(i+1, 'left');
       }
     };
-    const onkeyup = e => {
-      if (e.key === 'Enter') {
+    const onkeydown = e => {
+      if (e.key === 'F' || e.key === 'f') {
+        e.stopPropagation();
         if (img) img.requestFullscreen();
       } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
         e.stopPropagation();
@@ -1849,10 +1901,13 @@ class UI {
       showInfo: true,
       slide: opt_slide,
       handlers: [
-        ['keyup', onkeyup],
+        ['keydown', onkeydown, true],
         ['touchstart', ontouchstart, {capture:true,passive:false}],
         ['touchmove', ontouchmove, {capture:true,passive:false}],
       ],
+      onclose: () => {
+        f.elem.focus();
+      },
     };
     for (let j = i - 1; j <= i + 1; j++) {
       if (j >= 0 && j < max && this.galleryState_.content.files[j].isImage) {
@@ -1875,78 +1930,89 @@ class UI {
           }
         };
         img.src = f.thumbUrl;
-        const t = document.createElement('div');
-        t.textContent = _T('network-error');
-        t.className = 'offline-overlay';
-        content.appendChild(t);
+        UI.create('div', {className:'offline-overlay',text:_T('network-error'),parent:content});
       });
       img.className = 'popup-media';
       img.alt = f.fileName;
       params.content = img;
     } else if (f.isVideo) {
-      const video = document.createElement('video');
-      video.className = 'popup-media';
-      video.src = f.url;
-      video.poster = f.thumbUrl;
-      video.controls = 'controls';
-      params.content = video;
+      params.content = UI.create('video', {
+        className: 'popup-media',
+        src: f.url,
+        poster: f.thumbUrl,
+        controls: 'controls'
+      });
     } else if (f.contentType.startsWith('audio/')) {
-      const audio = document.createElement('audio');
-      audio.className = 'popup-media';
-      audio.src = f.url;
-      audio.controls = 'controls';
-      params.content = audio;
+      params.content = UI.create('audio', {
+        className: 'popup-media',
+        src: f.url,
+        controls: 'controls',
+      });
+    } else if (f.contentType === 'application/pdf') {
+      // PDFs don't load in chrome when sandbox is enabled on iframe.
+      params.content = UI.create('iframe', {
+        src: f.url,
+        title: f.fileName,
+      });
     } else if (f.contentType !== 'application/octet-stream') {
-      const iframe = document.createElement('iframe');
-      iframe.title = f.fileName;
-      iframe.src = f.url;
-      params.content = iframe;
+      params.content = UI.create('iframe', {
+        src: f.url,
+        title: f.fileName,
+        sandbox: 'allow-downloads allow-same-origin',
+      });
     } else {
-      const anchor = document.createElement('a');
-      anchor.href = f.url;
-      anchor.download = f.fileName;
-      anchor.textContent = _T('download-doc');
-      params.content = anchor;
+      params.content = UI.create('a', {
+        href: f.url,
+        text: _T('download-doc'),
+      });
     }
-    const {content, close, info} = this.commonPopup_(params);
+    const {EL, content, close, info} = this.commonPopup_(params);
     content.draggable = false;
-    content.addEventListener('dragstart', event => {
+    EL.add(content, 'dragstart', event => {
       event.stopPropagation();
       event.preventDefault();
     }, true);
     if (i > 0) {
-      const leftButton = document.createElement('div');
-      leftButton.className = 'arrow left';
-      leftButton.textContent = '⬅️';
-      leftButton.addEventListener('click', goLeft);
-      content.appendChild(leftButton);
+      const leftButton = UI.create('div', {className:'arrow left',text:'⬅️',tabindex:"0",title:_T('previous'),role:'button',parent:content});
+      EL.add(leftButton, 'click', goLeft);
+      EL.add(leftButton, 'keydown', e => {
+        if (e.key === 'Enter') {
+          goLeft(event);
+        }
+      });
     }
     if (i+1 < max) {
-      const rightButton = document.createElement('div');
-      rightButton.className = 'arrow right';
-      rightButton.textContent = '➡️';
-      rightButton.addEventListener('click', goRight);
-      content.appendChild(rightButton);
+      const rightButton = UI.create('div', {className:'arrow right',text:'➡️',tabindex:"0",title:_T('next'),role:'button',parent:content});
+      EL.add(rightButton, 'click', goRight);
+      EL.add(rightButton, 'keydown', e => {
+        if (e.key === 'Enter') {
+          goRight(event);
+        }
+      });
     }
     if (f.isImage) {
       content.classList.add('image-popup');
       let exifData;
-      info.addEventListener('click', () => {
+      const onclick = () => {
         if (exifData === undefined) {
           exifData = null;
           const me = this;
           EXIF.getData(img, function() {
             exifData = EXIF.getAllTags(this);
-            const div = document.createElement('div');
-            div.className = 'exif-data';
+            const div = UI.create('div', {className:'exif-data', parent:content});
             div.style.maxHeight = '' + Math.floor(0.9*content.offsetHeight) + 'px';
             div.style.maxWidth = '' + Math.floor(0.9*content.offsetWidth) + 'px';
-            me.formatExif_(div, exifData);
-            content.appendChild(div);
+            me.formatExif_(div, exifData, EL);
           });
         } else {
           const e = content.querySelector('.exif-data');
           if (e) e.classList.toggle('hidden');
+        }
+      };
+      EL.add(info, 'click', onclick);
+      EL.add(info, 'keydown', e => {
+        if (e.key === 'Enter') {
+          onclick();
         }
       });
     }
@@ -1955,7 +2021,7 @@ class UI {
     }
   }
 
-  formatExif_(div, data) {
+  formatExif_(div, data, EL) {
     const flat = [];
     for (let n of Object.keys(data).sort()) {
       if (n === 'thumbnail') {
@@ -1983,38 +2049,34 @@ class UI {
         out.push(`${key}: ${JSON.stringify(value)}`);
       }
     }
-    const makeModel = document.createElement('div');
-    if (data.Make) {
-      makeModel.textContent = `${data.Make} ${data.Model}`;
-    }
-    div.appendChild(makeModel);
-    const pos = document.createElement('div');
+    UI.create('div', {text: data.Make ? `${data.Make} ${data.Model}` : '', parent: div});
+    const pos = UI.create('div', {parent:div});
     if (data.GPSLatitudeRef) {
       const lat = `${data.GPSLatitudeRef} ${data.GPSLatitude[0].toFixed(0)}° ${data.GPSLatitude[1].toFixed(0)}' ${data.GPSLatitude[2].toFixed(3)}"`;
       const lon = `${data.GPSLongitudeRef} ${data.GPSLongitude[0].toFixed(0)}° ${data.GPSLongitude[1].toFixed(0)}' ${data.GPSLongitude[2].toFixed(3)}"`;
       pos.textContent = `${lat} ${lon}`;
     }
-    div.appendChild(pos);
-    const more = document.createElement('div');
-    more.textContent = '➕';
-    more.className = 'exif-more-details';
+    const more = UI.create('div', {className:'exif-more-details',text: '➕', tabindex:'0', role:'button', title:_T('expand'), parent:div});
     let expanded = false;
-    more.addEventListener('click', () => {
+    const onclick = () => {
       details.classList.toggle('hidden');
       expanded = !expanded;
       more.textContent = expanded ? '➖' : '➕';
+    };
+    EL.add(more, 'click', onclick);
+    EL.add(more, 'keydown', e => {
+      if (e.key === 'Enter') {
+        onclick();
+      }
     });
-    div.appendChild(more);
-    const details = document.createElement('div');
-    details.className = 'exif-details hidden';
-    details.textContent = out.join('\n');
-    div.appendChild(details);
+    const details = UI.create('div', {className:'exif-details hidden', text: out.join('\n'), parent: div});
   }
 
-  showEdit_(f) {
+  async showEdit_(f) {
     if (!f.isImage) {
       return;
     }
+    await this.loadFilerobot_();
     const {content, close} = this.commonPopup_({
       title: _T('edit:', f.fileName),
       className: 'popup photo-editor-popup',
@@ -2071,7 +2133,7 @@ class UI {
       cover = await main.sendRPC('getCover', c.collection);
     }
     const contacts = await main.sendRPC('getContacts');
-    const {content, close} = this.commonPopup_({
+    const {EL, content, close} = this.commonPopup_({
       title: _T('properties:', c.name !== '' ? c.name : _T('new-collection')),
     });
     content.id = 'collection-properties';
@@ -2182,29 +2244,20 @@ class UI {
     };
 
     if (!c.create) {
-      const deleteButton = document.createElement('button');
-      deleteButton.id = 'collection-properties-delete';
-      deleteButton.textContent = '🗑';
-      deleteButton.addEventListener('click', () => {
+      const deleteButton = UI.create('button', {id:'collection-properties-delete',text:'🗑',parent:content});
+      EL.add(deleteButton, 'click', () => {
         if (c.isOwner) {
           this.deleteCollection_(c.collection).then(() => close());
         } else {
           this.leaveCollection_(c.collection).then(() => close());
         }
       });
-      content.appendChild(deleteButton);
     }
+    const coverLabel = UI.create('div', {id:'collection-properties-cover-label',text:_T('cover'),parent:content});
 
-    const coverLabel = document.createElement('div');
-    coverLabel.id = 'collection-properties-cover-label';
-    coverLabel.textContent = _T('cover');
-    content.appendChild(coverLabel);
-
-    const coverInput = document.createElement('div');
-    const imgDiv = document.createElement('div');
-    imgDiv.id = 'collection-properties-thumbdiv';
-    imgDiv.draggable = false;
-    imgDiv.addEventListener('dragstart', event => {
+    const coverInput = UI.create('div');
+    const imgDiv = UI.create('div', {id:'collection-properties-thumbdiv',draggable:false,parent:coverInput});
+    EL.add(imgDiv, 'dragstart', event => {
       event.stopPropagation();
       event.preventDefault();
     }, true);
@@ -2213,14 +2266,12 @@ class UI {
       imgDiv.style.width = sz;
       imgDiv.style.height = sz;
     }
-    coverInput.appendChild(imgDiv);
+
     const setImage = url => {
       if (c.create) {
         return;
       }
-      while (imgDiv.firstChild) {
-        imgDiv.removeChild(imgDiv.firstChild);
-      }
+      UI.clearElement_(imgDiv);
       const img = new Image();
       img.id = 'collection-properties-thumb';
       img.draggable = false;
@@ -2232,8 +2283,7 @@ class UI {
 
     let coverSelect;
     if (c.isOwner) {
-      coverSelect = document.createElement('select');
-      coverSelect.id = 'collection-properties-cover';
+      coverSelect = UI.create('select', {id:'collection-properties-cover'});
       const opts = [
         {code:'', label:_T('cover-latest')},
         {code:'__b__', label:_T('cover-blank')},
@@ -2243,13 +2293,9 @@ class UI {
       }
       let currCode = cover ? cover.code : '';
       for (let opt of opts) {
-        let e = document.createElement('option');
-        e.value = opt.code;
-        e.textContent = opt.label;
-        e.selected = currCode === e.value;
-        coverSelect.appendChild(e);
+        UI.create('option', {value:opt.code,text:opt.label,selected:currCode === opt.code,parent:coverSelect});
       }
-      coverSelect.addEventListener('change', () => {
+      EL.add(coverSelect, 'change', () => {
         if (c.collection) {
           main.sendRPC('getCover', c.collection, coverSelect.options[coverSelect.options.selectedIndex].value)
           .then(cover => setImage(cover.url));
@@ -2260,152 +2306,78 @@ class UI {
     }
     content.appendChild(coverInput);
 
-    const nameLabel = document.createElement('div');
-    nameLabel.id = 'collection-properties-name-label';
-    nameLabel.textContent = _T('name');
-    content.appendChild(nameLabel);
+    const nameLabel = UI.create('div', {id:'collection-properties-name-label', text:_T('name'), parent:content});
 
     let name;
     if (c.isOwner) {
-      name = document.createElement('input');
-      name.id = 'collection-properties-name';
-      name.type = 'text';
-      name.value = c.name;
-      name.addEventListener('keyup', onChange);
-      content.appendChild(name);
+      name = UI.create('input', {id:'collection-properties-name', type:'text', value:c.name, parent:content});
+      EL.add(name, 'keydown', onChange);
       if (c.create) name.focus();
     } else {
-      name = document.createElement('div');
-      name.id = 'collection-properties-name';
-      name.textContent = c.name;
-      content.appendChild(name);
+      name = UI.create('div', {id:'collection-properties-name', text:c.name, parent:content});
     }
 
-    const sharedLabel = document.createElement('div');
-    sharedLabel.id = 'collection-properties-shared-label';
-    sharedLabel.textContent = _T('shared');
-    content.appendChild(sharedLabel);
+    const sharedLabel = UI.create('div', {id:'collection-properties-shared-label', text:_T('shared'), parent:content});
 
     let shared;
     if (c.isOwner) {
-      shared = document.createElement('input');
-      shared.id = 'collection-properties-shared';
-      shared.type = 'checkbox';
-      shared.checked = c.isShared;
-      shared.addEventListener('change', onChange);
-      content.appendChild(shared);
+      shared = UI.create('input', {id:'collection-properties-shared', type:'checkbox', checked:c.isShared, parent:content});
+      EL.add(shared, 'change', onChange);
     } else {
-      const sharedDiv = document.createElement('div');
-      sharedDiv.id = 'collection-properties-shared-div';
-      sharedDiv.textContent = c.isShared ? _T('yes') : _T('no');
-      content.appendChild(sharedDiv);
+      const sharedDiv = UI.create('div', {id:'collection-properties-shared-div', text:c.isShared ? _T('yes') : _T('no'), parent:content});
     }
 
-    const permLabel = document.createElement('div');
-    permLabel.id = 'collection-properties-perm-label';
-    permLabel.className = 'sharing-setting';
+    const permLabel = UI.create('div', {id:'collection-properties-perm-label',className:'sharing-setting',text:_T('permissions'), parent:content});
     permLabel.style.display = c.isShared ? '' : 'none';
-    permLabel.textContent = _T('permissions');
-    content.appendChild(permLabel);
 
-    const permDiv = document.createElement('div');
-    permDiv.id = 'collection-properties-perm';
-    permDiv.className = 'sharing-setting';
+    const permDiv = UI.create('div', {id:'collection-properties-perm',className:'sharing-setting',parent:content});
     permDiv.style.display = c.isShared ? '' : 'none';
 
-    const permAdd = document.createElement('input');
-    permAdd.id = 'collection-properties-perm-add';
-    permAdd.type = 'checkbox';
-    permAdd.checked = c.canAdd;
-    permAdd.disabled = !c.isOwner;
-    permAdd.addEventListener('change', onChange);
-    const permAddLabel = document.createElement('label');
-    permAddLabel.textContent = _T('perm-add');
-    permAddLabel.htmlFor = 'collection-properties-perm-add';
-    permDiv.appendChild(permAdd);
-    permDiv.appendChild(permAddLabel);
+    const permAdd = UI.create('input', {id:'collection-properties-perm-add', type:'checkbox', checked:c.canAdd, disabled:!c.isOwner, parent:permDiv});
+    EL.add(permAdd, 'change', onChange);
+    const permAddLabel = UI.create('label', {text:_T('perm-add'),htmlFor:'collection-properties-perm-add', parent:permDiv});
 
-    const permCopy = document.createElement('input');
-    permCopy.id = 'collection-properties-perm-copy';
-    permCopy.type = 'checkbox';
-    permCopy.checked = c.canCopy;
-    permCopy.disabled = !c.isOwner;
-    permCopy.addEventListener('change', onChange);
-    const permCopyLabel = document.createElement('label');
-    permCopyLabel.textContent = _T('perm-copy');
-    permCopyLabel.htmlFor = 'collection-properties-perm-copy';
-    permDiv.appendChild(permCopy);
-    permDiv.appendChild(permCopyLabel);
+    const permCopy = UI.create('input', {id:'collection-properties-perm-copy', type:'checkbox', checked:c.canCopy, disabled:!c.isOwner, parent:permDiv});
+    EL.add(permCopy, 'change', onChange);
+    const permCopyLabel = UI.create('label', {text:_T('perm-copy'),htmlFor:'collection-properties-perm-copy',parent:permDiv});
 
-    const permShare = document.createElement('input');
-    permShare.id = 'collection-properties-perm-share';
-    permShare.type = 'checkbox';
-    permShare.checked = c.canShare;
-    permShare.disabled = !c.isOwner;
-    permShare.addEventListener('change', onChange);
-    const permShareLabel = document.createElement('label');
-    permShareLabel.textContent = _T('perm-share');
-    permShareLabel.htmlFor = 'collection-properties-perm-share';
-    permDiv.appendChild(permShare);
-    permDiv.appendChild(permShareLabel);
+    const permShare = UI.create('input', {id:'collection-properties-perm-share', type:'checkbox', checked:c.canShare, disabled:!c.isOwner, parent:permDiv});
+    EL.add(permShare, 'change', onChange);
+    const permShareLabel = UI.create('label', {text:_T('perm-share'),htmlFor:'collection-properties-perm-share', parent:permDiv});
 
-    content.appendChild(permDiv);
-
-    const membersLabel = document.createElement('div');
-    membersLabel.id = 'collection-properties-members-label';
-    membersLabel.className = 'sharing-setting';
+    const membersLabel = UI.create('div', {id:'collection-properties-members-label', className:'sharing-setting', text:_T('members'), parent: content});
     membersLabel.style.display = c.isShared ? '' : 'none';
-    membersLabel.textContent = _T('members');
-    content.appendChild(membersLabel);
 
-    const membersDiv = document.createElement('div');
-    membersDiv.id = 'collection-properties-members';
-    membersDiv.className = 'sharing-setting';
+    const membersDiv = UI.create('div', {id:'collection-properties-members', className:'sharing-setting', parent:content});
     membersDiv.style.display = c.isShared ? '' : 'none';
-    content.appendChild(membersDiv);
 
-    const applyButton = document.createElement('button');
-    applyButton.id = 'collection-properties-apply-button';
-    applyButton.textContent = _T('no-changes');
-    applyButton.disabled = true;
-    applyButton.addEventListener('click', applyChanges);
-    content.appendChild(applyButton);
+    const applyButton = UI.create('button', {id:'collection-properties-apply-button', text:_T('no-changes'), disabled: true, parent:content});
+    EL.add(applyButton, 'click', applyChanges);
 
     const deleteMember = i => {
-      membersDiv.removeChild(members[i].elem);
+      UI.removeChild_(membersDiv, members[i].elem);
+      delete members[i].elem;
       members.splice(i, 1);
       refreshMembers();
       onChange();
     };
 
     const refreshMembers = () => {
-      while (membersDiv.firstChild) {
-        membersDiv.removeChild(membersDiv.firstChild);
-      }
+      UI.clearElement_(membersDiv);
       UI.sortBy(members, 'email');
       if (c.isOwner || c.canShare) {
-        const list = document.createElement('datalist');
-        list.id = 'collection-properties-members-contacts';
+        const list = UI.create('datalist', {id:'collection-properties-members-contacts', parent:membersDiv});
         for (let i = 0; i < contacts.length; i++) {
           if (members.some(m => m.userId === contacts[i].userId)) {
             continue;
           }
-          const opt = document.createElement('option');
-          opt.value = contacts[i].email;
-          list.appendChild(opt);
+          UI.create('option', {value:contacts[i].email, parent:list});
         }
         membersDiv.appendChild(list);
 
-        const input = document.createElement('input');
-        input.type = 'search';
-        input.id = 'collection-properties-members-input';
-        input.placeholder = _T('contact-email');
-        input.setAttribute('list', 'collection-properties-members-contacts');
-        membersDiv.appendChild(input);
+        const input = UI.create('input', {id:'collection-properties-members-input', type:'search', placeholder:_T('contact-email'), list:'collection-properties-members-contacts', parent:membersDiv});
 
-        const addButton = document.createElement('button');
-        addButton.id = 'collection-properties-members-add-button';
-        addButton.textContent = _T('add-member');
+        const addButton = UI.create('button', {id:'collection-properties-members-add-button', text:_T('add-member'), parent:membersDiv});
         const addFunc = () => {
           const c = contacts.find(e => e.email === input.value);
           if (c) {
@@ -2436,33 +2408,26 @@ class UI {
             input.readonly = false;
           });
         };
-        input.addEventListener('keyup', e => {
+        EL.add(input, 'keydown', e => {
           if (e.key === 'Enter') {
+            e.stopPropagation();
             addFunc();
           }
         });
-        input.addEventListener('change', addFunc);
-        addButton.addEventListener('click', addFunc);
-        membersDiv.appendChild(addButton);
+        EL.add(input, 'change', addFunc);
+        EL.add(addButton, 'click', addFunc);
       }
       if (members.length === 0) {
-        const div = document.createElement('div');
-        div.innerHTML = '<i>'+_T('none')+'</i>';
-        membersDiv.appendChild(div);
+        UI.create('div', {html:'<i>'+_T('none')+'</i>', parent:membersDiv});
       }
       for (let i = 0; i < members.length; i++) {
-        const div = document.createElement('div');
+        const div = UI.create('div', {parent:membersDiv});
         if (c.isOwner) {
-          const del = document.createElement('button');
-          del.textContent = '✖';
+          const del = UI.create('button', {text:'✖', parent:div});
           del.style.cursor = 'pointer';
-          del.addEventListener('click', () => deleteMember(i));
-          div.appendChild(del);
+          EL.add(del, 'click', () => deleteMember(i));
         }
-        const name = document.createElement('span');
-        name.textContent = members[i].email;
-        div.appendChild(name);
-        membersDiv.appendChild(div);
+        const name = UI.create('span', {text:members[i].email,parent:div});
         members[i].elem = div;
       }
     };
@@ -2494,21 +2459,24 @@ class UI {
     const e = document.querySelector('#thumbnail-progress-data');
     if (e) {
       e.textContent = info;
-      if (sz === 0) {
+      if (sz === 0 && e.remove) {
         setTimeout(e.remove, 2000);
       }
     } else {
-      const msg = document.createElement('div');
-      msg.className = 'progress-div';
-      const span = document.createElement('span');
-      span.id = 'thumbnail-progress-data';
-      span.textContent = info;
-      msg.appendChild(span);
-      span.remove = this.popupMessage(msg, 'progress', {sticky: sz > 0});
+      const msg = UI.create('div', {className:'progress-div'});
+      const span = UI.create('span', {id:'thumbnail-progress-data', text:info, parent:msg});
+      const r = this.popupMessage(msg, 'progress', {sticky: sz > 0});
+      if (sz > 0) {
+        span.remove = () => {
+          r();
+          delete span.remove;
+        };
+      }
     }
   }
 
   showUploadProgress(progress) {
+    const EL = new EventListeners();
     const info = _T('upload-progress', `${progress.numFilesDone}/${progress.numFiles} [${Math.floor(progress.numBytesDone / progress.numBytes * 100)}%]`);
     const e = document.querySelector('#upload-progress-data');
     if (e) {
@@ -2521,22 +2489,23 @@ class UI {
         delete e.clear;
       }
     } else {
-      const msg = document.createElement('div');
-      msg.className = 'progress-div';
-      const span = document.createElement('span');
-      span.id = 'upload-progress-data';
-      span.textContent = info;
-      msg.appendChild(span);
-      const button = document.createElement('button');
-      button.id = 'upload-progress-cancel-button';
-      button.textContent = _T('cancel');
-      button.addEventListener('click', () => {
+      const msg = UI.create('div', {className:'progress-div'});
+      const span = UI.create('span', {id:'upload-progress-data', text:info, parent:msg});
+      const button = UI.create('button', {id:'upload-progress-cancel-button', text: _T('cancel'), parent:msg});
+      EL.add(button, 'click', () => {
         button.disabled = true;
         this.cancelDropUploads_();
         main.sendRPC('cancelUpload');
       });
-      msg.appendChild(button);
-      span.remove = this.popupMessage(msg, 'progress', {sticky: !progress.done});
+      const r = this.popupMessage(msg, 'progress', {sticky: !progress.done});
+      if (!progress.done) {
+        span.remove = () => {
+          r();
+          EL.clear();
+          delete span.clear;
+          delete span.remove;
+        };
+      }
     }
   }
 
@@ -2557,13 +2526,16 @@ class UI {
         delete e.clear;
       }
     } else {
-      const msg = document.createElement('div');
-      msg.className = 'progress-div';
-      const span = document.createElement('span');
-      span.id = 'download-progress-data';
-      span.textContent = info;
-      msg.appendChild(span);
-      span.remove = this.popupMessage(msg, 'progress', {sticky: !progress.done});
+      const msg = UI.create('div', {className:'progress-div'});
+      const span = UI.create('span', {id:'download-progress-data', text:info, parent:msg});
+      const r = this.popupMessage(msg, 'progress', {sticky: !progress.done});
+      if (!progress.done) {
+        span.remove = () => {
+          r();
+          delete span.clear;
+          delete span.remove;
+        };
+      }
     }
   }
 
@@ -2582,53 +2554,35 @@ class UI {
         break;
       }
     }
-    const {popup, content, close} = this.commonPopup_({
+    const {EL, popup, content, close} = this.commonPopup_({
       title: _T('upload:', collectionName),
       className: 'popup upload',
     });
 
-    const h1 = document.createElement('h1');
-    h1.textContent = _T('collection:', collectionName);
-    content.appendChild(h1);
+    UI.create('h1', {text:_T('collection:', collectionName),parent:content});
     if (members?.length > 0) {
       UI.sortBy(members, 'email');
-      const div = document.createElement('div');
-      div.textContent = _T('shared-with', members.map(m => m.email).join(', '));
-      content.appendChild(div);
+      UI.create('div', {text:_T('shared-with', members.map(m => m.email).join(', ')), parent:content});
     }
 
-    const list = document.createElement('div');
-    list.id = 'upload-file-list';
-    content.appendChild(list);
+    const list = UI.create('div', {id:'upload-file-list', parent:content});
 
     let files = [];
     const processFiles = newFiles => {
       let p = [];
       for (let i = 0; i < newFiles.length; i++) {
         const f = newFiles[i];
-        const elem = document.createElement('div');
-        elem.className = 'upload-item-div';
+        const elem = UI.create('div', {className:'upload-item-div'});
         const img = new Image();
         img.src = 'clear.png';
         img.className = 'upload-thumbnail';
         elem.appendChild(img);
-        const div = document.createElement('div');
-        div.className = 'upload-item-attrs';
-        elem.appendChild(div);
-        const nameSpan = document.createElement('span');
-        nameSpan.textContent = _T('name:', f.name);
-        div.appendChild(nameSpan);
-        const sizeSpan = document.createElement('span');
-        sizeSpan.textContent = _T('size:', this.formatSize_(f.size));
-        div.appendChild(sizeSpan);
-        const errSpan = document.createElement('span');
-        errSpan.textContent = _T('status:', '...');
-        div.appendChild(errSpan);
-        const removeButton = document.createElement('button');
-        removeButton.className = 'upload-item-remove-button';
-        removeButton.disabled = true;
-        removeButton.textContent = _T('remove');
-        removeButton.addEventListener('click', () => {
+        const div = UI.create('div', {className:'upload-item-attrs', parent:elem});
+        UI.create('span', {text:_T('name:', f.name), parent:div});
+        UI.create('span', {text:_T('size:', this.formatSize_(f.size)), parent:div});
+        const errSpan = UI.create('span', {text:_T('status:', '...'), parent:div});
+        const removeButton = UI.create('button', {className:'upload-item-remove-button', disabled:true, text:_T('remove'), parent:div});
+        EL.add(removeButton, 'click', () => {
           files = files.filter(f => f.elem !== elem);
           processFiles([]);
         });
@@ -2657,15 +2611,10 @@ class UI {
         );
       }
       const list = document.querySelector('#upload-file-list');
-      while (list.firstChild) {
-        list.removeChild(list.firstChild);
-      }
+      UI.clearElement_(list);
       if (files.length > 0) {
-        const uploadButton = document.createElement('button');
-        uploadButton.className = 'upload-file-list-upload-button';
-        uploadButton.textContent = _T('upload');
-        uploadButton.disabled = true;
-        uploadButton.addEventListener('click', () => {
+        const uploadButton = UI.create('button', {className:'upload-file-list-upload-button', text:_T('upload'), disabled:true, parent:list});
+        EL.add(uploadButton, 'click', () => {
           let toUpload = [];
           for (let i = 0; i < files.length; i++) {
             if (files[i].err) {
@@ -2692,7 +2641,6 @@ class UI {
             uploadButton.textContent = _T('upload');
           });
         });
-        list.appendChild(uploadButton);
         Promise.allSettled(p).then(() => {
           uploadButton.disabled = false;
         });
@@ -2702,25 +2650,15 @@ class UI {
         list.appendChild(f.elem);
       }
     };
-    const fileInputs = document.createElement('div');
-    fileInputs.id = 'upload-files-div';
-    content.appendChild(fileInputs);
+    const fileInputs = UI.create('div', {id:'upload-files-div', parent:content});
 
-    const label = document.createElement('label');
-    label.for = 'files';
-    label.textContent = _T('select-upload');
-    fileInputs.appendChild(label);
-    const input = document.createElement('input');
-    input.id = 'upload-file-input';
-    input.type = 'file';
-    input.name = 'files';
-    input.multiple = true;
-    input.addEventListener('change', e => {
+    UI.create('label', {forHtml:'files', text:_T('select-upload'), parent:fileInputs});
+    const input = UI.create('input', {id:'upload-file-input', type:'file', name:'files', multiple:true, parent:fileInputs});
+    EL.add(input, 'change', e => {
       processFiles(e.target.files);
     });
-    fileInputs.appendChild(input);
 
-    popup.addEventListener('drop', e => {
+    EL.add(popup, 'drop', e => {
       e.preventDefault();
       e.stopPropagation();
       let files = [];
@@ -2737,7 +2675,7 @@ class UI {
       }
       processFiles(files);
     });
-    popup.addEventListener('dragover', e => {
+    EL.add(popup, 'dragover', e => {
       e.preventDefault();
     });
   }
@@ -2854,8 +2792,8 @@ class UI {
             ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
             video.pause();
             return resolve([canvas.toDataURL('image/png'),video.duration]);
-          });
-        });
+          }, {once: true});
+        }, {once: true});
       });
     } else {
       return this.makeGenericThumbnail_(file);
@@ -2882,7 +2820,7 @@ class UI {
   async showProfile_() {
     const curr = await main.sendRPC('mfaStatus');
 
-    const {content, close} = this.commonPopup_({
+    const {EL, content, close} = this.commonPopup_({
       title: _T('profile'),
       className: 'popup profile-popup',
     });
@@ -2917,88 +2855,46 @@ class UI {
       addSkButton.textContent = passkey.checked ? _T('add-passkey') : _T('add-security-key');
     };
 
-    const form = document.createElement('div');
-    form.id = 'profile-form';
+    const form = UI.create('div', {id:'profile-form'});
 
-    const emailLabel = document.createElement('label');
-    emailLabel.forHtml = 'profile-form-email';
-    emailLabel.textContent = _T('form-email');
-    const email = document.createElement('input');
-    email.id = 'profile-form-email';
-    email.type = 'email';
-    email.value = this.accountEmail_;
-    email.addEventListener('keyup', onchange);
-    email.addEventListener('change', onchange);
-    form.appendChild(emailLabel);
-    form.appendChild(email);
+    UI.create('label', {forHtml:'profile-form-email', text:_T('form-email'), parent:form});
+    const email = UI.create('input', {id:'profile-form-email', type:'email', value:this.accountEmail_, parent:form});
+    EL.add(email, 'keydown', onchange);
+    EL.add(email, 'change', onchange);
 
-    const newPassLabel = document.createElement('label');
-    newPassLabel.forHtml = 'profile-form-new-password';
-    newPassLabel.textContent = _T('form-new-password');
-    const newPass = document.createElement('input');
-    newPass.id = 'profile-form-new-password';
-    newPass.type = 'password';
-    newPass.placeholder = _T('optional');
-    newPass.autocomplete = 'new-password';
-    newPass.addEventListener('keyup', onchange);
-    newPass.addEventListener('change', onchange);
-    form.appendChild(newPassLabel);
-    form.appendChild(newPass);
+    UI.create('label', {forHtml:'profile-form-new-password', text:_T('form-new-password'), parent:form});
+    const newPass = UI.create('input', {id:'profile-form-new-password', type:'password', placeholder:_T('optional'), autocomplete:'new-password', parent:form});
+    EL.add(newPass, 'keydown', onchange);
+    EL.add(newPass, 'change', onchange);
 
-    const newPass2Label = document.createElement('label');
-    newPass2Label.forHtml = 'profile-form-new-password2';
-    newPass2Label.textContent = _T('form-confirm-password');
-    const newPass2 = document.createElement('input');
-    newPass2.id = 'profile-form-new-password2';
-    newPass2.type = 'password';
-    newPass2.placeholder = _T('optional');
-    newPass2.autocomplete = 'new-password';
-    newPass2.addEventListener('keyup', onchange);
-    newPass2.addEventListener('change', onchange);
-    form.appendChild(newPass2Label);
-    form.appendChild(newPass2);
+    UI.create('label', {forHtml:'profile-form-new-password2', text:_T('form-confirm-password'), parent:form});
+    const newPass2 = UI.create('input', {id:'profile-form-new-password2', type:'password', placeholder:_T('optional'), autocomplete:'new-password', parent:form});
+    EL.add(newPass2, 'keydown', onchange);
+    EL.add(newPass2, 'change', onchange);
 
-    const mfaLabel = document.createElement('label');
-    mfaLabel.forHtml = 'profile-form-enable-mfa';
-    mfaLabel.textContent = _T('enable-mfa?');
-    const mfaDiv = document.createElement('div');
-    mfaDiv.id = 'profile-form-enable-mfa-div';
-    const mfa = document.createElement('input');
-    mfa.id = 'profile-form-enable-mfa';
-    mfa.type = 'checkbox';
-    mfa.checked = curr.mfaEnabled;
-    mfa.addEventListener('change', () => {
+    UI.create('label', {forHtml:'profile-form-enable-mfa', text:_T('enable-mfa?'), parent:form});
+    const mfaDiv = UI.create('div', {id:'profile-form-enable-mfa-div', parent:form});
+    const mfa = UI.create('input', {id:'profile-form-enable-mfa', type:'checkbox', checked:curr.mfaEnabled, parent:mfaDiv});
+    EL.add(mfa, 'change', () => {
       form.querySelectorAll('.hide-no-mfa').forEach(e => e.style.display = mfa.checked ? '' : 'none');
       onchange();
     });
-    mfaDiv.appendChild(mfa);
-    const testButton = document.createElement('button');
-    testButton.id = 'profile-form-test-mfa';
-    testButton.className = 'hide-no-mfa';
-    testButton.textContent = _T('test');
-    testButton.addEventListener('click', () => {
+    const testButton = UI.create('button', {id:'profile-form-test-mfa', className:'hide-no-mfa', text:_T('test'), parent:mfaDiv});
+    EL.add(testButton, 'click', () => {
       testButton.disabled = true;
       main.sendRPC('mfaCheck', passkey.checked).finally(() => {
         testButton.disabled = false;
+      })
+      .finally(() => {
+        testButton.focus();
       });
     });
-    mfaDiv.appendChild(testButton);
-    form.appendChild(mfaLabel);
-    form.appendChild(mfaDiv);
 
     let otpKey = '';
-    const otpLabel = document.createElement('label');
-    otpLabel.className = 'hide-no-mfa';
-    otpLabel.forHtml = 'profile-form-enable-otp';
-    otpLabel.textContent = _T('enable-otp?');
-    const otpDiv = document.createElement('div');
-    otpDiv.id = 'profile-form-enable-otp-div';
-    otpDiv.className = 'hide-no-mfa';
-    const otp = document.createElement('input');
-    otp.id = 'profile-form-enable-otp';
-    otp.type = 'checkbox';
-    otp.checked = curr.otpEnabled;
-    otp.addEventListener('change', () => {
+    UI.create('label', {className:'hide-no-mfa', forHtml:'profile-form-enable-otp', text:_T('enable-otp?'), parent:form});
+    const otpDiv = UI.create('div', {id:'profile-form-enable-otp-div', className:'hide-no-mfa', parent:form});
+    const otp = UI.create('input', {id:'profile-form-enable-otp', type:'checkbox', checked:curr.otpEnabled, parent:otpDiv});
+    EL.add(otp, 'change', () => {
       if (otp.checked && !curr.otpEnabled) {
         otp.disabled = true;
         main.sendRPC('generateOTP')
@@ -3006,18 +2902,11 @@ class UI {
           otpKey = key;
           const image = new Image();
           image.src = img;
-          const keyDiv = document.createElement('div');
-          keyDiv.id = 'profile-form-otp-key';
-          keyDiv.textContent = 'KEY: ' + key;
-          const code = document.createElement('input');
-          code.id = 'profile-form-otp-code';
-          code.type = 'text';
-          code.placeholder = _T('enter-code');
-          code.addEventListener('keyup', onchange);
-          code.addEventListener('change', onchange);
           otpDiv.appendChild(image);
-          otpDiv.appendChild(keyDiv);
-          otpDiv.appendChild(code);
+          const keyDiv = UI.create('div', {id:'profile-form-otp-key', text:'KEY: ' + key, parent:otpDiv});
+          const code = UI.create('input', {id:'profile-form-otp-code', type:'text', placeholder:_T('enter-code'), parent:otpDiv});
+          EL.add(code, 'keydown', onchange);
+          EL.add(code, 'change', onchange);
         })
         .finally(() => {
           otp.disabled = false;
@@ -3025,91 +2914,55 @@ class UI {
         });
       } else {
         otpKey = '';
-        while (otpDiv.firstChild) {
-          otpDiv.removeChild(otpDiv.firstChild);
-        }
+        UI.clearElement_(otpDiv);
         otpDiv.appendChild(otp);
         onchange();
       }
     });
-    otpDiv.appendChild(otp);
-    form.appendChild(otpLabel);
-    form.appendChild(otpDiv);
 
-    const passkeyLabel = document.createElement('label');
-    passkeyLabel.className = 'hide-no-mfa';
-    passkeyLabel.forHtml = 'profile-form-enable-passkey';
-    passkeyLabel.textContent = _T('enable-passkey?');
-    const passkeyDiv = document.createElement('div');
-    passkeyDiv.id = 'profile-form-enable-passkey-div';
-    passkeyDiv.className = 'hide-no-mfa';
-    const passkey = document.createElement('input');
-    passkey.id = 'profile-form-enable-passkey';
-    passkey.className = 'hide-no-mfa';
-    passkey.type = 'checkbox';
-    passkey.checked = curr.passKey;
-    passkey.addEventListener('change', () => {
+    UI.create('label', {className:'hide-no-mfa', forHtml:'profile-form-enable-passkey', text:_T('enable-passkey?'), parent:form});
+    const passkeyDiv = UI.create('div', {id:'profile-form-enable-passkey-div', className:'hide-no-mfa', parent:form});
+    const passkey = UI.create('input', {id:'profile-form-enable-passkey', className:'hide-no-mfa', type:'checkbox', checked:curr.passKey, parent:passkeyDiv});
+    EL.add(passkey, 'change', () => {
       updateKeyList();
       onchange();
     });
-    passkeyDiv.appendChild(passkey);
-    form.appendChild(passkeyLabel);
-    form.appendChild(passkeyDiv);
 
-    const skLabel = document.createElement('label');
-    skLabel.className = 'hide-no-mfa';
-    skLabel.forHtml = 'profile-form-add-security-key-button';
-    skLabel.textContent = _T('security-keys:');
-    const skDiv = document.createElement('div');
-    skDiv.id = 'profile-form-security-keys-div';
-    skDiv.className = 'hide-no-mfa';
+    UI.create('label', {className:'hide-no-mfa', forHtml:'profile-form-add-security-key-button', text:_T('security-keys:'), parent:form});
+    const skDiv = UI.create('div', {id:'profile-form-security-keys-div', className:'hide-no-mfa', parent:form});
 
-    const addSkButton = document.createElement('button');
-    addSkButton.id = 'profile-form-add-security-key-button';
-    addSkButton.textContent = passkey.checked ? _T('add-passkey') : _T('add-security-key');
-    addSkButton.addEventListener('click', () => {
+    const addSkButton = UI.create('button', {id:'profile-form-add-security-key-button', text:passkey.checked ? _T('add-passkey') : _T('add-security-key'), parent:skDiv});
+    EL.add(addSkButton, 'click', () => {
       addSkButton.disabled = true;
       this.getCurrentPassword()
       .then(pw => main.addSecurityKey(pw, passkey.checked))
       .finally(() => {
         addSkButton.disabled = false;
+        addSkButton.focus();
         updateKeyList();
       });
     });
-    skDiv.appendChild(addSkButton);
 
-    const skList = document.createElement('div');
-    skList.id = 'profile-form-security-key-list';
-    skDiv.appendChild(skList);
-
-    form.appendChild(skLabel);
-    form.appendChild(skDiv);
+    const skList = UI.create('div', {id:'profile-form-security-key-list', parent:skDiv});
 
     let keyList = {};
     const updateKeyList = () => {
       main.sendRPC('listSecurityKeys')
       .then(keys => {
-        while (skList.firstChild) {
-          skList.removeChild(skList.firstChild);
-        }
+        UI.clearElement_(skList);
         keys = keys.filter(k => !passkey.checked || k.discoverable);
         keyList = {};
         if (keys.length > 0) {
           skList.innerHTML = `<div class="profile-form-security-key-list-header">${_T('name')}</div><div class="profile-form-security-key-list-header">${_T('added')}</div><div></div>`;
         }
         for (let k of keys) {
-          let input = document.createElement('input');
-          input.type = 'text';
-          input.className = 'profile-form-security-key-list-item';
-          input.value = k.name;
-          input.addEventListener('change', onchange);
-          input.addEventListener('keyup', onchange);
-          let t = document.createElement('div');
-          t.textContent = (new Date(k.createdAt)).toLocaleDateString(undefined, {year: 'numeric', month: 'short', day: 'numeric'});
-          let del = document.createElement('button');
-          del.textContent = '✖';
+          let input = UI.create('input', {type:'text', className:'profile-form-security-key-list-item', value:k.name, parent:skList});
+          EL.add(input, 'change', onchange);
+          EL.add(input, 'keydown', onchange);
+          let t = UI.create('div', {text:(new Date(k.createdAt)).toLocaleDateString(undefined, {year: 'numeric', month: 'short', day: 'numeric'}), parent:skList});
+          let del = UI.create('button', {text:'✖', parent:skList});
           del.style.cursor = 'pointer';
-          del.addEventListener('click', () => {
+          EL.add(del, 'click', () => {
             keyList[k.id].deleted = !keyList[k.id].deleted;
             input.disabled = keyList[k.id].deleted;
             input.classList.toggle('deleted-key');
@@ -3117,20 +2970,14 @@ class UI {
             del.classList.toggle('deleted-key');
             onchange();
           });
-          skList.appendChild(input);
-          skList.appendChild(t);
-          skList.appendChild(del);
           keyList[k.id] = {key: k, input: input};
         }
       });
     };
     updateKeyList();
 
-    const button = document.createElement('button');
-    button.id = 'profile-form-button';
-    button.textContent = _T('no-changes');
-    button.disabled = true;
-    button.addEventListener('click', async () => {
+    const button = UI.create('button', {id:'profile-form-button', text:_T('no-changes'), disabled:true, parent:form});
+    EL.add(button, 'click', async () => {
       if ((newPass.value !== '' || newPass2.value !== '') && newPass.value !== newPass2.value) {
         this.popupMessage(_T('new-pass-doesnt-match'));
         return;
@@ -3194,20 +3041,16 @@ class UI {
         button.textContent = _T('no-changes');
         delButton.disabled = false;
         onchange();
+        button.focus();
       });
     });
-    form.appendChild(button);
     form.querySelectorAll('.hide-no-mfa').forEach(e => e.style.display = mfa.checked ? '' : 'none');
     content.appendChild(form);
 
-    const deleteMsg = document.createElement('div');
-    deleteMsg.innerHTML = '<hr>' + _T('delete-warning');
-    content.appendChild(deleteMsg);
+    UI.create('div', {html:'<hr>' + _T('delete-warning'), parent:content});
 
-    const delButton = document.createElement('button');
-    delButton.id = 'profile-form-delete-button';
-    delButton.textContent = _T('delete-account');
-    delButton.addEventListener('click', () => {
+    const delButton = UI.create('button', {id:'profile-form-delete-button', text:_T('delete-account'), parent:content});
+    EL.add(delButton, 'click', () => {
       email.disabled = true;
       newPass.disabled = true;
       newPass2.disabled = true;
@@ -3227,31 +3070,20 @@ class UI {
         onchange();
       });
     });
-    content.appendChild(delButton);
   }
 
   async showBackupPhrase_() {
-    const {content, close} = this.commonPopup_({
+    const {EL, content, close} = this.commonPopup_({
       title: _T('key-backup'),
     });
     content.id = 'backup-phrase-content';
     let keyBackupEnabled = await main.sendRPC('keyBackupEnabled');
 
-    const warning = document.createElement('div');
-    warning.id = 'backup-phrase-warning';
-    warning.className = 'warning';
-    warning.innerHTML = _T('key-backup-warning');
-    content.appendChild(warning);
+    const warning = UI.create('div', {id:'backup-phrase-warning', className:'warning', html:_T('key-backup-warning'), parent:content});
+    const phrase = UI.create('div', {id:'backup-phrase-value', parent:content});
 
-    const phrase = document.createElement('div');
-    phrase.id = 'backup-phrase-value';
-    content.appendChild(phrase);
-
-    const button = document.createElement('button');
-    button.id = 'backup-phrase-show-button';
-    button.textContent = _T('show-backup-phrase');
-    content.appendChild(button);
-    button.addEventListener('click', () => {
+    const button = UI.create('button', {id:'backup-phrase-show-button', text:_T('show-backup-phrase'), parent:content});
+    EL.add(button, 'click', () => {
       if (phrase.textContent === '') {
         button.disabled = true;
         button.textContent = _T('checking-password');
@@ -3274,11 +3106,7 @@ class UI {
       }
     });
 
-    const warning2 = document.createElement('div');
-    warning2.id = 'backup-phrase-warning2';
-    warning2.className = 'warning';
-    warning2.innerHTML = '<hr>' + _T('key-backup-warning2');
-    content.appendChild(warning2);
+    const warning2 = UI.create('div', {id:'backup-phrase-warning2', className:'warning', html:'<hr>' + _T('key-backup-warning2'), parent:content});
 
     const changeBackup = choice => {
       inputYes.disabled = true;
@@ -3299,46 +3127,21 @@ class UI {
         inputNo.disabled = false;
       });
     };
-    const divYes = document.createElement('div');
-    divYes.className = 'key-backup-option';
-    const inputYes = document.createElement('input');
-    inputYes.type = 'radio';
-    inputYes.id = 'choose-key-backup-yes';
-    inputYes.name = 'do-backup';
-    inputYes.checked = keyBackupEnabled;
-    inputYes.addEventListener('change', () => changeBackup(true));
-    const labelYes = document.createElement('label');
-    labelYes.htmlFor = 'choose-key-backup-yes';
-    labelYes.textContent = _T('opt-keep-backup');
-    divYes.appendChild(inputYes);
-    divYes.appendChild(labelYes);
+    const divYes = UI.create('div', {className:'key-backup-option', parent:content});
+    const inputYes = UI.create('input', {id:'choose-key-backup-yes', type:'radio', name:'do-backup', checked:keyBackupEnabled, parent:divYes});
+    EL.add(inputYes, 'change', () => changeBackup(true));
+    UI.create('label', {htmlFor:'choose-key-backup-yes', text:_T('opt-keep-backup'), parent:divYes});
 
-    const divNo = document.createElement('div');
-    divNo.className = 'key-backup-option';
-    const inputNo = document.createElement('input');
-    inputNo.type = 'radio';
-    inputNo.id = 'choose-key-backup-no';
-    inputNo.name = 'do-backup';
-    inputNo.checked = !keyBackupEnabled;
-    inputNo.addEventListener('change', () => changeBackup(false));
-    const labelNo = document.createElement('label');
-    labelNo.htmlFor = 'choose-key-backup-no';
-    labelNo.textContent = _T('opt-dont-keep-backup');
-    divNo.appendChild(inputNo);
-    divNo.appendChild(labelNo);
-
-    content.appendChild(divYes);
-    content.appendChild(divNo);
+    const divNo = UI.create('div', {className:'key-backup-option', parent:content});
+    const inputNo = UI.create('input', {id:'choose-key-backup-no', type:'radio', name:'do-backup', checked:!keyBackupEnabled, parent:divNo});
+    EL.add(inputNo, 'change', () => changeBackup(false));
+    const labelNo = UI.create('label', {htmlFor:'choose-key-backup-no', text:_T('opt-dont-keep-backup'), parent:divNo});
   }
 
   async showPreferences_() {
-    const content = document.createElement('div');
-    content.id = 'preferences-content';
-
-    const text = document.createElement('div');
-    text.id = 'preferences-cache-text';
-    text.innerHTML = _T('choose-cache-pref');
-    content.appendChild(text);
+    const EL = new EventListeners();
+    const content = UI.create('div', {id:'preferences-content'});
+    const text = UI.create('div', {id:'preferences-cache-text', html:_T('choose-cache-pref'), parent:content});
 
     const current = await main.sendRPC('cachePreference');
     const choices = [
@@ -3379,7 +3182,10 @@ class UI {
       .finally(() => {
         choices.forEach(c => {
           c.input.disabled = false;
-          c.input.checked = current.mode === c.value;
+          if (current.mode === c.value) {
+            c.input.checked = true;
+            c.input.focus();
+          }
         });
         allthumbs.checked = current.allthumbs;
         allthumbs.disabled = current.mode !== 'encrypted';
@@ -3393,92 +3199,44 @@ class UI {
     let allthumbs;
     let mobile;
     let cacheSize;
-    const opts = document.createElement('div');
-    opts.id = 'preferences-cache-choices';
+    const opts = UI.create('div', {id:'preferences-cache-choices', parent:content});
     choices.forEach(choice => {
-      const input = document.createElement('input');
-      input.type = 'radio';
-      input.id = `preferences-cache-${choice.value}`;
-      input.name = 'preferences-cache-option';
-      input.checked = current.mode === choice.value;
-      input.addEventListener('change', () => changeCachePref(choice.value));
+      const input = UI.create('input', {id:`preferences-cache-${choice.value}`, type:'radio', name:'preferences-cache-option', checked:current.mode === choice.value, parent:opts});
+      EL.add(input, 'change', () => changeCachePref(choice.value));
       choice.input = input;
-      const label = document.createElement('label');
-      label.htmlFor = `preferences-cache-${choice.value}`;
-      label.innerHTML = choice.label;
+      const label = UI.create('label', {htmlFor:`preferences-cache-${choice.value}`, html:choice.label, parent: opts});
       if (choice.value === 'encrypted') {
-        const adiv = document.createElement('div');
-        allthumbs = document.createElement('input');
-        allthumbs.id = 'preferences-cache-allthumbs';
-        allthumbs.type = 'checkbox';
-        allthumbs.checked = current.allthumbs;
-        allthumbs.disabled = current.mode !== 'encrypted';
-        allthumbs.addEventListener('change', () => changeCachePref(choice.value));
-        const allthumbsLabel = document.createElement('label');
-        allthumbsLabel.htmlFor = `preferences-cache-allthumbs`;
-        allthumbsLabel.textContent = _T('prefetch-all-thumbnails');
-        adiv.appendChild(allthumbsLabel);
-        adiv.appendChild(allthumbs);
-        label.appendChild(adiv);
+        const adiv = UI.create('div', {parent:label});
+        UI.create('label', {htmlFor:'preferences-cache-allthumbs', text:_T('prefetch-all-thumbnails'), parent:adiv});
+        allthumbs = UI.create('input', {id:'preferences-cache-allthumbs', type:'checkbox', checked:current.allthumbs, disabled:current.mode !== 'encrypted', parent:adiv});
+        EL.add(allthumbs, 'change', () => changeCachePref(choice.value));
 
-        const mdiv = document.createElement('div');
-        mobile = document.createElement('input');
-        mobile.id = 'preferences-cache-mobile';
-        mobile.type = 'checkbox';
-        mobile.checked = current.mobile;
-        mobile.disabled = current.mode !== 'encrypted';
-        mobile.addEventListener('change', () => changeCachePref(choice.value));
-        const mobileLabel = document.createElement('label');
-        mobileLabel.htmlFor = `preferences-cache-mobile`;
-        mobileLabel.textContent = _T('use-mobile');
-        mdiv.appendChild(mobileLabel);
-        mdiv.appendChild(mobile);
-        label.appendChild(mdiv);
+        const mdiv = UI.create('div', {parent:label});
+        UI.create('label', {htmlFor:'preferences-cache-mobile', text:_T('use-mobile'), parent:mdiv});
+        mobile = UI.create('input', {id:'preferences-cache-mobile', type:'checkbox', checked:current.mobile, disabled:current.mode !== 'encrypted', parent:mdiv});
+        EL.add(mobile, 'change', () => changeCachePref(choice.value));
 
-        const sdiv = document.createElement('div');
-        cacheSize = document.createElement('input');
-        cacheSize.id = 'preferences-cache-size';
-        cacheSize.type = 'number';
-        cacheSize.min = '1';
-        cacheSize.value = current.maxSize;
-        cacheSize.disabled = current.mode !== 'encrypted';
-        cacheSize.addEventListener('change', () => changeCachePref(choice.value));
-        const sizeLabel = document.createElement('label');
-        sizeLabel.htmlFor = `preferences-cache-size`;
-        sizeLabel.textContent = _T('max-cache-size');
-        const usage = document.createElement('div');
-        usage.textContent = _T('cache-usage', current.usage);
-        sdiv.appendChild(sizeLabel);
-        sdiv.appendChild(cacheSize);
-        sdiv.appendChild(usage);
-        label.appendChild(sdiv);
+        const sdiv = UI.create('div', {parent:label});
+        UI.create('label', {htmlFor:'preferences-cache-size', text:_T('max-cache-size'), parent:sdiv});
+        cacheSize = UI.create('input', {id:'preferences-cache-size', type:'number', min:'1', value:current.maxSize, disabled:current.mode !== 'encrypted', parent:sdiv});
+        EL.add(cacheSize, 'change', () => changeCachePref(choice.value));
+        const usage = UI.create('div', {text:_T('cache-usage', current.usage), parent:sdiv});
       }
-      opts.appendChild(input);
-      opts.appendChild(label);
     });
-    content.appendChild(opts);
-
 
     navigator.serviceWorker.ready
     .then(registration => {
       if (!registration.pushManager || !registration.pushManager.getSubscription) {
         return;
       }
-      const notif = document.createElement('div');
-      notif.id = 'preferences-notifications-text';
-      notif.innerHTML = _T('choose-notifications-pref');
-      content.appendChild(notif);
-      const notifopt = document.createElement('div');
-      notifopt.id = 'preferences-notifications-choices';
-      const input = document.createElement('input');
-      input.type = 'checkbox';
-      input.id = 'preferences-notifications-checkbox';
-      input.name = 'preferences-notifications-checkbox';
+      UI.create('div', {id:'preferences-notifications-text', html:_T('choose-notifications-pref'), parent:content});
+      const notifopt = UI.create('div', {id:'preferences-notifications-choices', parent:content});
+      const input = UI.create('input', {id:'preferences-notifications-checkbox', type:'checkbox', name:'preferences-notifications-checkbox', parent:notifopt});
       registration.pushManager.getSubscription()
       .then(sub => {
         input.checked = sub !== null;
       });
-      input.addEventListener('change', async () => {
+      EL.add(input, 'change', async () => {
         if (window.Notification && window.Notification.permission !== 'granted' && input.checked) {
           const p = await window.Notification.requestPermission();
           input.checked = p === 'granted';
@@ -3494,33 +3252,27 @@ class UI {
           this.enableNotifications = false;
         });
       });
-      const label = document.createElement('label');
-      label.htmlFor = `preferences-notifications-checkbox`;
-      label.innerHTML = _T('opt-enable-notifications');
-      notifopt.appendChild(input);
-      notifopt.appendChild(label);
-      content.appendChild(notifopt);
+      UI.create('label', {htmlFor:'preferences-notifications-checkbox', html:_T('opt-enable-notifications'), parent:notifopt});
     });
 
     const {close} = this.commonPopup_({
       title: _T('prefs'),
       content: content,
+      EL: EL,
     });
   }
 
   async showAdminConsole_() {
     const data = await main.sendRPC('adminUsers');
-    const {content} = this.commonPopup_({
+    const {EL, content} = this.commonPopup_({
       title: _T('admin-console'),
       className: 'popup admin-console-popup',
     });
-    return this.showAdminConsoleData_(content, data);
+    return this.showAdminConsoleData_(EL, content, data);
   }
 
-  async showAdminConsoleData_(content, data) {
-    while (content.firstChild) {
-      content.removeChild(content.firstChild);
-    }
+  async showAdminConsoleData_(EL, content, data) {
+    UI.clearElement_(content);
     const changes = () => {
       const out = {};
       for (let p of Object.keys(data).filter(k => k.startsWith('_'))) {
@@ -3553,11 +3305,8 @@ class UI {
       saveButton.disabled = changes() === null;
       saveButton.textContent = saveButton.disabled ? _T('no-changes') : _T('apply-changes');
     };
-    const saveButton = document.createElement('button');
-    saveButton.id = 'admin-console-save-button';
-    saveButton.textContent = _T('no-changes');
-    saveButton.disabled = true;
-    saveButton.addEventListener('click', () => {
+    const saveButton = UI.create('button', {id:'admin-console-save-button', text:_T('no-changes'), disabled:true, parent:content});
+    EL.add(saveButton, 'click', () => {
       const c = changes();
       content.querySelectorAll('input,select').forEach(elem => {
         elem.disabled = true;
@@ -3565,7 +3314,7 @@ class UI {
       main.sendRPC('adminUsers', c)
       .then(data => {
         this.popupMessage(_T('data-updated'), 'info');
-        return this.showAdminConsoleData_(content, data);
+        return this.showAdminConsoleData_(EL, content, data);
       })
       .finally(() => {
         content.querySelectorAll('input,select').forEach(elem => {
@@ -3573,20 +3322,11 @@ class UI {
         });
       });
     });
-    content.appendChild(saveButton);
 
-    const defQuotaDiv = document.createElement('div');
-    defQuotaDiv.id = 'admin-console-default-quota-div';
-    const defQuotaLabel = document.createElement('label');
-    defQuotaLabel.htmlFor = 'admin-console-default-quota-value';
-    defQuotaLabel.textContent = 'Default quota:';
-    defQuotaDiv.appendChild(defQuotaLabel);
-    const defQuotaValue = document.createElement('input');
-    defQuotaValue.id = 'admin-console-default-quota-value';
-    defQuotaValue.type = 'number';
-    defQuotaValue.size = 5;
-    defQuotaValue.value = data.defaultQuota;
-    defQuotaValue.addEventListener('change', () => {
+    const defQuotaDiv = UI.create('div', {id:'admin-console-default-quota-div', parent:content});
+    UI.create('label', {htmlFor:'admin-console-default-quota-value', text:'Default quota:', parent:defQuotaDiv});
+    const defQuotaValue = UI.create('input', {id:'admin-console-default-quota-value', type:'number', size:5, value:data.defaultQuota, parent:defQuotaDiv});
+    EL.add(defQuotaValue, 'change', () => {
       const v = parseInt(defQuotaValue.value);
       if (v === data.defaultQuota) {
         delete data._defaultQuota;
@@ -3597,16 +3337,11 @@ class UI {
       }
       onchange();
     });
-    defQuotaDiv.appendChild(defQuotaValue);
-    const defQuotaUnit = document.createElement('select');
+    const defQuotaUnit = UI.create('select', {parent:defQuotaDiv});
     for (let u of ['','MB','GB','TB']) {
-      const opt = document.createElement('option');
-      opt.value = u;
-      opt.textContent = u === '' ? '' : _T(u);
-      opt.selected = u === data.defaultQuotaUnit;
-      defQuotaUnit.appendChild(opt);
+      UI.create('option', {value:u, text:u === '' ? '' : _T(u), selected:u === data.defaultQuotaUnit, parent:defQuotaUnit});
     }
-    defQuotaUnit.addEventListener('change', () => {
+    EL.add(defQuotaUnit, 'change', () => {
       const v = defQuotaUnit.options[defQuotaUnit.options.selectedIndex].value;
       if (v === data.defaultQuotaUnit || (v === '' && data.defaultQuotaUnit === undefined)) {
         delete data._defaultQuotaUnit;
@@ -3617,34 +3352,25 @@ class UI {
       }
       onchange();
     });
-    defQuotaDiv.appendChild(defQuotaUnit);
-    content.appendChild(defQuotaDiv);
 
-    const filter = document.createElement('input');
-    filter.id = 'admin-console-filter';
-    filter.type = 'search';
-    filter.placeholder = _T('filter');
-    filter.addEventListener('keyup', () => {
+    const filter = UI.create('input', {id:'admin-console-filter', type:'search', placeholder:_T('filter'), parent:content});
+    EL.add(filter, 'keydown', () => {
       showUsers();
     });
-    filter.addEventListener('input', () => {
+    EL.add(filter, 'input', () => {
       showUsers();
     });
-    content.appendChild(filter);
 
     const view = {};
     for (let user of data.users) {
       view[user.email] = [];
 
-      const email = document.createElement('div');
-      email.textContent = user.email;
+      const email = UI.create('div', {text:user.email});
       view[user.email].push(email);
 
-      const lockedDiv = document.createElement('div');
-      const locked = document.createElement('input');
-      locked.type = 'checkbox';
-      locked.checked = user.locked;
-      locked.addEventListener('change', () => {
+      const lockedDiv = UI.create('div');
+      const locked = UI.create('input', {type:'checkbox', checked:user.locked, parent:lockedDiv});
+      EL.add(locked, 'change', () => {
         const v = locked.checked;
         if (v === user.locked) {
           delete user._locked;
@@ -3655,14 +3381,11 @@ class UI {
         }
         onchange();
       });
-      lockedDiv.appendChild(locked);
       view[user.email].push(lockedDiv);
 
-      const approvedDiv = document.createElement('div');
-      const approved = document.createElement('input');
-      approved.type = 'checkbox';
-      approved.checked = user.approved;
-      approved.addEventListener('change', () => {
+      const approvedDiv = UI.create('div');
+      const approved = UI.create('input', {type:'checkbox', checked:user.approved, parent:approvedDiv});
+      EL.add(approved, 'change', () => {
         const v = approved.checked;
         if (v === user.approved) {
           delete user._approved;
@@ -3673,14 +3396,11 @@ class UI {
         }
         onchange();
       });
-      approvedDiv.appendChild(approved);
       view[user.email].push(approvedDiv);
 
-      const adminDiv = document.createElement('div');
-      const admin = document.createElement('input');
-      admin.type = 'checkbox';
-      admin.checked = user.admin;
-      admin.addEventListener('change', () => {
+      const adminDiv = UI.create('div');
+      const admin = UI.create('input', {type:'checkbox', checked:user.admin, parent:adminDiv});
+      EL.add(admin, 'change', () => {
         const v = admin.checked;
         if (v === user.admin) {
           delete user._admin;
@@ -3691,16 +3411,11 @@ class UI {
         }
         onchange();
       });
-      adminDiv.appendChild(admin);
       view[user.email].push(adminDiv);
 
-      const quotaDiv = document.createElement('div');
-      quotaDiv.className = 'quota-cell';
-      const quotaValue = document.createElement('input');
-      quotaValue.type = 'number';
-      quotaValue.size = 5;
-      quotaValue.value = user.quota;
-      quotaValue.addEventListener('change', () => {
+      const quotaDiv = UI.create('div', {className:'quota-cell'});
+      const quotaValue = UI.create('input', {type:'number', size:5, value:user.quota, parent:quotaDiv});
+      EL.add(quotaValue, 'change', () => {
         const v = parseInt(quotaValue.value);
         if ((quotaValue.value === '' && user.quota === undefined) || v === user.quota) {
           delete user._quota;
@@ -3711,16 +3426,11 @@ class UI {
         }
         onchange();
       });
-      quotaDiv.appendChild(quotaValue);
-      const quotaUnit = document.createElement('select');
+      const quotaUnit = UI.create('select');
       for (let u of ['','MB','GB','TB']) {
-        const opt = document.createElement('option');
-        opt.value = u;
-        opt.textContent = u === '' ? '' : _T(u);
-        opt.selected = u === user.quotaUnit;
-        quotaUnit.appendChild(opt);
+        UI.create('option', {value:u, text:u === '' ? '' : _T(u), selected:u === user.quotaUnit, parent:quotaUnit});
       }
-      quotaUnit.addEventListener('change', () => {
+      EL.add(quotaUnit, 'change', () => {
         const v = quotaUnit.options[quotaUnit.options.selectedIndex].value;
         if (v === user.quotaUnit || (v === '' && user.quotaUnit === undefined)) {
           delete user._quotaUnit;
@@ -3735,21 +3445,43 @@ class UI {
       view[user.email].push(quotaDiv);
     }
 
-    const table = document.createElement('div');
-    table.id = 'admin-console-table';
-    content.appendChild(table);
+    const table = UI.create('div', {id:'admin-console-table', parent:content});
 
     const showUsers = () => {
-      while (table.firstChild) {
+      while(table.firstChild) {
         table.removeChild(table.firstChild);
       }
-      table.innerHTML = `<div>${_T('email')}</div><div>${_T('locked')}</div><div>${_T('approved')}</div><div>${_T('admin')}</div><div>${_T('quota')}</div>`;
+      table.innerHTML = `<div class="row"><div>${_T('email')}</div><div>${_T('locked')}</div><div>${_T('approved')}</div><div>${_T('admin')}</div><div>${_T('quota')}</div></div>`;
       for (let user of data.users) {
         if (filter.value === '' || user.email.includes(filter.value) || Object.keys(user).filter(k => k.startsWith('_')).length > 0) {
-          view[user.email].forEach(e => table.appendChild(e));
+          const row = UI.create('div', {className:'row', parent:table});
+          view[user.email].forEach(e => row.appendChild(e));
         }
       }
     };
     showUsers();
+  }
+}
+
+let EL_added = 0;
+let EL_removed = 0;
+class EventListeners {
+  constructor() {
+    this.list_ = [];
+  }
+  add(elem, type, listener, options) {
+    EL_added++;
+    elem.addEventListener(type, listener, options);
+    this.list_.push({elem, type, listener, options});
+  }
+  clear() {
+    for (const it of this.list_) {
+      EL_removed++;
+      it.elem.removeEventListener(it.type, it.listener, it.options);
+      delete it.elem;
+      delete it.listener;
+    }
+    this.list_ = [];
+    //console.log(`XXX EL clear ${EL_added - EL_removed} added=${EL_added} removed=${EL_removed}`);
   }
 }

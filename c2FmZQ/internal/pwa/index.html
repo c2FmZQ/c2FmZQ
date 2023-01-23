@@ -20,7 +20,8 @@ c2FmZQ. If not, see <https://www.gnu.org/licenses/>.
 <head>
 <title>Login</title>
 <meta http-equiv="content-type" content="text/html; charset=utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1">
+<meta http-equiv="content-security-policy" content="default-src 'self'; img-src 'self' data:; style-src 'unsafe-inline' 'self'; form-action 'none';" />
+<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
 <link rel="icon" type="image/png" href="c2.png" />
 <link rel="stylesheet" type="text/css" href="style.css" />
 <link rel="manifest" href="c2fmzq.webmanifest" />
@@ -33,12 +34,11 @@ c2FmZQ. If not, see <https://www.gnu.org/licenses/>.
 <script src="ui.js"></script>
 <script src="lang.js"></script>
 <script src="main.js"></script>
-<script type="module" src="thirdparty/filerobot-image-editor.min.js"></script>
 <script src="thirdparty/browser-libs.js"></script>
 </head>
 <body>
 
-<div id="passphrase-div" class="hidden">
+<div id="passphrase-div" class="hidden" role="form">
   <p>Enter a passphrase to protect data stored locally on your browser.</p>
   <p>This is <em>not</em> your account password.</p>
   <input id="passphrase-input" type="password" name="passphrase" size="30" autocomplete="new-password">
@@ -47,8 +47,8 @@ c2FmZQ. If not, see <https://www.gnu.org/licenses/>.
   <button id="skip-passphrase-button">Skip</button>
 </div>
 <div id="loggedout-div" class="hidden">
-  <div id="tabs" class="tabs"><span id="login-tab" class="tab select">Login</span><span id="register-tab" class="tab">Register</span><span id="recover-tab" class="tab">Recover</span></div>
-  <div id="login-form">
+  <div id="tabs" class="tabs" role="tablist"><span id="login-tab" class="tab select" tabindex="0" role="tab">Login</span><span id="register-tab" class="tab" tabindex="0" role="tab">Register</span><span id="recover-tab" class="tab" tabindex="0" role="tab">Recover</span></div>
+  <div id="login-form" role="form">
   <label for="email" style="grid-column: 1">Email:</label> <input id="email-input" style="grid-column: 2" type="email" name="email" size="10">
   <label id="password-input-label" for="password" style="grid-column: 1">Password:</label><input id="password-input" style="grid-column: 2" type="password" name="password" size="10">
   <label id="password-input2-label" for="password2" style="grid-column: 1; display: none;">Retype password:</label><input id="password-input2" style="grid-column: 2; display: none;" type="password" name="password2" size="10">
@@ -65,14 +65,16 @@ c2FmZQ. If not, see <https://www.gnu.org/licenses/>.
     <button id="refresh-button">⟳</button>
     <button id="loggedin-account">👤 ▼</button>
   </div>
-  <div id="collections"></div>
-  <div id="gallery"></div>
+  <header>
+  <nav id="collections"></nav>
+  </header>
+  <main id="gallery"></main>
 </div>
 <button class="hidden" id="resetdb-button">Reset DB</button>
 <div id="popup-messages"></div>
 <div id="footer">
 <select id="language"></select>
-<span id="version"></span>
+<span id="version" role="none"></span>
 </div>
 </body>
 </html>

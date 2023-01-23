@@ -13,9 +13,11 @@ body.waiting, body.waiting a:hover, body.waiting * {
 body.noscroll {
   overflow: hidden;
 }
+main>h1 {
+  text-align: center;
+}
 h1 {
   overflow-wrap: break-word;
-  text-align: center;
 }
 a {
   color: black;
@@ -132,7 +134,6 @@ button {
   background-color: white;
 }
 .thumbdiv {
-  animation: fadeIn 1s;
   margin: 1em;
   border: 1px solid black;
   padding: 0;
@@ -169,6 +170,12 @@ button {
 .date {
   margin-top: 2em;
 }
+.row {
+  display: contents;
+}
+div.row.selected>div {
+  background-color: lightgreen;
+}
 #gallery-list-div {
   display: grid;
   grid-template-columns: auto 2fr 1fr 1fr 1fr 1fr;
@@ -178,13 +185,13 @@ button {
   width: 95vw;
   overflow-x: scroll;
 }
-#gallery-list-div div {
+#gallery-list-div>div.row>div {
   white-space: nowrap;
   display: flex;
   align-items: center;
   cursor: pointer;
 }
-#gallery-list-div div img {
+#gallery-list-div>div.row>div>img {
   border: 1px solid black;
   object-fit: cover;
   width: 48px;
@@ -205,10 +212,10 @@ button {
   padding-left: 1em;
   padding-right: 1em;
 }
-#gallery-list-div>div:nth-child(-n+6) {
+#gallery-list-div>div:nth-child(-n+1)>div {
   font-weight: bold;
 }
-#gallery-list-div>div:nth-child(12n+1),#gallery-list-div>div:nth-child(12n+2),#gallery-list-div>div:nth-child(12n+3),#gallery-list-div>div:nth-child(12n+4),#gallery-list-div>div:nth-child(12n+5),#gallery-list-div>div:nth-child(12n+6) {
+#gallery-list-div>div:not(.selected):nth-child(2n+1)>div {
   background-color: #eee;
 }
 .resetdb-button {
@@ -409,6 +416,7 @@ button {
   background-color: #aaa;
   display: grid;
   grid-template-columns: 1fr auto auto;
+  align-items: center;
   gap: 10px;
 }
 .popup-name {
@@ -448,7 +456,7 @@ button {
   flex-direction: column;
   justify-content: center;
 }
-.popup-content > .arrow:hover {
+.popup-content > .arrow:hover,.arrow:focus {
   opacity: 0.75;
 }
 .popup-content > .arrow.left {
@@ -789,18 +797,18 @@ button.deleted-key {
   flex: 0 1 auto;
   width: 100%;
 }
-#admin-console-table>div:nth-child(-n+5) {
+#admin-console-table>div.row:nth-child(-n+1)>div {
   font-weight: bold;
   position: sticky;
   top: 0;
 }
-#admin-console-table>div:nth-child(10n+1),#admin-console-table>div:nth-child(10n+2),#admin-console-table>div:nth-child(10n+3),#admin-console-table>div:nth-child(10n+4),#admin-console-table>div:nth-child(10n+5) {
+#admin-console-table>div.row:nth-child(2n+1)>div {
   background-color: #eee;
 }
-#admin-console-table > div {
+#admin-console-table>div.row>div {
   padding: 0.5em;
 }
-#admin-console-table>div:nth-child(5n+2),#admin-console-table>div:nth-child(5n+3),#admin-console-table>div:nth-child(5n+4) {
+#admin-console-table>div.row>div:nth-child(n+2):nth-child(-n+4) {
   text-align: center;
 }
 .quota-cell {

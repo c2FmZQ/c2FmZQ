@@ -57,8 +57,9 @@ func startServer(t *testing.T) (*wrapper, func()) {
 	if err != nil {
 		t.Fatalf("net.Listen failed: %v", err)
 	}
-	go s.RunWithListener(l)
 	url := fmt.Sprintf("http://devtest:%d/", l.Addr().(*net.TCPAddr).Port)
+	s.BaseURL = url
+	go s.RunWithListener(l)
 	t.Logf("Server running on %s", url)
 	wd := newWebDriver(t, url)
 	if err := wd.ResizeWindow("", 1000, 800); err != nil {
@@ -211,6 +212,7 @@ func (w *wrapper) css(s string) selenium.WebElement {
 }
 
 func (w *wrapper) waitFor(sel string) selenium.WebElement {
+	w.t.Logf("Waiting for %s", sel)
 	var e selenium.WebElement
 	if err := w.WaitWithTimeout(func(wd selenium.WebDriver) (bool, error) {
 		var err error
@@ -244,6 +246,15 @@ func (w *wrapper) sendKeys(sel, keys string) {
 func (w *wrapper) click(sel string) {
 	if err := w.waitFor(sel).Click(); err != nil {
 		w.t.Fatalf("%s: %v", sel, err)
+	}
+}
+
+func (w *wrapper) rightClick(sel string) {
+	if err := w.waitFor(sel).MoveTo(0, 0); err != nil {
+		w.t.Fatalf("%s: %v", sel, err)
+	}
+	if err := w.Click(selenium.RightButton); err != nil {
+		w.t.Fatalf("RightClick(%s): %v", sel, err)
 	}
 }
 

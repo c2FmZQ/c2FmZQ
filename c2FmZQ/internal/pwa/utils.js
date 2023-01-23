@@ -57,10 +57,6 @@ function base64StdEncode(v) {
   return base64.fromByteArray(v);
 }
 
-function base64DecodeToBinary(s) {
-  return String.fromCharCode(...base64DecodeToBytes(s));
-}
-
 function base64DecodeToString(s) {
   return self.bytesToString(base64DecodeToBytes(s));
 }
@@ -93,6 +89,7 @@ async function sodiumSecretKey(k) {
 }
 
 async function sodiumKey(k, type) {
+  if (k === undefined) return k;
   k = await Promise.resolve(k);
   if (typeof k === 'object') {
     if (k instanceof X25519SecretKey) return k;
@@ -123,5 +120,42 @@ async function sodiumKey(k, type) {
   } catch (e) {
     console.error('SW sodiumKey', k, e);
     return null;
+  }
+}
+
+class SodiumWrapper {
+  async init() {
+    const sodium = await self.SodiumPlus.auto();
+    this.PWHASH_OPSLIMIT_MODERATE = sodium.CRYPTO_PWHASH_OPSLIMIT_MODERATE;
+    this.PWHASH_OPSLIMIT_INTERACTIVE = sodium.CRYPTO_PWHASH_OPSLIMIT_INTERACTIVE;
+    this.PWHASH_MEMLIMIT_MODERATE = sodium.CRYPTO_PWHASH_MEMLIMIT_MODERATE;
+    this.PWHASH_OPSLIMIT_MIN = 1; // For tests only
+    this.PWHASH_MEMLIMIT_MIN = 8192; // For tests only
+    this.PWHASH_ALG_ARGON2ID13 = sodium.CRYPTO_PWHASH_ALG_ARGON2ID13;
+    this.AEAD_XCHACHA20POLY1305_IETF_NPUBBYTES = sodium.CRYPTO_AEAD_XCHACHA20POLY1305_IETF_NPUBBYTES;
+    this.XCHACHA20POLY1305_OVERHEAD = sodium.CRYPTO_AEAD_XCHACHA20POLY1305_IETF_NPUBBYTES + sodium.CRYPTO_AEAD_XCHACHA20POLY1305_IETF_ABYTES;
+
+    this.secretbox_keygen = async () => sodium.crypto_secretbox_keygen().then(k => k.getBuffer());
+    this.randombytes = async (n) => sodium.randombytes_buf(n);
+    this.secretbox = async (data, nonce, key) => sodium.crypto_secretbox(new Uint8Array(data), nonce, await sodiumKey(key));
+    this.secretbox_open = async (data, nonce, key) => sodium.crypto_secretbox_open(data, nonce, await sodiumKey(key));
+    this.pwhash = sodium.crypto_pwhash.bind(sodium);
+    this.hex2bin = async (hex) => sodium.sodium_hex2bin(hex);
+    this.box_keypair = async () => {
+      const kp = await sodium.crypto_box_keypair();
+      return {
+        sk: (await sodium.crypto_box_secretkey(kp)).getBuffer(),
+        pk: (await sodium.crypto_box_publickey(kp)).getBuffer(),
+      };
+    };
+    this.box_publickey_from_secretkey = async (sk) => sodium.crypto_box_publickey_from_secretkey(await sodiumSecretKey(sk)).then(k => k.getBuffer());
+    this.box_seal = async (data, pk) => sodium.crypto_box_seal(new Uint8Array(data), await sodiumPublicKey(pk));
+    this.box_seal_open = async (data, pk, sk) => sodium.crypto_box_seal_open(new Uint8Array(data), await sodiumPublicKey(pk), await sodiumSecretKey(sk));
+    this.box = async (data, nonce, sk, pk) => sodium.crypto_box(data, nonce, await sodiumSecretKey(sk), await sodiumPublicKey(pk));
+    this.box_open = async (data, nonce, sk, pk) => sodium.crypto_box_open(data, nonce, await sodiumSecretKey(sk), await sodiumPublicKey(pk));
+
+    this.kdf_derive_from_key = async (sz, id, ctx, key) => sodium.crypto_kdf_derive_from_key(sz, id, ctx, await sodiumKey(key));
+    this.aead_xchacha20poly1305_ietf_decrypt = sodium.crypto_aead_xchacha20poly1305_ietf_decrypt.bind(sodium);
+    this.aead_xchacha20poly1305_ietf_encrypt = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt.bind(sodium);
   }
 }

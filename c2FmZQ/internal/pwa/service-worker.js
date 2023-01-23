@@ -109,8 +109,6 @@ class ServiceWorker {
         return resolve();
       }
       this.#state.appInitialized = true;
-      self.sodium = await self.SodiumPlus.auto();
-      self.XCHACHA20POLY1305_OVERHEAD = sodium.CRYPTO_AEAD_XCHACHA20POLY1305_IETF_NPUBBYTES + sodium.CRYPTO_AEAD_XCHACHA20POLY1305_IETF_ABYTES;
       const app = new c2FmZQClient({
         store: this.#store,
         sw: this,
@@ -459,7 +457,7 @@ class ServiceWorker {
     const reqUrl = event.request.url.replace(/#.*$/, '');
     if (!reqUrl.startsWith(self.registration.scope)) {
       console.error('SW fetch req out of scope', reqUrl, self.registration.scope);
-      event.respondWith('request out of scope', {'status': 403, 'statusText': 'Permission denied'});
+      event.respondWith(new Response('request out of scope', {'status': 403, 'statusText': 'Permission denied'}));
       return;
     }
     const url = new URL(reqUrl);

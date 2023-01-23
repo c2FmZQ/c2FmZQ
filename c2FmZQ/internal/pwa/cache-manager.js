@@ -76,7 +76,7 @@ class CacheManager {
         });
         if (this.cacheSummary_.totalSize !== totalSize || this.cacheSummary_.numEvictable !== numEvictable ||
             this.cacheSummary_.totalSize !== summary.totalSize || this.cacheSummary_.numEvictable !== summary.numEvictable) {
-          console.error(`SW cache self-check counters off: ${this.cacheSummary_.totalSize} ${totalSize} ${this.cacheSummary_.numEvictable} ${numEvictable}`, summary);
+          console.log(`SW cache self-check counters off: ${this.cacheSummary_.totalSize} ${totalSize} ${this.cacheSummary_.numEvictable} ${numEvictable}`, summary);
           this.cacheSummary_.totalSize = totalSize;
           this.cacheSummary_.numEvictable = numEvictable;
           this.cacheSummary_.changed = true;

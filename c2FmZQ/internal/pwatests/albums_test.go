@@ -21,10 +21,13 @@
 package pwa_test
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"c2FmZQ/internal/client"
+	"c2FmZQ/internal/pwa"
 	"c2FmZQ/internal/stingle"
 )
 
@@ -96,17 +99,48 @@ func TestSharing(t *testing.T) {
 
 	wd.sleep(2 * time.Second) // for refresh
 
+	dir := t.TempDir()
+	b, err := pwa.FS.ReadFile("c2.png")
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "c2.png"), b, 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	if err := alice.GetUpdates(false); err != nil {
+		t.Fatalf("GetUpdates: %v", err)
+	}
+	if _, err := alice.ImportFiles([]string{filepath.Join(dir, "*")}, "gallery", false); err != nil {
+		t.Fatalf("ImportFiles: %v", err)
+	}
+	if err := alice.Sync(false); err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+
+	wd.click("#refresh-button")
+	wd.sleep(2 * time.Second) // for refresh
+
+	wd.click("#collections>div:nth-child(1)")
+	wd.rightClick(".thumbdiv")
+	wd.click("#context-menu-select")
+	wd.rightClick("#collections>div:nth-child(2)")
+	wd.click("#context-menu-move")
+	wd.waitPopupMessage("Moved 1 file")
+
 	if err := bob.GetUpdates(true); err != nil {
 		t.Fatalf("bob.GetUpdates: %v", err)
 	}
-	items, err := bob.GlobFiles([]string{"shared/*"}, client.MatchAll)
+	items, err := bob.GlobFiles([]string{"shared/*"}, client.GlobOptions{MatchDot: true, Recursive: true})
 	if err != nil {
 		t.Fatalf("bob.GlobFiles: %v", err)
 	}
-	if got, want := len(items), 1; got != want {
+	if got, want := len(items), 2; got != want {
 		t.Fatalf("Unexpected number of shared albums: Got %d, want %d", got, want)
 	}
 	if got, want := items[0].Filename, "shared/my pix"; got != want {
+		t.Errorf("Unexpected shared album: Got %q, want %q", got, want)
+	}
+	if got, want := items[1].Filename, "shared/my pix/c2.png"; got != want {
 		t.Errorf("Unexpected shared album: Got %q, want %q", got, want)
 	}
 	if got, want := stingle.Permissions(items[0].Album.Permissions).Human(), "+Add,+Copy,+Share"; got != want {
@@ -117,6 +151,7 @@ func TestSharing(t *testing.T) {
 	}
 
 	t.Log("Change the name and the permissions")
+	wd.click("#collections>div:nth-child(2)")
 	wd.click("#settings-button")
 	wd.waitFor("#collection-properties-name").Clear()
 	wd.sendKeys("#collection-properties-name", "MY PIX")
