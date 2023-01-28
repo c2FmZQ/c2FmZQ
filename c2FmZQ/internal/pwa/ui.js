@@ -1995,14 +1995,13 @@ class UI {
       let exifData;
       const onclick = () => {
         if (exifData === undefined) {
-          exifData = null;
-          const me = this;
-          EXIF.getData(img, function() {
-            exifData = EXIF.getAllTags(this);
+          EXIF.load(f.url, {length: 128 * 1024, includeUnknown: true})
+          .then(v => {
+            exifData = v;
             const div = UI.create('div', {className:'exif-data', parent:content});
             div.style.maxHeight = '' + Math.floor(0.9*content.offsetHeight) + 'px';
             div.style.maxWidth = '' + Math.floor(0.9*content.offsetWidth) + 'px';
-            me.formatExif_(div, exifData, EL);
+            this.formatExif_(div, exifData, EL);
           });
         } else {
           const e = content.querySelector('.exif-data');
@@ -2022,38 +2021,21 @@ class UI {
   }
 
   formatExif_(div, data, EL) {
-    const flat = [];
-    for (let n of Object.keys(data).sort()) {
-      if (n === 'thumbnail') {
-        continue;
-      }
-      if (Array.isArray(data[n])) {
-        for (let i in data[n]) {
-          if (data[n].hasOwnProperty(i)) {
-            flat.push({key: `${n}[${i}]`, value: data[n][i]});
-          }
-        }
-      } else {
-          flat.push({key: n, value: data[n]});
-      }
-    }
-    if (flat.length === 0) {
+    delete data.MakerNote;
+    delete data.Thumbnail;
+    if (Object.keys(data).length === 0) {
       div.textContent = '∅';
       return;
     }
     const out = [];
-    for (let {key,value} of flat) {
-      if (value instanceof Number) {
-        out.push(`${key}: ${value} [${value.numerator} / ${value.denominator}]`);
-      } else {
-        out.push(`${key}: ${JSON.stringify(value)}`);
-      }
+    for (let key of Object.keys(data).sort()) {
+      out.push(`${key}: ${data[key].description} (${JSON.stringify(data[key].value)})`);
     }
-    UI.create('div', {text: data.Make ? `${data.Make} ${data.Model}` : '', parent: div});
+    UI.create('div', {text: data.Make ? `${data.Make.value} ${data.Model.value}` : '', parent: div});
     const pos = UI.create('div', {parent:div});
     if (data.GPSLatitudeRef) {
-      const lat = `${data.GPSLatitudeRef} ${data.GPSLatitude[0].toFixed(0)}° ${data.GPSLatitude[1].toFixed(0)}' ${data.GPSLatitude[2].toFixed(3)}"`;
-      const lon = `${data.GPSLongitudeRef} ${data.GPSLongitude[0].toFixed(0)}° ${data.GPSLongitude[1].toFixed(0)}' ${data.GPSLongitude[2].toFixed(3)}"`;
+      const lat = `${data.GPSLatitudeRef.value} ${data.GPSLatitude.description}°`;
+      const lon = `${data.GPSLongitudeRef.value} ${data.GPSLongitude.description}°`;
       pos.textContent = `${lat} ${lon}`;
     }
     const more = UI.create('div', {className:'exif-more-details',text: '➕', tabindex:'0', role:'button', title:_T('expand'), parent:div});

@@ -2,7 +2,7 @@
 
 cd "$(dirname $0)"
 
-npm install bip39 secure-webstore sodium-plus exif-js
+npm install bip39 secure-webstore sodium-plus exifreader
 
 browserify worker.js \
   --exclude=./wordlists/japanese.json  \
