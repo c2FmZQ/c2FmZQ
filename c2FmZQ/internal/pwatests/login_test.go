@@ -47,6 +47,7 @@ func TestRegisterRecoverLogin(t *testing.T) {
 	wd.click("#account-menu-key-backup")
 	wd.click("#backup-phrase-show-button")
 	wd.sendKeys(".prompt-input", "foobar\n")
+	wd.click(".prompt-confirm-button")
 
 	var backupPhrase string
 	wd.Wait(func(selenium.WebDriver) (bool, error) {
@@ -113,6 +114,7 @@ func TestNoBackupKeys(t *testing.T) {
 	wd.click("#account-menu-key-backup")
 	wd.click("#backup-phrase-show-button")
 	wd.sendKeys(".prompt-input", "foobar\n")
+	wd.click(".prompt-confirm-button")
 
 	var backupPhrase string
 	wd.Wait(func(selenium.WebDriver) (bool, error) {
@@ -146,6 +148,7 @@ func TestNoBackupKeys(t *testing.T) {
 	wd.click("#account-menu-key-backup")
 	wd.click("#choose-key-backup-yes")
 	wd.sendKeys(".prompt-input", "foobar\n")
+	wd.click(".prompt-confirm-button")
 	wd.waitPopupMessage("Enabled")
 	wd.click(".popup-close")
 

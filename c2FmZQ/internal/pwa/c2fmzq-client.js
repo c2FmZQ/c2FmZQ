@@ -2230,7 +2230,7 @@ class c2FmZQClient {
         'cache-control': 'no-store, immutable',
         'content-type': ctype,
       };
-      if (ctype === 'application/octet-stream') {
+      if (ctype.startsWith('application/')) {
         h['content-disposition'] = 'attachment';
         h['content-security-policy'] = 'sandbox;';
       }

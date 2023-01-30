@@ -788,7 +788,9 @@ class UI {
 
     EL.clear();
     const cd = document.querySelector('#collections');
-    UI.clearElement_(cd);
+    if (this.collections_.length && !this.collections_[0].obj) {
+      UI.clearElement_(cd);
+    }
     let g = document.querySelector('#gallery');
     UI.clearElement_(g);
 
@@ -805,18 +807,6 @@ class UI {
         y: event.y,
         items: [],
       };
-      if (cachePref.mode === 'encrypted') {
-        params.items.push({
-          text: c.isOffline ? _T('offline-on') : _T('offline-off'),
-          onclick: () => {
-             main.sendRPC('setCollectionOffline', c.collection, !c.isOffline)
-             .then(() => {
-               this.refresh_();
-             });
-          },
-        });
-        params.items.push({});
-      }
       if (this.galleryState_.collection !== c.collection) {
         params.items.push({
           text: _T('open'),
@@ -849,6 +839,18 @@ class UI {
           });
         }
       }
+      if (cachePref.mode === 'encrypted') {
+        params.items.push({});
+        params.items.push({
+          text: c.isOffline ? _T('offline-on') : _T('offline-off'),
+          onclick: () => {
+             main.sendRPC('setCollectionOffline', c.collection, !c.isOffline)
+             .then(() => {
+               this.refresh_();
+             });
+          },
+        });
+      }
       if (params.items.length > 0) {
         this.contextMenu_(params);
       }
@@ -860,13 +862,14 @@ class UI {
         continue;
       }
       const c = this.collections_[i];
-      if (!currentCollection || this.galleryState_.collection === c.collection) {
+      const isCurrent = this.galleryState_.collection === c.collection;
+      if (!currentCollection || isCurrent) {
         currentCollection = c;
       }
       if (c.name === 'gallery' || c.name === 'trash') {
         c.name = _T(c.name);
       }
-      if (this.galleryState_.collection === c.collection) {
+      if (isCurrent) {
         this.title_.textContent = c.name;
         this.galleryState_.canDrag = c.isOwner || c.canCopy;
         this.galleryState_.isOwner = c.isOwner;
@@ -874,9 +877,16 @@ class UI {
       if (c.collection === 'trash') {
         continue;
       }
-      const div = UI.create('div', {className:'collectionThumbdiv', tabindex:'0', role:'link', title:_T('collection-title', c.name)});
-      if (!c.isOwner) {
-        div.classList.add('not-owner');
+      if (!c.obj) {
+        c.obj = new CollectionThumb(c);
+        cd.appendChild(c.obj.div);
+      }
+      c.obj.setCurrent(isCurrent);
+      c.obj.setCacheMode(cachePref.mode);
+      const div = c.obj.div;
+
+      if (isCurrent) {
+        scrollTo = div;
       }
       if (c.isOwner || c.canAdd) {
         EL.add(div, 'dragover', event => {
@@ -897,40 +907,12 @@ class UI {
       });
       EL.add(div, 'keydown', e => {
         if (e.key === 'Enter') {
+          e.preventDefault();
           e.stopPropagation();
-          this.switchView(c);
+          showContextMenu(e, c);
+          //this.switchView(c);
         }
       }, true);
-      if (this.galleryState_.collection === c.collection) {
-        scrollTo = div;
-      }
-      const img = new Image();
-      img.alt = c.name;
-      if (c.cover) {
-        img.src = c.cover;
-      } else {
-        img.src = 'clear.png';
-      }
-      const sz = this.galleryState_.collection === c.collection ? UI.px_(150) : UI.px_(120);
-      const imgdiv = UI.create('div');
-      img.style.height = sz;
-      img.style.width = sz;
-      img.style.gridArea = '1 / 1 / 2 / 2';
-      imgdiv.style.display = 'grid';
-      imgdiv.style.height = sz;
-      imgdiv.style.width = sz;
-      imgdiv.appendChild(img);
-      if (cachePref.mode === 'encrypted' && c.isOffline) {
-        const check = UI.create('div', {text: '☑', className:'collectionThumbOfflineCheck', parent:imgdiv});
-        check.style.gridArea = '1 / 1 / 2 / 2';
-        check.style.justifySelf = 'end';
-        check.style.alignSelf = 'start';
-        check.style.opacity = '0.75';
-      }
-      div.appendChild(imgdiv);
-      const n = UI.create('div', {text:c.name,className:'collectionThumbLabel',parent:div});
-      n.style.width = sz;
-      cd.appendChild(div);
     }
 
     const collButtons = UI.create('div', {id:'collection-buttons'});
@@ -990,14 +972,10 @@ class UI {
     } while (dist() <= 0 && this.galleryState_.shown < this.galleryState_.content.total);
 
     if (scrollTo) {
-      scrollTo.focus();
-      if (oldScrollLeft) {
-        cd.scrollLeft = oldScrollLeft;
-      }
       setTimeout(() => {
-        if (oldScrollLeft) cd.scrollLeft = oldScrollLeft;
         const left = Math.max(scrollTo.offsetLeft - (cd.offsetWidth - scrollTo.offsetWidth)/2, 0);
         cd.scrollTo({behavior: 'smooth', left: left});
+        scrollTo.focus();
       }, 10);
     }
   }
@@ -1148,34 +1126,39 @@ class UI {
         document.documentElement.scrollTo(0, opt_scrollTop);
       }
     };
+
+    const year = new Date().getFullYear();
+
     const last = Math.min(this.galleryState_.shown + n, max);
     for (let i = this.galleryState_.shown; i < last; i++) {
       this.galleryState_.shown++;
       const f = this.galleryState_.content.files[i];
       if (this.galleryState_.format === 'grid') {
-        const date = (new Date(f.dateCreated)).toLocaleDateString(undefined, {weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'});
+        const created = new Date(f.dateCreated);
+        //const date = created.toLocaleDateString(undefined, {weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'});
+        const dateFormat = year === created.getFullYear() ? {month: 'long'} : {month: 'long', year: 'numeric'};
+        const date = created.toLocaleDateString(undefined, dateFormat);
         if (date !== this.galleryState_.lastDate) {
           this.galleryState_.lastDate = date;
           const dateDiv = UI.create('div', {className:'date', html:'<br clear="all" />'+date+'<br clear="all" />', parent:g});
         }
+
+        const d = UI.create('div', {className:'thumbdiv', draggable:true, tabindex:'0', role:'link', title:_T('file-title', f.fileName)});
+        f.elem = d;
+        f.select = () => selectItem(i);
+
         const img = new Image();
         EL.add(img, 'load', scroll);
         img.alt = f.fileName;
         img.src = f.thumbUrl;
         img.style.height = UI.px_(320);
         img.style.width = UI.px_(240);
-
-        const d = UI.create('div', {className:'thumbdiv', tabindex:'0', role:'link', title:_T('file-title', f.fileName)});
-        f.elem = d;
-        f.select = () => selectItem(i);
-
         d.appendChild(img);
         if (f.isVideo) {
           const div = UI.create('div',{className:'duration', parent:d});
           UI.create('span', {className:'duration', text: this.formatDuration_(f.duration), parent: div});
         }
 
-        d.draggable = true;
         EL.add(d, 'click', e => click(i, e));
         EL.add(d, 'keydown', e => {
           if (e.key === 'Enter') {
@@ -1191,7 +1174,7 @@ class UI {
       } else {
         const row = UI.create('div', {className:'row', parent:listDiv});
 
-        const imgDiv = UI.create('div', {tabindex:'0',role:'link', title:_T('file-title', f.fileName), parent:row});
+        const imgDiv = UI.create('div', {tabindex:'0', role:'link', title:_T('file-title', f.fileName), parent:row});
         imgDiv.draggable = true;
         EL.add(imgDiv, 'dragstart', e => dragStart(f, e, img));
         EL.add(imgDiv, 'dragend', e => dragEnd(f, e));
@@ -1430,11 +1413,13 @@ class UI {
       while (t) {
         x += t.offsetLeft;
         y += t.offsetTop;
-        if (t === document.body) {
-          x -= document.documentElement.scrollLeft;
-          y -= document.documentElement.scrollTop;
-        }
         t = t.offsetParent;
+      }
+      t = params.target.parentElement;
+      while (t) {
+        x -= t.scrollLeft;
+        y -= t.scrollTop;
+        t = t.parentElement;
       }
     }
     EL.add(menu, 'contextmenu', event => {
@@ -1486,7 +1471,6 @@ class UI {
       params.target.focus();
     };
 
-    let focus;
     for (let i = 0; i < params.items.length; i++) {
       if (!params.items[i].text) {
         if (i !== 0 && i !== params.items.length - 1) {
@@ -1510,9 +1494,6 @@ class UI {
           closeMenu();
           params.items[i].onclick(e);
         });
-        if (!focus) {
-          focus = item;
-        }
       } else {
         UI.create('div', {
           className: 'context-menu-div',
@@ -1522,9 +1503,6 @@ class UI {
       }
     }
     body.appendChild(menu);
-    if (focus) {
-      focus.focus();
-    }
 
     let up, left;
     if (x > window.innerWidth / 2) {
@@ -1581,6 +1559,10 @@ class UI {
       h.tabs.forEach(e => e.setAttribute('tabindex', '-1'));
     };
     const remove = h => {
+      if (!h) {
+        console.log('setGlobalContext nothing to remove');
+        return;
+      }
       h.handlers.forEach(args => document.removeEventListener(...args));
       h.tabs.forEach(e => e.setAttribute('tabindex', '0'));
     };
@@ -1622,7 +1604,7 @@ class UI {
       win.appendChild(input);
     }
 
-    const buttons = UI.create('div', {className:'prompt-button-row',parent:win});
+    const buttons = UI.create('div', {className:'prompt-button-row button-group',parent:win});
     const canc = UI.create('button', {className:'prompt-cancel-button', text:params.cancelText || _T('cancel'), tabindex:'0', parent:buttons});
     const conf = UI.create('button', {className:'prompt-confirm-button', text:params.confirmText || _T('confirm'), tabindex:'0', parent:buttons});
 
@@ -1641,11 +1623,6 @@ class UI {
           e.stopPropagation();
           close();
           reject(_T('canceled'));
-        }
-        if (e.key === 'Enter') {
-          e.stopPropagation();
-          close();
-          resolve(params.getValue ? input.value.trim() : true);
         }
       };
       this.setGlobalContext([
@@ -1707,12 +1684,11 @@ class UI {
     const popupContent = UI.create('div', {className:'popup-content', parent:popup});
 
     const body = document.body;
-    const g = document.querySelector('#gallery');
 
     if (!this.popupBlur_ || this.popupBlur_.depth <= 0) {
       this.popupBlur_ = {
         depth: 0,
-        elem: UI.create('div', {className:'blur', parent:g}),
+        elem: UI.create('div', {className:'blur', parent:body}),
       };
     }
     this.popupBlur_.depth++;
@@ -1773,24 +1749,24 @@ class UI {
           break;
       }
       popup.addEventListener('animationend', () => {
-        UI.removeChild_(g, popup);
+        UI.removeChild_(body, popup);
         if (--this.popupBlur_.depth <= 0) {
           const elem = this.popupBlur_.elem;
           this.popupBlur_.elem = null;
           elem.style.animation = 'fadeOut 0.25s';
           elem.addEventListener('animationend', () => {
-            UI.removeChild_(g, elem);
+            UI.removeChild_(body, elem);
           }, {once: true});
         }
       }, {once: true});
       EL.clear();
+      body.classList.remove('noscroll');
       if (params.onclose) {
         params.onclose();
       }
-      body.classList.remove('noscroll');
     };
     body.classList.add('noscroll');
-    g.appendChild(popup);
+    body.appendChild(popup);
     popup.style.width = '' + popup.offsetWidth + 'px';
     switch (params.slide) {
       case 'left':
@@ -1948,22 +1924,16 @@ class UI {
         src: f.url,
         controls: 'controls',
       });
-    } else if (f.contentType === 'application/pdf') {
-      // PDFs don't load in chrome when sandbox is enabled on iframe.
-      params.content = UI.create('iframe', {
-        src: f.url,
-        title: f.fileName,
+    } else if (f.contentType.startsWith('application/')) {
+      params.content = UI.create('a', {
+        href: f.url,
+        text: _T('download-doc'),
       });
-    } else if (f.contentType !== 'application/octet-stream') {
+    } else {
       params.content = UI.create('iframe', {
         src: f.url,
         title: f.fileName,
         sandbox: 'allow-downloads allow-same-origin',
-      });
-    } else {
-      params.content = UI.create('a', {
-        href: f.url,
-        text: _T('download-doc'),
       });
     }
     const {EL, content, close, info} = this.commonPopup_(params);
@@ -2409,7 +2379,7 @@ class UI {
           del.style.cursor = 'pointer';
           EL.add(del, 'click', () => deleteMember(i));
         }
-        const name = UI.create('span', {text:members[i].email,parent:div});
+        const name = UI.create('span', {text:members[i].email,className:'email',parent:div});
         members[i].elem = div;
       }
     };
@@ -3241,6 +3211,9 @@ class UI {
       title: _T('prefs'),
       content: content,
       EL: EL,
+      onclose: () => {
+        this.refreshGallery_(false);
+      },
     });
   }
 
@@ -3287,23 +3260,6 @@ class UI {
       saveButton.disabled = changes() === null;
       saveButton.textContent = saveButton.disabled ? _T('no-changes') : _T('apply-changes');
     };
-    const saveButton = UI.create('button', {id:'admin-console-save-button', text:_T('no-changes'), disabled:true, parent:content});
-    EL.add(saveButton, 'click', () => {
-      const c = changes();
-      content.querySelectorAll('input,select').forEach(elem => {
-        elem.disabled = true;
-      });
-      main.sendRPC('adminUsers', c)
-      .then(data => {
-        this.popupMessage(_T('data-updated'), 'info');
-        return this.showAdminConsoleData_(EL, content, data);
-      })
-      .finally(() => {
-        content.querySelectorAll('input,select').forEach(elem => {
-          elem.disabled = false;
-        });
-      });
-    });
 
     const defQuotaDiv = UI.create('div', {id:'admin-console-default-quota-div', parent:content});
     UI.create('label', {htmlFor:'admin-console-default-quota-value', text:'Default quota:', parent:defQuotaDiv});
@@ -3429,6 +3385,24 @@ class UI {
 
     const table = UI.create('div', {id:'admin-console-table', parent:content});
 
+    const saveButton = UI.create('button', {id:'admin-console-save-button', text:_T('no-changes'), disabled:true, parent:content});
+    EL.add(saveButton, 'click', () => {
+      const c = changes();
+      content.querySelectorAll('input,select').forEach(elem => {
+        elem.disabled = true;
+      });
+      main.sendRPC('adminUsers', c)
+      .then(data => {
+        this.popupMessage(_T('data-updated'), 'info');
+        return this.showAdminConsoleData_(EL, content, data);
+      })
+      .finally(() => {
+        content.querySelectorAll('input,select').forEach(elem => {
+          elem.disabled = false;
+        });
+      });
+    });
+
     const showUsers = () => {
       while(table.firstChild) {
         table.removeChild(table.firstChild);
@@ -3465,5 +3439,51 @@ class EventListeners {
     }
     this.list_ = [];
     //console.log(`XXX EL clear ${EL_added - EL_removed} added=${EL_added} removed=${EL_removed}`);
+  }
+}
+
+class CollectionThumb {
+  constructor(c) {
+    const div = UI.create('div', {className:'collectionThumbdiv', tabindex:'0', role:'link', title:_T('collection-title', c.name)});
+    if (!c.isOwner) {
+      div.classList.add('not-owner');
+    }
+    const img = new Image();
+    img.alt = c.name;
+    if (c.cover) {
+      img.src = c.cover;
+    } else {
+      img.src = 'clear.png';
+    }
+    const imgdiv = UI.create('div');
+    img.style.gridArea = '1 / 1 / 2 / 2';
+    imgdiv.style.display = 'grid';
+    imgdiv.appendChild(img);
+    if (c.isOffline) {
+      const check = UI.create('div', {text: '☑', className:'collectionThumbOfflineCheck', parent:imgdiv});
+      check.style.display = 'none';
+      check.style.gridArea = '1 / 1 / 2 / 2';
+      check.style.justifySelf = 'end';
+      check.style.alignSelf = 'start';
+      check.style.opacity = '0.75';
+    }
+    div.appendChild(imgdiv);
+    const n = UI.create('div', {text:c.name, className:'collectionThumbLabel', parent:div});
+
+    this.setCurrent = isCurrent => {
+      const sz = isCurrent ? UI.px_(150) : UI.px_(120);
+      img.style.height = sz;
+      img.style.width = sz;
+      imgdiv.style.height = sz;
+      imgdiv.style.width = sz;
+      n.style.width = sz;
+    };
+    this.setCacheMode = mode => {
+      const e = this.div.querySelector('.collectionThumbOfflineCheck');
+      if (e) {
+        e.style.display = mode === 'encrypted' ? 'block' : 'none';
+      }
+    };
+    this.div = div;
   }
 }

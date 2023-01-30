@@ -52,6 +52,7 @@ func TestMFAWithSecurityKey(t *testing.T) {
 	wd.click("#profile-form-enable-mfa")
 	wd.click("#profile-form-add-security-key-button")
 	wd.sendKeys(".prompt-input", "foobar\n")
+	wd.click(".prompt-confirm-button")
 	wd.clear(".prompt-input")
 	wd.sendKeys(".prompt-input", "test key")
 	wd.click(".prompt-confirm-button")
@@ -62,15 +63,17 @@ func TestMFAWithSecurityKey(t *testing.T) {
 
 	wd.click("#profile-form-button")
 	wd.sendKeys(".prompt-input", "foobar\n")
+	wd.click(".prompt-confirm-button")
 	wd.waitPopupMessage("MFA enabled")
 
 	t.Log("Logging out")
 	wd.click("#loggedin-account")
 	wd.click("#account-menu-logout")
-	wd.sleep(2 * time.Second)
 
 	t.Log("Logging in")
 	wd.waitFor("#loggedout-div")
+	wd.sleep(2 * time.Second)
+
 	wd.click("#login-tab")
 	wd.sendKeys("#email-input", "test@c2fmzq.org")
 	wd.sendKeys("#password-input", "foobar")
@@ -82,6 +85,7 @@ func TestMFAWithSecurityKey(t *testing.T) {
 	wd.click("#account-menu-key-backup")
 	wd.click("#backup-phrase-show-button")
 	wd.sendKeys(".prompt-input", "foobar\n")
+	wd.click(".prompt-confirm-button")
 
 	var backupPhrase string
 	wd.Wait(func(selenium.WebDriver) (bool, error) {
@@ -153,6 +157,7 @@ func TestMFAWithPasskey(t *testing.T) {
 	wd.click("#profile-form-enable-passkey")
 	wd.click("#profile-form-add-security-key-button")
 	wd.sendKeys(".prompt-input", "foobar\n")
+	wd.click(".prompt-confirm-button")
 	wd.clear(".prompt-input")
 	wd.sendKeys(".prompt-input", "my passkey")
 	wd.click(".prompt-confirm-button")
@@ -163,15 +168,17 @@ func TestMFAWithPasskey(t *testing.T) {
 
 	wd.click("#profile-form-button")
 	wd.sendKeys(".prompt-input", "foobar\n")
+	wd.click(".prompt-confirm-button")
 	wd.waitPopupMessage("MFA enabled")
 
 	t.Log("Logging out")
 	wd.click("#loggedin-account")
 	wd.click("#account-menu-logout")
-	wd.sleep(2 * time.Second)
 
 	t.Log("Logging in")
 	wd.waitFor("#loggedout-div")
+	wd.sleep(2 * time.Second)
+
 	wd.click("#login-tab")
 	wd.sendKeys("#email-input", "test@c2fmzq.org")
 	wd.sendKeys("#password-input", "foobar")
@@ -183,6 +190,7 @@ func TestMFAWithPasskey(t *testing.T) {
 	wd.click("#account-menu-key-backup")
 	wd.click("#backup-phrase-show-button")
 	wd.sendKeys(".prompt-input", "foobar\n")
+	wd.click(".prompt-confirm-button")
 
 	var backupPhrase string
 	wd.Wait(func(selenium.WebDriver) (bool, error) {
@@ -266,16 +274,19 @@ func TestMFAWithOTP(t *testing.T) {
 
 	wd.click("#profile-form-button")
 	wd.sendKeys(".prompt-input", "foobar\n")
+	wd.click(".prompt-confirm-button")
 	wd.sendKeys(".prompt-input", code()+"\n")
+	wd.click(".prompt-confirm-button")
 	wd.waitPopupMessage("MFA enabled", "OTP enabled")
 
 	t.Log("Logging out")
 	wd.click("#loggedin-account")
 	wd.click("#account-menu-logout")
-	wd.sleep(2 * time.Second)
 
 	t.Log("Logging in")
 	wd.waitFor("#loggedout-div")
+	wd.sleep(2 * time.Second)
+
 	wd.click("#login-tab")
 	wd.sendKeys("#email-input", "test@c2fmzq.org")
 	wd.sendKeys("#password-input", "foobar")
@@ -291,6 +302,7 @@ func TestMFAWithOTP(t *testing.T) {
 	wd.click("#profile-form-enable-mfa")
 	wd.click("#profile-form-button")
 	wd.sendKeys(".prompt-input", "foobar\n")
+	wd.click(".prompt-confirm-button")
 	wd.sendKeys(".prompt-input", code())
 	wd.click(".prompt-confirm-button")
 	wd.waitPopupMessage("MFA disabled", "OTP disabled")

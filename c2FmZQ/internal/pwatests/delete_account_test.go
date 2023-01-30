@@ -45,10 +45,11 @@ func TestDeleteAccount(t *testing.T) {
 	wd.click("#account-menu-profile")
 	wd.click("#profile-form-delete-button")
 	wd.sendKeys(".prompt-input", "foobar\n")
-
-	wd.sleep(2 * time.Second)
+	wd.click(".prompt-confirm-button")
 
 	wd.waitFor("#loggedout-div")
+	wd.sleep(2 * time.Second)
+
 	wd.click("#login-tab")
 	wd.sendKeys("#email-input", "test@c2fmzq.org")
 	wd.sendKeys("#password-input", "foobar")

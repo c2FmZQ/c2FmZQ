@@ -25,6 +25,12 @@ a {
 button {
   font-family: monospace;
 }
+:not(.button-group):not(.context-menu) > button:hover:not(:disabled), :not(.button-group):not(.context-menu) > button:focus:not(:disabled) {
+  scale: 1.05;
+}
+.button-group > button:hover, .button-group:not(:has(button:hover)) > button:focus {
+  scale: 1.05;
+}
 .hidden {
   display: none;
 }
@@ -111,9 +117,12 @@ button {
   cursor: pointer;
   overflow: hidden;
   min-width: fit-content;
-  box-shadow: 2px 2px 5px black;
+  background-color: white;
+  box-shadow: 2px 2px 5px #777;
+  transition: all 0.5s;
 }
-.collectionThumbdiv:hover {
+.collectionThumbdiv:hover, #collections:not(:has(.collectionThumbdiv:hover)) > .collectionThumbdiv:focus {
+  transform: scale(1.05);
   border-color: blue;
 }
 .collectionThumbdiv .collectionThumbLabel {
@@ -134,7 +143,7 @@ button {
   background-color: white;
 }
 .thumbdiv {
-  margin: 1em;
+  margin: 10px;
   border: 1px solid black;
   padding: 0;
   text-align: center;
@@ -142,12 +151,14 @@ button {
   display: inline-grid;
   align-items: start;
   justify-content: end;
-  box-shadow: 3px 3px 5px black;
+  box-shadow: 3px 3px 5px darkgray;
+  transition: all 0.5s;
 }
 .thumbdiv * {
   pointer-events: none;
 }
-.thumbdiv:hover {
+.thumbdiv:hover, #gallery:not(:has(.thumbdiv:hover)) .thumbdiv:focus {
+  transform: scale(1.05);
   border-color: blue;
 }
 .thumbdiv img {
@@ -173,6 +184,20 @@ button {
 .row {
   display: contents;
 }
+#gallery-list-div:not(:has(:hover))>div.row>div:focus, #gallery-list-div>div.row:not(:first-child):has(:hover)>div:first-child {
+  border: 0;
+  transform-origin: left;
+  transform: scale(1.2);
+  z-index: 5;
+}
+#gallery-list-div:not(:has(:hover))>div.row:focus-within>div {
+  border-top: 1px dotted black;
+  border-bottom: 1px dotted black;
+}
+#gallery-list-div>div.row:not(:first-child):has(div:hover)>div {
+  border-top: 1px solid blue;
+  border-bottom: 1px solid blue;
+}
 div.row.selected>div {
   background-color: lightgreen;
 }
@@ -190,6 +215,11 @@ div.row.selected>div {
   display: flex;
   align-items: center;
   cursor: pointer;
+  transition: all 0.5s;
+}
+#gallery-list-div>div.row>div:nth-child(1) {
+  position: sticky;
+  left: 0;
 }
 #gallery-list-div>div.row>div>img {
   border: 1px solid black;
@@ -215,6 +245,9 @@ div.row.selected>div {
 #gallery-list-div>div:nth-child(-n+1)>div {
   font-weight: bold;
 }
+#gallery-list-div>div:not(.selected):nth-child(2n)>div {
+  background-color: white;
+}
 #gallery-list-div>div:not(.selected):nth-child(2n+1)>div {
   background-color: #eee;
 }
@@ -234,9 +267,10 @@ div.row.selected>div {
   top: 0;
   right: 10px;
   z-index: 2;
-  background-color: #eee;
+  background-color: lightgray;
 }
 #buttons button {
+  margin-top: 0.2em;
   height: 2em;
 }
 #gallery {
@@ -308,6 +342,7 @@ div.row.selected>div {
   border: 1px solid black;
   z-index: 1;
   background-color: white;
+  resize: both;
 }
 #login-form * {
   margin: 0.25em;
@@ -321,9 +356,9 @@ div.row.selected>div {
   width: 100vw;
   max-width: 100vw;
   padding-top: 2em;
-  background-color: #eee;
-  border-bottom: thick dashed #ddd;
-  transition: position;
+  padding-bottom: 1em;
+  background-color: lightgray;
+  border-bottom: 1px solid darkgray;
 }
 #collections.fixed {
   animation: slideDown 0.75s;
@@ -355,6 +390,7 @@ div.row.selected>div {
   display: flex;
   flex-direction: column;
   font-size: 150%;
+  resize: both;
 }
 .prompt-input {
   padding: 0.5em;
@@ -362,7 +398,7 @@ div.row.selected>div {
 .prompt-button-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  column-gap: 0.5em;
+  column-gap: 1em;
   margin-top: 2em;
 }
 .prompt-confirm-button {
@@ -370,18 +406,26 @@ div.row.selected>div {
   padding: 0.5em;
   border-radius: 8px;
   border: 2px solid black;
+  justify-self: start;
+}
+.prompt-button-row:not(:hover) .prompt-confirm-button:focus {
+  background-color: #aea;
 }
 .prompt-confirm-button:hover {
-  border: 2px solid gray;
+  background-color: #aea;
 }
 .prompt-cancel-button {
   font-weight: bold;
   padding: 0.5em;
   border-radius: 8px;
   border: 2px solid black;
+  justify-self: end;
+}
+.prompt-button-row:not(:hover) .prompt-cancel-button:focus {
+  background-color: #eaa;
 }
 .prompt-cancel-button:hover {
-  border: 2px solid gray;
+  background-color: #eaa;
 }
 .prompt-bg {
   animation: fadeIn 0.25s;
@@ -406,7 +450,7 @@ div.row.selected>div {
   z-index: 100;
   box-shadow: 5px 5px 5px black;
   max-width: 95vw;
-  max-height: 95vh;
+  max-height: 90vh;
   overflow: visible;
   display: flex;
   flex-direction: column;
@@ -435,13 +479,14 @@ div.row.selected>div {
   text-align: right;
 }
 .popup-media {
-  max-height: 95vh;
+  max-height: 90vh;
   max-width: 95vw;
   object-fit: contain;
   display: block;
 }
 .popup-content {
   overflow: hidden;
+  resize: both;
 }
 .popup-content > .arrow {
   position: absolute;
@@ -493,7 +538,7 @@ div.row.selected>div {
   min-width: 10em;
   box-shadow: 1px 1px 4px darkgrey;
 }
-.context-menu-item:hover {
+.context-menu-item:hover, .context-menu:not(:has(:hover)) > .context-menu-item:focus {
   background-color: lightgray;
 }
 .context-menu-div {
@@ -548,9 +593,11 @@ button.context-menu-item {
   justify-content: center;
   align-items: center;
   cursor: pointer;
+  z-index: 10;
 }
-#add-button:hover {
+#add-button:hover, #add-button:focus {
   border-color: blue;
+  scale: 1.05;
 }
 #upload-files-div {
   margin: 1em;
@@ -608,6 +655,7 @@ button.context-menu-item {
 #collection-properties-name-label {
 }
 #collection-properties-name {
+  user-select: all;
 }
 #collection-properties-perm {
   display: inline-flex;
@@ -623,6 +671,9 @@ button.context-menu-item {
 #collection-properties-apply-button {
   grid-column: 1 / 3;
 }
+.email {
+  user-select: all;
+}
 #backup-phrase-content {
   padding: 2em;
   overflow-y: auto;
@@ -636,6 +687,7 @@ button.context-menu-item {
   color: gray;
   font-style: italic;
   background-color: yellow;
+  user-select: all;
 }
 #backup-phrase-content .warning {
   font-size: 150%;
@@ -705,6 +757,9 @@ input[type=checkbox] {
 }
 #profile-form-security-key-list > button {
 }
+#profile-form-delete-button {
+  margin: 0.5em;
+}
 .highlight {
   box-shadow: 0 0 3px 3px yellow;
 }
@@ -773,10 +828,10 @@ button.deleted-key {
   display: flex;
   flex-flow: column;
   align-items: flex-start;
-  height: 90%;
 }
 #admin-console-save-button {
-  margin-bottom: 1em;
+  margin-top: 1em;
+  align-self: stretch;
 }
 #admin-console-filter {
   margin-top: 1em;
