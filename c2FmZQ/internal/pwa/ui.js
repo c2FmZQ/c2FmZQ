@@ -1604,8 +1604,8 @@ class UI {
   async prompt(params) {
     const body = document.body;
     
-    const win = UI.create('div', {className: 'prompt-div', role:'alertdialog', 'aria-labelledby':'prompt-text'});
     const bg = UI.create('div', {className: 'prompt-bg', role:'none', parent: body});
+    const win = UI.create('div', {className: 'prompt-div', role:'alertdialog', 'aria-labelledby':'prompt-text'});
     const text = UI.create('div', {className: 'prompt-text', id:'prompt-text', text: params.message, parent: win});
 
     let input;
@@ -1674,8 +1674,8 @@ class UI {
 
   freeze(params) {
     const body = document.body;
-    const win = UI.create('div', {className: 'prompt-div', role:'alertdialog', 'aria-labelledby':'prompt-text'});
     const bg = UI.create('div', {className:'prompt-bg', role:'none', parent:body});
+    const win = UI.create('div', {className: 'prompt-div', role:'alertdialog', 'aria-labelledby':'prompt-text', parent:body});
     const text = UI.create('div', {className:'prompt-text', id:'prompt-text', text:params.message, parent:win});
 
     const waiting = body.classList.contains('waiting');
