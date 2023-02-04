@@ -16,6 +16,9 @@ body.noscroll {
 main>h1 {
   text-align: center;
 }
+form {
+  display: contents;
+}
 h1 {
   overflow-wrap: break-word;
 }
@@ -260,7 +263,7 @@ div.row.selected>div {
 }
 #refresh-button {
 }
-#loggedin-account {
+#account-button {
 }
 #buttons {
   position: fixed;
@@ -332,6 +335,17 @@ div.row.selected>div {
   top: 40vh;
   transform: translate(-50%, -50%);
   padding: 0;
+}
+#passphrase-form {
+  display: grid;
+  grid-auto-columns: 1fr 2fr;
+  grid-auto-rows: auto;
+  gap: 0.5em;
+}
+#passphrase-buttons {
+  grid-column: 1 / 3;
+  justify-self: center;
+  width: fit-content;
 }
 #login-form {
   display: grid;

@@ -69,11 +69,12 @@ func startServer(t *testing.T) (*wrapper, func()) {
 		t.Fatalf("wd.Get: %v", err)
 	}
 	return wd, func() {
-		s.Shutdown()
-		db.Wipe()
 		log.Record = nil
 		wd.getLogs(slog.Browser)
+		wd.sleep(time.Second)
 		wd.Quit()
+		s.Shutdown()
+		db.Wipe()
 	}
 }
 
@@ -213,17 +214,25 @@ func (w *wrapper) css(s string) selenium.WebElement {
 
 func (w *wrapper) waitFor(sel string) selenium.WebElement {
 	w.t.Logf("Waiting for %s", sel)
-	var e selenium.WebElement
-	if err := w.WaitWithTimeout(func(wd selenium.WebDriver) (bool, error) {
-		var err error
-		if e, err = wd.FindElement(selenium.ByCSSSelector, sel); err != nil {
-			return false, nil
+	delay := time.Minute
+	for try := 0; try <= 5; try++ {
+		var e selenium.WebElement
+		if err := w.WaitWithTimeout(func(wd selenium.WebDriver) (bool, error) {
+			var err error
+			if e, err = wd.FindElement(selenium.ByCSSSelector, sel); err != nil {
+				return false, nil
+			}
+			return e.IsDisplayed()
+		}, delay); err != nil || e == nil {
+			w.t.Logf("waitFor(%q): %v", sel, err)
+			w.sleep(time.Second)
+			delay = 10 * time.Second
+			continue
 		}
-		return e.IsDisplayed()
-	}, 2*time.Minute); err != nil || e == nil {
-		w.t.Fatalf("waitFor(%q): %v", sel, err)
+		return e
 	}
-	return e
+	w.t.Fatalf("waitFor(%q): failed too many times", sel)
+	return nil
 }
 
 func (w *wrapper) waitGone(sel string) {
@@ -238,30 +247,59 @@ func (w *wrapper) waitGone(sel string) {
 }
 
 func (w *wrapper) sendKeys(sel, keys string) {
-	if err := w.waitFor(sel).SendKeys(keys); err != nil {
-		w.t.Fatalf("%s: %v", sel, err)
+	w.sleep(250 * time.Millisecond)
+	for try := 0; try <= 5; try++ {
+		if err := w.waitFor(sel).SendKeys(keys); err != nil {
+			w.t.Logf("%s: %v", sel, err)
+			w.sleep(time.Second)
+			continue
+		}
+		return
 	}
+	w.t.Fatalf("%s: failed too many times", sel)
 }
 
 func (w *wrapper) click(sel string) {
-	if err := w.waitFor(sel).Click(); err != nil {
-		w.t.Fatalf("%s: %v", sel, err)
+	w.sleep(250 * time.Millisecond)
+	for try := 0; try <= 5; try++ {
+		if err := w.waitFor(sel).Click(); err != nil {
+			w.t.Logf("%s: %v", sel, err)
+			w.sleep(time.Second)
+			continue
+		}
+		return
 	}
+	w.t.Fatalf("%s: failed too many timesv", sel)
 }
 
 func (w *wrapper) rightClick(sel string) {
-	if err := w.waitFor(sel).MoveTo(0, 0); err != nil {
-		w.t.Fatalf("%s: %v", sel, err)
+	w.sleep(250 * time.Millisecond)
+	for try := 0; try <= 5; try++ {
+		if err := w.waitFor(sel).MoveTo(0, 0); err != nil {
+			w.t.Logf("%s: %v", sel, err)
+			continue
+		}
+		if err := w.Click(selenium.RightButton); err != nil {
+			w.t.Logf("RightClick(%s): %v", sel, err)
+			w.sleep(time.Second)
+			continue
+		}
+		return
 	}
-	if err := w.Click(selenium.RightButton); err != nil {
-		w.t.Fatalf("RightClick(%s): %v", sel, err)
-	}
+	w.t.Fatalf("rightClick(%s): failed too many times", sel)
 }
 
 func (w *wrapper) clear(sel string) {
-	if err := w.waitFor(sel).Clear(); err != nil {
-		w.t.Fatalf("%s: %v", sel, err)
+	w.sleep(250 * time.Millisecond)
+	for try := 0; try <= 5; try++ {
+		if err := w.waitFor(sel).Clear(); err != nil {
+			w.t.Logf("%s: %v", sel, err)
+			w.sleep(time.Second)
+			continue
+		}
+		return
 	}
+	w.t.Fatalf("%s: failed too many times", sel)
 }
 
 func (w *wrapper) waitPopupMessage(messages ...string) {
@@ -311,4 +349,27 @@ func (w *wrapper) sleep(d time.Duration) {
 	w.WaitWithTimeout(func(wd selenium.WebDriver) (bool, error) {
 		return false, nil
 	}, d)
+}
+
+func (w *wrapper) setPassphrase(pp string) {
+	w.t.Log("Setting passphrase")
+	w.sendKeys("#passphrase-input", pp+"\n")
+	w.sendKeys("#passphrase-input2", pp+"\n")
+}
+
+func (w *wrapper) createAccount(email, pass string) {
+	w.t.Log("Creating new account")
+	w.click("#register-tab")
+	w.sendKeys("#email-input", email)
+	w.sendKeys("#password-input", pass)
+	w.sendKeys("#password-input2", pass)
+	w.click("#login-button")
+	w.waitFor("#gallery")
+}
+
+func (w *wrapper) logout() {
+	w.t.Log("Logging out")
+	w.click("#account-button")
+	w.click("#account-menu-logout")
+	w.sleep(2 * time.Second)
 }

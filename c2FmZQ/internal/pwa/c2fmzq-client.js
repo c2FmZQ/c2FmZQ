@@ -70,16 +70,6 @@ class c2FmZQClient {
         return this.init();
       }
       this.cache_ = await self.caches.open('local');
-      if ('connection' in navigator) {
-        this.#state.currentNetworkType = navigator.connection.type;
-        navigator.connection.addEventListener('change', event => {
-          if (this.#state.currentNetworkType !== navigator.connection.type) {
-            console.log(`SW network changed ${this.currentNetworkType_} -> ${navigator.connection.type}`);
-            this.#state.currentNetworkType = navigator.connection.type;
-            this.onNetworkChange(event);
-          }
-        });
-      }
       if (this.vars_.maxCacheSize === undefined) {
         if ('estimate' in navigator.storage) {
           const est = await navigator.storage.estimate();
@@ -101,6 +91,13 @@ class c2FmZQClient {
    */
   async saveVars_() {
     return this.#store.set('vars', this.vars_);
+  }
+
+  async clearVars_() {
+    this.vars_ = {};
+    await this.saveVars_();
+    return this.#store.keys()
+      .then(keys => Promise.all(keys.map(k => this.#store.del(k))));
   }
 
   /*
@@ -676,7 +673,11 @@ class c2FmZQClient {
     if (resp.status !== 'ok') {
       throw resp.status;
     }
-    return this.logout(clientId);
+    this.resetDB_();
+    await this.clearVars_();
+    await this.#store.clear();
+    await this.deleteCache_();
+    this.#sw.sendLoggedOut();
   }
 
   async makeKeyBundle_(password, pk, sk) {
@@ -726,11 +727,10 @@ class c2FmZQClient {
       .then(() => console.log('SW logged out'))
       .catch(console.error)
       .finally(async () => {
-        this.vars_ = {};
         this.resetDB_();
+        await this.clearVars_();
         await this.#store.clear();
         await this.deleteCache_();
-        this.loadVars_();
         console.log('SW internal data cleared');
       });
   }

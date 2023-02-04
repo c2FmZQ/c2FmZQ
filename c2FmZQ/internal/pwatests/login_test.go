@@ -22,7 +22,6 @@ package pwa_test
 
 import (
 	"testing"
-	"time"
 
 	"github.com/tebeka/selenium"
 )
@@ -31,19 +30,11 @@ func TestRegisterRecoverLogin(t *testing.T) {
 	wd, stop := startServer(t)
 	defer stop()
 
-	t.Log("Setting passphrase")
-	wd.sendKeys("#passphrase-input", "hello\n")
-
-	t.Log("Creating new account")
-	wd.click("#register-tab")
-	wd.sendKeys("#email-input", "test@c2fmzq.org")
-	wd.sendKeys("#password-input", "foobar")
-	wd.sendKeys("#password-input2", "foobar")
-	wd.click("#login-button")
-	wd.waitFor("#gallery")
+	wd.setPassphrase("hello")
+	wd.createAccount("test@c2fmzq.org", "foobar")
 
 	t.Log("Getting backup phrase")
-	wd.click("#loggedin-account")
+	wd.click("#account-button")
 	wd.click("#account-menu-key-backup")
 	wd.click("#backup-phrase-show-button")
 	wd.sendKeys(".prompt-input", "foobar\n")
@@ -60,11 +51,9 @@ func TestRegisterRecoverLogin(t *testing.T) {
 	})
 	wd.click(".popup-close")
 
-	t.Log("Logging out")
-	wd.click("#loggedin-account")
-	wd.click("#account-menu-logout")
+	wd.logout()
 
-	wd.sleep(2 * time.Second)
+	wd.setPassphrase("hello")
 
 	t.Log("Recovering account")
 	wd.click("#recover-tab")
@@ -75,11 +64,9 @@ func TestRegisterRecoverLogin(t *testing.T) {
 	wd.click("#login-button")
 	wd.waitFor("#gallery")
 
-	t.Log("Logging out")
-	wd.click("#loggedin-account")
-	wd.click("#account-menu-logout")
+	wd.logout()
 
-	wd.sleep(2 * time.Second)
+	wd.setPassphrase("hello")
 
 	t.Log("Logging in")
 	wd.click("#login-tab")
@@ -95,22 +82,20 @@ func TestNoBackupKeys(t *testing.T) {
 	wd, stop := startServer(t)
 	defer stop()
 
-	t.Log("Setting passphrase")
-	wd.sendKeys("#passphrase-input", "hello\n")
-
+	wd.setPassphrase("hello")
 	t.Log("Creating new account")
 	wd.click("#register-tab")
 	wd.sendKeys("#email-input", "test@c2fmzq.org")
 	wd.sendKeys("#password-input", "foobar")
 	wd.sendKeys("#password-input2", "foobar")
-	wd.click("#backup-keys-checkbox")
+	wd.click("#backup-keys-checkbox") // <==
 	wd.click("#login-button")
 	wd.waitFor("#gallery")
 
 	wd.waitPopupMessage("Your secret key is NOT backed up. You will need a backup phrase next time you login.")
 
 	t.Log("Getting backup phrase")
-	wd.click("#loggedin-account")
+	wd.click("#account-button")
 	wd.click("#account-menu-key-backup")
 	wd.click("#backup-phrase-show-button")
 	wd.sendKeys(".prompt-input", "foobar\n")
@@ -127,11 +112,9 @@ func TestNoBackupKeys(t *testing.T) {
 	})
 	wd.click(".popup-close")
 
-	t.Log("Logging out")
-	wd.click("#loggedin-account")
-	wd.click("#account-menu-logout")
+	wd.logout()
 
-	wd.sleep(2 * time.Second)
+	wd.setPassphrase("hello")
 
 	t.Log("Logging in")
 	wd.click("#login-tab")
@@ -144,7 +127,7 @@ func TestNoBackupKeys(t *testing.T) {
 	wd.waitFor("#gallery")
 
 	t.Log("Enable key backup")
-	wd.click("#loggedin-account")
+	wd.click("#account-button")
 	wd.click("#account-menu-key-backup")
 	wd.click("#choose-key-backup-yes")
 	wd.sendKeys(".prompt-input", "foobar\n")
@@ -152,11 +135,9 @@ func TestNoBackupKeys(t *testing.T) {
 	wd.waitPopupMessage("Enabled")
 	wd.click(".popup-close")
 
-	t.Log("Logging out")
-	wd.click("#loggedin-account")
-	wd.click("#account-menu-logout")
+	wd.logout()
 
-	wd.sleep(2 * time.Second)
+	wd.setPassphrase("hello")
 
 	t.Log("Logging in")
 	wd.click("#login-tab")

@@ -1,5 +1,4 @@
-//
-// Copyright 2021-2022 TTBT Enterprises LLC
+// Copyright 2021-2023 TTBT Enterprises LLC
 //
 // This file is part of c2FmZQ (https://c2FmZQ.org/).
 //
@@ -24,28 +23,42 @@ import (
 	"testing"
 )
 
-func TestDeleteAccount(t *testing.T) {
+func TestLock(t *testing.T) {
 	wd, stop := startServer(t)
 	defer stop()
 
-	wd.setPassphrase("hello");
+	wd.setPassphrase("hello")
 	wd.createAccount("test@c2fmzq.org", "foobar")
 
-	t.Log("Deleting account")
 	wd.click("#account-button")
-	wd.click("#account-menu-profile")
-	wd.click("#profile-form-delete-button")
-	wd.sendKeys(".prompt-input", "foobar\n")
-	wd.click(".prompt-confirm-button")
+	wd.click("#account-menu-lock")
 
-	wd.setPassphrase("hello");
+	wd.sendKeys("#passphrase-input", "hullo\n")
+	wd.waitPopupMessage("Wrong passphrase")
 
+	wd.sendKeys("#passphrase-input", "hello\n")
+	wd.waitFor("#gallery")
+
+	t.Log("Done")
+}
+
+func TestChangePassphrase(t *testing.T) {
+	wd, stop := startServer(t)
+	defer stop()
+
+	wd.setPassphrase("hello")
+	wd.createAccount("test@c2fmzq.org", "foobar")
+
+	wd.logout()
+
+	wd.setPassphrase("hullo")
+
+	t.Log("Login")
 	wd.click("#login-tab")
 	wd.sendKeys("#email-input", "test@c2fmzq.org")
 	wd.sendKeys("#password-input", "foobar")
 	wd.click("#login-button")
-
-	wd.waitPopupMessage("Login failed", "Invalid credentials")
+	wd.waitFor("#gallery")
 
 	t.Log("Done")
 }

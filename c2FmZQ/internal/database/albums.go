@@ -289,6 +289,10 @@ func (d *Database) AlbumUpdates(user User, ts int64) ([]stingle.Album, error) {
 			log.Errorf("d.FileSet(%q, %q, %q) failed: %v", user.Email, stingle.AlbumSet, v.AlbumID, err)
 			continue
 		}
+		if fs.Album == nil {
+			log.Errorf("d.FileSet(%q, %q, %q) has Album == nil", user.Email, stingle.AlbumSet, v.AlbumID)
+			continue
+		}
 		if fs.Album.DateModified > ts {
 			sa := convertAlbumSpecToStingleAlbum(fs.Album)
 			if fs.Album.OwnerID != user.UserID {

@@ -35,16 +35,8 @@ func TestCreateDeleteAlbum(t *testing.T) {
 	wd, stop := startServer(t)
 	defer stop()
 
-	t.Log("Setting passphrase")
-	wd.sendKeys("#passphrase-input", "hello\n")
-
-	t.Log("Creating new account")
-	wd.click("#register-tab")
-	wd.sendKeys("#email-input", "test@c2fmzq.org")
-	wd.sendKeys("#password-input", "foobar")
-	wd.sendKeys("#password-input2", "foobar")
-	wd.click("#login-button")
-	wd.waitFor("#gallery")
+	wd.setPassphrase("hello")
+	wd.createAccount("test@c2fmzq.org", "foobar")
 
 	t.Log("Create collection")
 	wd.click("#add-button")
@@ -52,7 +44,6 @@ func TestCreateDeleteAlbum(t *testing.T) {
 	wd.sendKeys("#collection-properties-name", "my pix")
 	wd.click("#collection-properties-apply-button")
 
-	wd.sleep(2 * time.Second) // for refresh
 	wd.waitText(".collectionThumbLabel", "my pix")
 
 	wd.click("#settings-button")
@@ -75,8 +66,7 @@ func TestSharing(t *testing.T) {
 		t.Fatalf("bob.CreateAccount: %v", err)
 	}
 
-	t.Log("Setting passphrase")
-	wd.sendKeys("#passphrase-input", "hello\n")
+	wd.setPassphrase("hello")
 
 	t.Log("Logging in")
 	wd.click("#login-tab")
@@ -97,8 +87,6 @@ func TestSharing(t *testing.T) {
 	wd.click("#collection-properties-perm-share")
 	wd.click("#collection-properties-apply-button")
 
-	wd.sleep(2 * time.Second) // for refresh
-
 	dir := t.TempDir()
 	b, err := pwa.FS.ReadFile("c2.png")
 	if err != nil {
@@ -118,7 +106,6 @@ func TestSharing(t *testing.T) {
 	}
 
 	wd.click("#refresh-button")
-	wd.sleep(2 * time.Second) // for refresh
 
 	wd.click("#collections>div:nth-child(1)")
 	wd.rightClick(".thumbdiv")
@@ -159,7 +146,7 @@ func TestSharing(t *testing.T) {
 	wd.click("#collection-properties-perm-share")
 	wd.click("#collection-properties-apply-button")
 
-	wd.sleep(2 * time.Second) // for refresh
+	wd.sleep(5 * time.Second)
 
 	if err := bob.GetUpdates(true); err != nil {
 		t.Fatalf("bob.GetUpdates: %v", err)
@@ -183,7 +170,7 @@ func TestSharing(t *testing.T) {
 	wd.click("#collection-properties-shared")
 	wd.click("#collection-properties-apply-button")
 
-	wd.sleep(2 * time.Second) // for refresh
+	wd.sleep(5 * time.Second)
 
 	if err := bob.GetUpdates(true); err != nil {
 		t.Fatalf("bob.GetUpdates: %v", err)

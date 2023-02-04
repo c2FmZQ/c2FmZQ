@@ -32,7 +32,11 @@ class Store {
     this.store = null;
     this.storep = null;
     this.pp = null;
-    this.name = name || 'c2FmZQ';
+    this.name = name || null;
+  }
+
+  locked() {
+    return !this.pp || !this.pp();
   }
 
   passphrase() {
@@ -41,6 +45,10 @@ class Store {
 
   setPassphrase(pp) {
     this.pp = () => pp;
+  }
+
+  setName(name) {
+    this.name = name;
   }
 
   async open(storeKey) {
@@ -61,7 +69,10 @@ class Store {
         const key = storeKey || this.passphrase();
         if (!key) {
           this.storep = null;
-          return reject(false);
+          return reject(new Error('locked'));
+        }
+        if (this.name === null) {
+          this.name = key.substring(0, 5);
         }
         store = new SecureStore.Store(this.name, key);
         if (DEBUG) console.log(`SW store init`);
@@ -110,6 +121,10 @@ class Store {
     //if (DEBUG) console.log(`SW Store.get(${key})`);
     return this.open()
       .then(() => this.store.get(key))
+      .catch(err => {
+        console.log('SW store.get', err);
+        return null;
+      })
       .finally(() => this.release());
   }
 
@@ -117,6 +132,10 @@ class Store {
     //if (DEBUG) console.log(`SW Store.set(${key}, ...)`);
     return this.open()
       .then(() => this.store.set(key, value))
+      .catch(err => {
+        console.log('SW store.set', err);
+        return null;
+      })
       .finally(() => this.release());
   }
 
@@ -124,6 +143,10 @@ class Store {
     //if (DEBUG) console.log(`SW Store.del(${key})`);
     return this.open()
       .then(() => this.store.del(key))
+      .catch(err => {
+        console.log('SW store.del', err);
+        return null;
+      })
       .finally(() => this.release());
   }
 
@@ -131,6 +154,10 @@ class Store {
     if (DEBUG) console.log(`SW Store.clear()`);
     return this.open()
       .then(() => this.store.clear())
+      .catch(err => {
+        console.log('SW store.clear', err);
+        return null;
+      })
       .finally(() => this.release());
   }
 
@@ -138,6 +165,10 @@ class Store {
     if (DEBUG) console.log(`SW Store.destroy()`);
     return this.open()
       .then(() => this.store.destroy())
+      .catch(err => {
+        console.log('SW store.destroy', err);
+        return null;
+      })
       .finally(() => this.release());
   }
 
@@ -145,6 +176,10 @@ class Store {
     if (DEBUG) console.log(`SW Store.keys()`);
     return this.open()
       .then(() => this.store.keys())
+      .catch(err => {
+        console.log('SW store.keys', err);
+        return [];
+      })
       .finally(() => this.release());
   }
 }

@@ -35,19 +35,11 @@ func TestMFAWithSecurityKey(t *testing.T) {
 
 	wd.enableWebauthn()
 
-	t.Log("Setting passphrase")
-	wd.sendKeys("#passphrase-input", "hello\n")
-
-	t.Log("Creating new account")
-	wd.click("#register-tab")
-	wd.sendKeys("#email-input", "test@c2fmzq.org")
-	wd.sendKeys("#password-input", "foobar")
-	wd.sendKeys("#password-input2", "foobar")
-	wd.click("#login-button")
-	wd.waitFor("#gallery")
+	wd.setPassphrase("hello");
+	wd.createAccount("test@c2fmzq.org", "foobar")
 
 	t.Log("Adding security key")
-	wd.click("#loggedin-account")
+	wd.click("#account-button")
 	wd.click("#account-menu-profile")
 	wd.click("#profile-form-enable-mfa")
 	wd.click("#profile-form-add-security-key-button")
@@ -66,13 +58,11 @@ func TestMFAWithSecurityKey(t *testing.T) {
 	wd.click(".prompt-confirm-button")
 	wd.waitPopupMessage("MFA enabled")
 
-	t.Log("Logging out")
-	wd.click("#loggedin-account")
-	wd.click("#account-menu-logout")
+	wd.logout()
+
+	wd.setPassphrase("hello");
 
 	t.Log("Logging in")
-	wd.waitFor("#loggedout-div")
-	wd.sleep(2 * time.Second)
 
 	wd.click("#login-tab")
 	wd.sendKeys("#email-input", "test@c2fmzq.org")
@@ -81,7 +71,7 @@ func TestMFAWithSecurityKey(t *testing.T) {
 	wd.waitFor("#gallery")
 
 	t.Log("Getting backup phrase")
-	wd.click("#loggedin-account")
+	wd.click("#account-button")
 	wd.click("#account-menu-key-backup")
 	wd.click("#backup-phrase-show-button")
 	wd.sendKeys(".prompt-input", "foobar\n")
@@ -98,10 +88,9 @@ func TestMFAWithSecurityKey(t *testing.T) {
 	})
 	wd.click(".popup-close")
 
-	t.Log("Logging out")
-	wd.click("#loggedin-account")
-	wd.click("#account-menu-logout")
-	wd.sleep(2 * time.Second)
+	wd.logout()
+
+	wd.setPassphrase("hello");
 
 	t.Log("Recovering account")
 	wd.click("#recover-tab")
@@ -114,10 +103,9 @@ func TestMFAWithSecurityKey(t *testing.T) {
 
 	wd.disableWebauthn()
 
-	t.Log("Logging out")
-	wd.click("#loggedin-account")
-	wd.click("#account-menu-logout")
-	wd.sleep(2 * time.Second)
+	wd.logout()
+
+	wd.setPassphrase("hello");
 
 	t.Log("Recovering account without webauthn")
 	wd.click("#recover-tab")
@@ -139,19 +127,11 @@ func TestMFAWithPasskey(t *testing.T) {
 
 	wd.enableWebauthn()
 
-	t.Log("Setting passphrase")
-	wd.sendKeys("#passphrase-input", "hello\n")
-
-	t.Log("Creating new account")
-	wd.click("#register-tab")
-	wd.sendKeys("#email-input", "test@c2fmzq.org")
-	wd.sendKeys("#password-input", "foobar")
-	wd.sendKeys("#password-input2", "foobar")
-	wd.click("#login-button")
-	wd.waitFor("#gallery")
+	wd.setPassphrase("hello");
+	wd.createAccount("test@c2fmzq.org", "foobar")
 
 	t.Log("Adding passkey")
-	wd.click("#loggedin-account")
+	wd.click("#account-button")
 	wd.click("#account-menu-profile")
 	wd.click("#profile-form-enable-mfa")
 	wd.click("#profile-form-enable-passkey")
@@ -171,14 +151,11 @@ func TestMFAWithPasskey(t *testing.T) {
 	wd.click(".prompt-confirm-button")
 	wd.waitPopupMessage("MFA enabled")
 
-	t.Log("Logging out")
-	wd.click("#loggedin-account")
-	wd.click("#account-menu-logout")
+	wd.logout()
+
+	wd.setPassphrase("hello");
 
 	t.Log("Logging in")
-	wd.waitFor("#loggedout-div")
-	wd.sleep(2 * time.Second)
-
 	wd.click("#login-tab")
 	wd.sendKeys("#email-input", "test@c2fmzq.org")
 	wd.sendKeys("#password-input", "foobar")
@@ -186,7 +163,7 @@ func TestMFAWithPasskey(t *testing.T) {
 	wd.waitFor("#gallery")
 
 	t.Log("Getting backup phrase")
-	wd.click("#loggedin-account")
+	wd.click("#account-button")
 	wd.click("#account-menu-key-backup")
 	wd.click("#backup-phrase-show-button")
 	wd.sendKeys(".prompt-input", "foobar\n")
@@ -203,10 +180,9 @@ func TestMFAWithPasskey(t *testing.T) {
 	})
 	wd.click(".popup-close")
 
-	t.Log("Logging out")
-	wd.click("#loggedin-account")
-	wd.click("#account-menu-logout")
-	wd.sleep(2 * time.Second)
+	wd.logout()
+
+	wd.setPassphrase("hello");
 
 	t.Log("Recovering account")
 	wd.click("#recover-tab")
@@ -219,10 +195,9 @@ func TestMFAWithPasskey(t *testing.T) {
 
 	wd.disableWebauthn()
 
-	t.Log("Logging out")
-	wd.click("#loggedin-account")
-	wd.click("#account-menu-logout")
-	wd.sleep(2 * time.Second)
+	wd.logout()
+
+	wd.setPassphrase("hello");
 
 	t.Log("Recovering account without webauthn")
 	wd.click("#recover-tab")
@@ -242,19 +217,11 @@ func TestMFAWithOTP(t *testing.T) {
 	wd, stop := startServer(t)
 	defer stop()
 
-	t.Log("Setting passphrase")
-	wd.sendKeys("#passphrase-input", "hello\n")
-
-	t.Log("Creating new account")
-	wd.click("#register-tab")
-	wd.sendKeys("#email-input", "test@c2fmzq.org")
-	wd.sendKeys("#password-input", "foobar")
-	wd.sendKeys("#password-input2", "foobar")
-	wd.click("#login-button")
-	wd.waitFor("#gallery")
+	wd.setPassphrase("hello");
+	wd.createAccount("test@c2fmzq.org", "foobar")
 
 	t.Log("Adding OTP")
-	wd.click("#loggedin-account")
+	wd.click("#account-button")
 	wd.click("#account-menu-profile")
 	wd.click("#profile-form-enable-mfa")
 	wd.click("#profile-form-enable-otp")
@@ -279,14 +246,11 @@ func TestMFAWithOTP(t *testing.T) {
 	wd.click(".prompt-confirm-button")
 	wd.waitPopupMessage("MFA enabled", "OTP enabled")
 
-	t.Log("Logging out")
-	wd.click("#loggedin-account")
-	wd.click("#account-menu-logout")
+	wd.logout()
+
+	wd.setPassphrase("hello");
 
 	t.Log("Logging in")
-	wd.waitFor("#loggedout-div")
-	wd.sleep(2 * time.Second)
-
 	wd.click("#login-tab")
 	wd.sendKeys("#email-input", "test@c2fmzq.org")
 	wd.sendKeys("#password-input", "foobar")
@@ -296,7 +260,7 @@ func TestMFAWithOTP(t *testing.T) {
 	wd.waitFor("#gallery")
 
 	t.Log("Turn off OTP and MFA")
-	wd.click("#loggedin-account")
+	wd.click("#account-button")
 	wd.click("#account-menu-profile")
 	wd.click("#profile-form-enable-otp")
 	wd.click("#profile-form-enable-mfa")

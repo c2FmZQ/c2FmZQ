@@ -39,16 +39,23 @@ c2FmZQ. If not, see <https://www.gnu.org/licenses/>.
 <body>
 
 <div id="passphrase-div" class="hidden" role="form">
-  <p>Enter a passphrase to protect data stored locally on your browser.</p>
-  <p>This is <em>not</em> your account password.</p>
-  <input id="passphrase-input" type="password" name="passphrase" size="30" autocomplete="new-password">
+  <div id="passphrase-text"></div>
+  <div id="passphrase-form">
+  <form>
+  <label id="passphrase-input-label" for="passphrase-input" style="grid-column: 1">Passphrase:</label><input id="passphrase-input" style="grid-column: 2" type="password" autocomplete="off">
+  <label id="passphrase-input2-label" for="passphrase-input2" style="grid-column: 1;">Retype passphrase:</label><input id="passphrase-input2" style="grid-column: 2" type="password" autocomplete="off">
+  <div id="passphrase-buttons">
   <button id="set-passphrase-button">Set</button>
   <button id="show-passphrase-button">Show</button>
   <button id="skip-passphrase-button">Skip</button>
+  </div>
+  </form>
+  </div>
 </div>
 <div id="loggedout-div" class="hidden">
   <div id="tabs" class="tabs" role="tablist"><span id="login-tab" class="tab select" tabindex="0" role="tab">Login</span><span id="register-tab" class="tab" tabindex="0" role="tab">Register</span><span id="recover-tab" class="tab" tabindex="0" role="tab">Recover</span></div>
   <div id="login-form" role="form">
+  <form>
   <label for="email" style="grid-column: 1">Email:</label> <input id="email-input" style="grid-column: 2" type="email" name="email" size="10">
   <label id="password-input-label" for="password" style="grid-column: 1">Password:</label><input id="password-input" style="grid-column: 2" type="password" name="password" size="10">
   <label id="password-input2-label" for="password2" style="grid-column: 1; display: none;">Retype password:</label><input id="password-input2" style="grid-column: 2; display: none;" type="password" name="password2" size="10">
@@ -56,6 +63,7 @@ c2FmZQ. If not, see <https://www.gnu.org/licenses/>.
   <label id="backup-keys-checkbox-label" for="backup-keys-checkbox" style="grid-column: 1; display: none;">Backup keys?</label><input id="backup-keys-checkbox" style="grid-column: 2; display: none;" name="backup-keys-checkbox" type="checkbox" checked="true">
   <label id="server-label" for="server" style="grid-column: 1; display: none;">Server:</label><input id="server-input" style="grid-column: 2; display: none;" type="text" name="server" size="30" placeholder="https://...">
   <button id="login-button" style="grid-column: 1 / 3" type="button">Login</button>
+  </form>
   </div>
 </div>
 <div id="loggedin-div" class="hidden">
@@ -63,7 +71,7 @@ c2FmZQ. If not, see <https://www.gnu.org/licenses/>.
     <span id="quota"></span>
     <button id="trash-button">🗑</button>
     <button id="refresh-button">⟳</button>
-    <button id="loggedin-account">👤 ▼</button>
+    <button id="account-button">👤 ▼</button>
   </div>
   <header>
   <nav id="collections"></nav>

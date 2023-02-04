@@ -54,8 +54,7 @@ func TestEdit(t *testing.T) {
 		t.Fatalf("Sync: %v", err)
 	}
 
-	t.Log("Setting passphrase")
-	wd.sendKeys("#passphrase-input", "hello\n")
+	wd.setPassphrase("hello");
 
 	t.Log("Logging in")
 	wd.click("#login-tab")

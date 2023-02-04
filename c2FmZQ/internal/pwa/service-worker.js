@@ -86,20 +86,37 @@ class ServiceWorker {
     self.addEventListener('push', event => sw.#onpush(event));
     self.addEventListener('pushsubscriptionchange', event => sw.#onpushsubscriptionchange(event));
     self.addEventListener('fetch', event => sw.#onfetch(event));
-    (async () => sw.#initApp(null))();
+    if ('connection' in navigator) {
+      sw.#state.currentNetworkType = navigator.connection.type;
+      navigator.connection.addEventListener('change', event => {
+        if (sw.#state.currentNetworkType !== navigator.connection.type) {
+          console.log(`SW network changed ${sw.currentNetworkType_} -> ${navigator.connection.type}`);
+          sw.#state.currentNetworkType = navigator.connection.type;
+          if (sw.#app) {
+            sw.#app.onNetworkChange(event);
+          }
+        }
+      });
+    }
+    sw.#sendHello();
   }
 
-  async #initApp(storeKey, capabilities) {
+  async #initApp(storeKey, capabilities, reset) {
     const p = new Promise(async (resolve, reject) => {
-      if (this.#store.passphrase() || !storeKey) {
-        this.#sendHello();
+      const dbName = storeKey.substring(0, 5);
+      const dbList = await self.indexedDB.databases().then(list => list.filter(item => item.name !== 'notifications').map(item => item.name));
+      console.log(`SW dbName ${dbName} ${JSON.stringify(dbList)}`);
+      if (!reset && dbList.length && !dbList.includes(dbName)) {
+        console.log('SW Wrong passphrase');
+        this.#sendHello('Wrong passphrase');
         return resolve();
       }
+      this.#store.setName(dbName);
       try {
         await this.#store.open(storeKey);
       } catch (err) {
         if (err.message === 'Wrong passphrase') {
-          console.log('SW Wrong passphrase');
+          console.log('SW Wrong passphrase:');
           this.#sendHello(err.message);
           return resolve();
         }
@@ -109,6 +126,14 @@ class ServiceWorker {
         return resolve();
       }
       this.#state.appInitialized = true;
+      dbList.filter(item => item !== dbName).forEach(name => {
+        console.log(`SW Delete database ${name}`);
+        try {
+          self.indexedDB.deleteDatabase(name);
+        } catch (err) {
+          console.log(`SW deleteDatabase(${name}):`, err);
+        }
+      });
       const app = new c2FmZQClient({
         store: this.#store,
         sw: this,
@@ -365,7 +390,18 @@ class ServiceWorker {
           console.log(`SW Version mismatch: ${event.data.version} != ${VERSION}`);
         }
         Lang.current = event.data.lang || 'en-US';
-        this.#initApp(event.data.storeKey, event.data.capabilities);
+        if (!event.data.storeKey) {
+          this.#sendHello();
+        } else {
+          this.#initApp(event.data.storeKey, event.data.capabilities, event.data.reset);
+        }
+        break;
+      case 'lock':
+        console.log('SW Received lock');
+        this.#store.setPassphrase(null);
+        this.#app = null;
+        this.#state.appInitialized = false;
+        this.#store = new Store();
         break;
       case 'rpc':
         this.#handleRpcRequest(clientId, event);
@@ -481,18 +517,19 @@ class ServiceWorker {
       const handler = async () => {
         if (this.#app) {
           await this.#store.open();
-          return resolve(this.#app.handleFetchEvent(event));
+          return resolve(this.#app.handleFetchEvent(event).finally(() => this.#store.release()));
         }
         if (count++ > 100) {
-          this.fixme();
-          console.log(event.request);
-          return reject(new Error('timeout'));
+          if (!this.#store.locked()) {
+            this.fixme();
+            console.log(event.request);
+          }
+          return resolve(new Response('Service Unavailable', {'status': 502, 'statusText': 'Service Unavailable'}));
         }
         setTimeout(handler, 100);
       };
       handler();
-    })
-    .finally(() => this.#store.release()));
+    }));
   }
 
   fixme() {

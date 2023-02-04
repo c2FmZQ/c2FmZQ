@@ -64,6 +64,7 @@ class Main {
     if (this.salt_ === null) {
       this.salt_ = window.crypto.getRandomValues(new Uint8Array(16));
       window.localStorage.setItem('salt', this.base64RawUrlEncode(this.salt_));
+      window.localStorage.setItem('resetPassphrase', 'yes');
     }
     const sh = window.localStorage.getItem('sh');
     if (sh) {
@@ -101,7 +102,7 @@ class Main {
           ui.popupMessage(event.data.msg, 'info');
           break;
         case 'loggedout':
-          window.location.reload();
+          this.lock();
           break;
         case 'hello':
           console.log(`Received hello ${event.data.version}`);
@@ -111,6 +112,7 @@ class Main {
           if (event.data.err) {
             this.storeKey_ = null;
             ui.wrongPassphrase(event.data.err);
+            return;
           }
           if (!event.data.storeKey && this.storeKey_ !== null) {
             this.sendHello_();
@@ -121,9 +123,12 @@ class Main {
               v = `${VERSION}/${event.data.version}`;
             }
             document.getElementById('version').textContent = v + (DEVEL?' DEVEL':'');
+            window.localStorage.removeItem('resetPassphrase');
             setTimeout(ui.startUI.bind(ui));
           } else {
-            setTimeout(ui.promptForPassphrase.bind(ui));
+            setTimeout(() => {
+              ui.promptForPassphrase(window.localStorage.getItem('resetPassphrase') === 'yes');
+            });
           }
           break;
         case 'rpc-result':
@@ -184,30 +189,43 @@ class Main {
     const enc = new TextEncoder();
     const km = await window.crypto.subtle.importKey('raw', enc.encode(p), 'PBKDF2', false, ['deriveBits']);
     const bits = await window.crypto.subtle.deriveBits(
-      {'name': 'PBKDF2', salt: this.salt_, 'iterations': 200000, 'hash': 'SHA-256'}, km, 256);
+      {'name': 'PBKDF2', salt: this.salt_, 'iterations': 200000, 'hash': 'SHA-256'}, km, 512);
     const a = new Uint8Array(bits);
     const k = base64.fromByteArray(a);
     this.storeKey_ = k;
     this.sendHello_();
   }
 
-  resetServiceWorker() {
+  async lock() {
+    if (!window.localStorage.getItem('_')) {
+      this.storeKey_ = null;
+      navigator.serviceWorker.controller.postMessage({type: 'lock'});
+    }
+    setTimeout(() => {
+      window.location.reload();
+    }, 25);
+  }
+
+  resetPassphrase() {
+    window.localStorage.setItem('resetPassphrase', 'yes');
+  }
+
+  async resetServiceWorker() {
     console.log('resetServiceWorker', this.fixing_);
     if (this.fixing_) {
       return;
     }
     this.fixing_ = true;
-    navigator.serviceWorker.ready
-    .then(r => r.unregister())
-    .then(() => {
-      window.localStorage.clear();
-      let req = window.indexedDB.deleteDatabase('c2FmZQ');
-      req.onsuccess = () => console.log('DB deleted');
-      req.onerror = () => console.error('DB deletion failed');
-      window.requestAnimationFrame(() => {
-        window.location.reload();
+    return navigator.serviceWorker.ready
+      .then(r => r.unregister())
+      .then(() => {
+        window.localStorage.clear();
+        window.indexedDB.databases().then(list => Promise.all(list.map(item => window.indexedDB.deleteDatabase(item.name))));
+        return new Promise((resolve, reject) => {
+          window.setTimeout(resolve, 5000);
+        })
+        .then(() => window.location.reload());
       });
-    });
   }
 
   setServerFingerPrint(elemId) {
@@ -418,13 +436,23 @@ class Main {
     if ('PublicKeyCredential' in window) {
       capabilities.push('mfa');
     }
-    navigator.serviceWorker.controller.postMessage({
-      type: 'hello',
-      storeKey: this.storeKey_,
-      version: VERSION,
-      lang: Lang.current,
-      capabilities: capabilities,
-    });
+    if (this.storeKey_ === null) {
+      navigator.serviceWorker.controller.postMessage({
+        type: 'hello',
+        version: VERSION,
+        lang: Lang.current,
+        capabilities: capabilities,
+      });
+    } else {
+      navigator.serviceWorker.controller.postMessage({
+        type: 'hello',
+        storeKey: this.storeKey_,
+        version: VERSION,
+        lang: Lang.current,
+        capabilities: capabilities,
+        reset: window.localStorage.getItem('resetPassphrase') === 'yes',
+      });
+    }
   }
 
   async sendRPC(f, ...args) {

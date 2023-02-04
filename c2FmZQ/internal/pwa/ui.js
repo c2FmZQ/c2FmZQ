@@ -37,6 +37,9 @@ class UI {
       shown: SHOW_ITEMS_INCREMENT,
       EL: new EventListeners(),
     };
+    if (localStorage.getItem('_')) {
+      this.skippedPassphrase_ = true;
+    }
     this.enableNotifications = localStorage.getItem('enableNotifications') === 'yes';
 
     _T = Lang.text;
@@ -55,9 +58,14 @@ class UI {
 
     this.title_ = document.querySelector('title');
     this.passphraseInput_ = document.querySelector('#passphrase-input');
+    this.passphraseInputLabel_ = document.querySelector('#passphrase-input-label');
+    this.passphraseInput2_ = document.querySelector('#passphrase-input2');
+    this.passphraseInput2Label_ = document.querySelector('#passphrase-input2-label');
     this.setPassphraseButton_ = document.querySelector('#set-passphrase-button');
     this.showPassphraseButton_ = document.querySelector('#show-passphrase-button');
+    this.showPassphraseButton_.textContent = _T('show');
     this.skipPassphraseButton_ = document.querySelector('#skip-passphrase-button');
+    this.skipPassphraseButton_.textContent = _T('skip-passphrase');
     this.resetDbButton_ = document.querySelector('#resetdb-button');
 
     this.emailInput_ = document.querySelector('#email-input');
@@ -74,8 +82,13 @@ class UI {
     this.loginButton_ = document.querySelector('#login-button');
     this.refreshButton_ = document.querySelector('#refresh-button');
     this.trashButton_ = document.querySelector('#trash-button');
-    this.loggedInAccount_ = document.querySelector('#loggedin-account');
+    this.accountButton_ = document.querySelector('#account-button');
 
+    document.querySelectorAll('form').forEach(e => {
+      e.addEventListener('submit', event => {
+        event.preventDefault();
+      });
+    });
     document.querySelector('title').textContent = _T('login');
     document.querySelector('#login-tab').textContent = _T('login');
     document.querySelector('#register-tab').textContent = _T('register');
@@ -88,18 +101,23 @@ class UI {
     document.querySelector('label[for=server]').textContent = _T('form-server');
     document.querySelector('#login-button').textContent = _T('login');
 
-    this.passphraseInput_.addEventListener('keydown', e => {
-      if (e.key === 'Enter') {
-        this.setPassphrase_();
+    this.setPassphraseButton_.addEventListener('click', () => {
+      if (this.passphraseInput_.value !== this.passphraseInput2_.value && this.passphraseInput2_.style.display !== 'none') {
+        if (this.passphraseInput2_.value !== '') {
+          this.popupMessage(_T('new-pass-doesnt-match'), 'error', {role:'alert'});
+        }
+        return;
       }
+      this.setPassphrase_();
     });
-    this.setPassphraseButton_.addEventListener('click', this.setPassphrase_.bind(this));
     this.showPassphraseButton_.addEventListener('click', () => {
       if (this.passphraseInput_.type === 'text') {
         this.passphraseInput_.type = 'password';
+        this.passphraseInput2_.type = 'password';
         this.showPassphraseButton_.textContent = _T('show');
       } else {
         this.passphraseInput_.type = 'text';
+        this.passphraseInput2_.type = 'text';
         this.showPassphraseButton_.textContent = _T('hide');
       }
     });
@@ -108,6 +126,7 @@ class UI {
       .then(() => {
         const passphrase = btoa(String.fromCharCode(...window.crypto.getRandomValues(new Uint8Array(64))));
         localStorage.setItem('_', passphrase);
+        this.skippedPassphrase_ = true;
         this.passphraseInput_.value = passphrase;
         this.setPassphrase_();
       })
@@ -115,7 +134,11 @@ class UI {
         console.log(err);
       });
     });
-    this.resetDbButton_.addEventListener('click', main.resetServiceWorker.bind(main));
+    this.resetDbButton_.addEventListener('click', () => {
+      main.resetPassphrase();
+      this.resetDbButton_.className = 'hidden';
+      window.location.reload();
+    });
   }
 
   async loadFilerobot_() {
@@ -140,17 +163,25 @@ class UI {
     return this.fieLoaded_;
   }
 
-  promptForPassphrase() {
+  promptForPassphrase(reset) {
     const p = localStorage.getItem('_');
     if (p) {
       this.passphraseInput_.value = p;
+      this.passphraseInput2_.value = p;
       this.setPassphrase_();
       return;
     }
+    document.querySelector('#passphrase-text').innerHTML = reset ? _T('enter-passphrase-text') : _T('reenter-passphrase-text');
     this.promptingForPassphrase_ = true;
-    this.setPassphraseButton_.textContent = 'Set';
+    this.setPassphraseButton_.textContent = _T('set-passphrase');
     this.setPassphraseButton_.disabled = false;
     this.passphraseInput_.disabled = false;
+
+    this.passphraseInput2_.disabled = false;
+    this.passphraseInput2_.style.display = reset ? 'block' : 'none';
+    this.passphraseInput2Label_.style.display = reset ? 'block' : 'none';
+    this.skipPassphraseButton_.style.display = reset ? 'inline-block' : 'none';
+    this.passphraseInput_.focus();
     this.showPassphraseBox_();
   }
 
@@ -172,17 +203,26 @@ class UI {
     });
   }
 
-  setPassphrase_() {
+  setPassphrase_(reset) {
     if (!this.passphraseInput_.value) {
       return;
     }
     this.promptingForPassphrase_ = false;
-    this.setPassphraseButton_.textContent = 'Setting';
+    this.setPassphraseButton_.textContent = _T('setting-passphrase');
     this.setPassphraseButton_.disabled = true;
     this.passphraseInput_.disabled = true;
+    this.passphraseInput2_.disabled = true;
+    this.resetDbButton_.className = 'hidden';
 
-    main.setPassphrase(this.passphraseInput_.value);
-    this.passphraseInput_.value = '';
+    main.setPassphrase(this.passphraseInput_.value)
+      .finally(() => {
+        this.passphraseInput_.value = '';
+        this.passphraseInput2_.value = '';
+        this.setPassphraseButton_.textContent = _T('set-passphrase');
+        this.setPassphraseButton_.disabled = false;
+        this.passphraseInput_.disabled = false;
+        this.passphraseInput2_.disabled = false;
+      });
 
     setTimeout(() => {
       if (!this.uiStarted_ && !this.promptingForPassphrase_) {
@@ -192,10 +232,8 @@ class UI {
   }
 
   wrongPassphrase(err) {
-    if (localStorage.getItem('_')) {
-      main.resetServiceWorker();
-      return;
-    }
+    console.log('Received wrong passphrase error');
+    localStorage.removeItem('_');
     this.resetDbButton_.className = 'resetdb-button';
     this.popupMessage(err);
   }
@@ -305,11 +343,11 @@ class UI {
     this.serverInput_.addEventListener('change', () => {
       this.serverHash_(this.serverInput_.value, false);
     });
-    this.loggedInAccount_.addEventListener('click', this.showAccountMenu_.bind(this));
-    this.loggedInAccount_.addEventListener('contextmenu', this.showAccountMenu_.bind(this));
-    this.loggedInAccount_.textContent = _T('account');
-    this.loggedInAccount_.title = _T('account-title');
-    this.loggedInAccount_.setAttribute('aria-label', _T('account-title'));
+    this.accountButton_.addEventListener('click', this.showAccountMenu_.bind(this));
+    this.accountButton_.addEventListener('contextmenu', this.showAccountMenu_.bind(this));
+    this.accountButton_.textContent = _T('account');
+    this.accountButton_.title = _T('account-title');
+    this.accountButton_.setAttribute('aria-label', _T('account-title'));
 
     const tabClick = event => {
       for (let tab of Object.values(this.tabs_)) {
@@ -447,6 +485,14 @@ class UI {
         text: _T('admin-console'),
         onclick: this.showAdminConsole_.bind(this),
         id: 'account-menu-admin',
+      });
+    }
+    if (!this.skippedPassphrase_) {
+      params.items.push({});
+      params.items.push({
+        text: _T('lock'),
+        onclick: () => main.lock(),
+        id: 'account-menu-lock',
       });
     }
     params.items.push({});
@@ -692,8 +738,10 @@ class UI {
 
   async logout_() {
     return main.sendRPC('logout')
-    .then(() => {
-      this.showLoggedOut_();
+    .finally(() => {
+      window.localStorage.removeItem('_');
+      window.localStorage.removeItem('salt');
+      main.lock();
     });
   }
 
@@ -3011,7 +3059,9 @@ class UI {
       this.prompt({message: _T('confirm-delete-account'), getValue: true, password: true})
       .then(pw => main.sendRPC('deleteAccount', pw))
       .then(() => {
-        window.location.reload();
+        window.localStorage.removeItem('_');
+        window.localStorage.removeItem('salt');
+        main.lock();
       })
       .finally(() => {
         email.disabled = false;
