@@ -28,7 +28,7 @@ func TestDeleteAccount(t *testing.T) {
 	wd, stop := startServer(t)
 	defer stop()
 
-	wd.setPassphrase("hello");
+	wd.setPassphrase("hello")
 	wd.createAccount("test@c2fmzq.org", "foobar")
 
 	t.Log("Deleting account")
@@ -38,7 +38,7 @@ func TestDeleteAccount(t *testing.T) {
 	wd.sendKeys(".prompt-input", "foobar\n")
 	wd.click(".prompt-confirm-button")
 
-	wd.setPassphrase("hello");
+	wd.setPassphrase("hello")
 
 	wd.click("#login-tab")
 	wd.sendKeys("#email-input", "test@c2fmzq.org")

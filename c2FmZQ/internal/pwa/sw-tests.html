@@ -51,67 +51,15 @@ body {
 </head>
 <body>
 <script>
-function sendHello() {
-  console.log(`Sending hello ${VERSION}`);
-  if (!navigator.serviceWorker.controller) {
-    console.log('No controller');
-    return;
-  }
-
-  (async () => {
-    const p = localStorage.getItem('_') || 'foo';
-    let salt;
-    try {
-      const s = window.localStorage.getItem('salt');
-      if (s) {
-        salt = base64DecodeToBytes(s);
-      }
-    } catch (err) {
-      salt = null;
-    }
-    if (salt === null) {
-      salt = window.crypto.getRandomValues(new Uint8Array(16));
-      window.localStorage.setItem('salt', base64RawUrlEncode(salt));
-    }
-    const km = await window.crypto.subtle.importKey('raw', new TextEncoder().encode(p), 'PBKDF2', false, ['deriveBits']);
-    const bits = await window.crypto.subtle.deriveBits(
-      {'name': 'PBKDF2', salt: salt, 'iterations': 200000, 'hash': 'SHA-256'}, km, 256);
-    const a = new Uint8Array(bits);
-    const k = base64.fromByteArray(a);
-
-    navigator.serviceWorker.controller.postMessage({
-      type: 'hello',
-      storeKey: k,
-      version: VERSION,
-      lang: 'en',
-      capabilities: [],
-    });
-  })();
-}   
-navigator.serviceWorker.oncontrollerchange = () => {
-  sendHello();
-};
-
-let once = false;
 navigator.serviceWorker.onmessage = event => {
-  if (event.data?.type === 'hello') {
-    console.log(`Received hello ${event.data.version}`);
-    if (!event.data.storeKey) {
-      sendHello();
-    } else if (!once) {
-      once = true;
-      navigator.serviceWorker.controller.postMessage({type: 'run-tests'});
-    }
-  }
   if (event.data?.type === 'test-results') {
     const e = document.createElement('div');
     e.id = 'results';
     e.textContent = JSON.stringify(event.data.results);
-    const body = document.querySelector('body');
-    body.appendChild(e);
+    document.body.appendChild(e);
     const d = document.createElement('div');
     d.className = 'summary';
-    body.appendChild(d);
+    document.body.appendChild(d);
     const push = c => {
       const t = document.createElement('div');
       t.textContent = c;
@@ -128,12 +76,10 @@ navigator.serviceWorker.register('service-worker.js?tests')
   .then(r => r.update())
   .then(() => {
     console.log('Service worker updated');
+    navigator.serviceWorker.controller.postMessage({type: 'run-tests'});
   })
   .catch(err => {
     console.error('Service worker update failed', err);
-  })
-  .finally(() => {
-    sendHello();
   });
 </script>
 </body>

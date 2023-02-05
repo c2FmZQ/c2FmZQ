@@ -49,15 +49,12 @@ class CacheManager {
   async delete() {
     this.populateCacheDataPromise_ = null;
     this.maxSize_ = 0;
-    return this.store_.keys()
-      .then(keys => keys.filter(k => k.startsWith(this.storePrefix_)))
-      .then(keys => Promise.all(keys.map(k => this.store_.del(k))));
+    return this.store_.del(Store2.prefix(this.storePrefix_));
   }
 
   async selfCheck() {
     return this.populateCacheData_()
-      .then(() => this.store_.keys())
-      .then(keys => keys.filter(k => k.startsWith(this.storePrefix_)))
+      .then(() => this.store_.keys(Store2.prefix(this.storePrefix_)))
       .then(keys => Promise.all(keys.map(k => this.store_.get(k).then(v => ({key: k, value: v})))))
       .then(cachedFiles => {
         let totalSize = 0;
@@ -193,8 +190,8 @@ class CacheManager {
   }
 
   async keys() {
-    return this.store_.keys()
-      .then(keys => keys.filter(k => k.startsWith(this.storePrefix_) && k !== this.summaryKey_))
+    return this.store_.keys(Store2.prefix(this.storePrefix_))
+      .then(keys => keys.filter(k => k !== this.summaryKey_))
       .then(keys => keys.map(k => k.substring(this.storePrefix_.length)));
   }
 

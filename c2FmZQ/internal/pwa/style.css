@@ -341,6 +341,7 @@ div.row.selected>div {
   grid-auto-columns: 1fr 2fr;
   grid-auto-rows: auto;
   gap: 0.5em;
+  align-items: start;
 }
 #passphrase-buttons {
   grid-column: 1 / 3;
@@ -421,6 +422,7 @@ div.row.selected>div {
   border-radius: 8px;
   border: 2px solid black;
   justify-self: start;
+  white-space: nowrap;
 }
 .prompt-button-row:not(:hover) .prompt-confirm-button:focus {
   background-color: #aea;
@@ -434,6 +436,7 @@ div.row.selected>div {
   border-radius: 8px;
   border: 2px solid black;
   justify-self: end;
+  white-space: nowrap;
 }
 .prompt-button-row:not(:hover) .prompt-cancel-button:focus {
   background-color: #eaa;

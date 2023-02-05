@@ -128,12 +128,24 @@ class MockStore {
   }
   async del(key) {
     console.log(`store del(${JSON.stringify(key)})`);
+    if (key instanceof IDBKeyRange) {
+      this.store.forEach((v, k) => {
+        if (key.includes(k)) {
+          this.store.delete(k);
+        }
+      });
+      return;
+    }
     return this.store.delete(key);
   }
-  async keys() {
-    //console.log(`store keys()`);
+  async keys(range) {
+    console.log('store keys', range);
     const out = [];
-    this.store.forEach((v, k) => out.push(k));
+    this.store.forEach((v, k) => {
+      if (!range || range.includes(k)) {
+        out.push(k);
+      }
+    });
     return out;
   }
 }
@@ -273,10 +285,29 @@ async function testCache(t) {
   await app.cm_.delete();
 }
 
+async function testStore2(t) {
+  const st = new Store2();
+  st.setName('test');
+  st.setPassphrase('Hello world');
+
+  await st.open();
+  await st.set('test', 'value 1 2 3');
+  await st.set('arr', [0,1,2]);
+  t.eq(await st.get('test'), 'value 1 2 3');
+  t.eq(await st.get('arr'), [0,1,2]);
+  t.eq(await st.keys(), ['arr', 'test']);
+  t.eq(await st.keys(Store2.prefix('')), ['arr', 'test']);
+  t.eq(await st.keys(Store2.prefix('ar')), ['arr']);
+  t.eq(await st.keys(Store2.prefix('t')), ['test']);
+  t.eq(await st.keys(Store2.prefix('blah')), []);
+  await st.release();
+}
+
 class Helper {
   constructor() {
     this.failed = false;
     this.errors = [];
+    this.logs = [];
   }
   assert(v, m, obj) {
     if (!v) {
@@ -288,10 +319,17 @@ class Helper {
     }
   }
   eq(v1, v2, m) {
+    if (Array.isArray(v1) && Array.isArray(v2)) {
+      v1 = JSON.stringify(v1);
+      v2 = JSON.stringify(v2);
+    }
     this.assert(v1 === v2, `${m}: Expected ${v1} === ${v2}`);
   }
   is(v, cls) {
     this.assert(v instanceof cls, `Got ${v.constructor.name}, but expected object to be ${cls.name}`, v);
+  }
+  log(m) {
+    this.logs.push(m);
   }
   result() {
     if (this.failed) {
@@ -305,15 +343,15 @@ async function runTests() {
   const results = [];
   for (const t of tests) {
     console.log(`SW running test: ${t}`);
+    const h = new Helper();
     try {
-      const h = new Helper();
       await self[t](h);
       h.result();
       console.log(`${t} PASS`);
       results.push({test:t, result:'PASS'});
     } catch (err) {
       console.error(`${t} FAIL`, err);
-      results.push({test:t, result:'FAIL', err:err});
+      results.push({test:t, result:'FAIL', err:err, logs:h.logs});
     }
   }
   let pass = true;

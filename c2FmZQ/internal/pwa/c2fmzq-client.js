@@ -96,8 +96,7 @@ class c2FmZQClient {
   async clearVars_() {
     this.vars_ = {};
     await this.saveVars_();
-    return this.#store.keys()
-      .then(keys => Promise.all(keys.map(k => this.#store.del(k))));
+    return this.#store.clear();
   }
 
   /*
@@ -1043,12 +1042,6 @@ class c2FmZQClient {
     return this.#store.get(`files/${collection}/${file}`);
   }
 
-  async deletePrefix_(prefix) {
-    return this.#store.keys()
-      .then(keys => keys.filter(k => k.startsWith(prefix)))
-      .then(keys => Promise.all(keys.map(k => this.#store.del(k))));
-  }
-
   /*
    */
   async convertFileUpdate_(up, set) {
@@ -1067,10 +1060,10 @@ class c2FmZQClient {
   }
 
   async indexCollection_(collection) {
-    await this.deletePrefix_(`index/${collection}`);
+    await this.#store.del(Store2.prefix(`index/${collection}/`));
 
     const prefix = `files/${collection}/`;
-    const keys = (await this.#store.keys()).filter(k => k.startsWith(prefix));
+    const keys = await this.#store.keys(Store2.prefix(prefix));
     let out = [];
     for (let k of keys) {
       const file = k.substring(prefix.length);
@@ -1583,7 +1576,7 @@ class c2FmZQClient {
 
   async deleteCollection(clientId, collection) {
     const prefix = `files/${collection}/`;
-    const files = (await this.#store.keys()).filter(k => k.startsWith(prefix)).map(k => k.substring(prefix.length));
+    const files = (await this.#store.keys(Store2.prefix(prefix))).map(k => k.substring(prefix.length));
     if (files.length > 0) {
       await this.moveFiles(clientId, collection, 'trash', files, true);
     }
@@ -1878,7 +1871,7 @@ class c2FmZQClient {
     const wanttn = new Map();
 
     console.time('SW cache stick/unstick');
-    (await this.#store.keys()).filter(k => k.startsWith('files/')).map(k => {
+    (await this.#store.keys(Store2.prefix('files/'))).map(k => {
       const p = k.lastIndexOf('/');
       const c = k.substring(6, p);
       const f = k.substring(p+1);

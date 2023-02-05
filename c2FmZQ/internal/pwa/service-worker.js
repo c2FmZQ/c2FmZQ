@@ -34,7 +34,7 @@ let MANIFEST = [
   'index.html',
   'lang.js',
   'main.js',
-  'store.js',
+  'store2.js',
   'style.css',
   'ui.js',
   'utils.js',
@@ -51,7 +51,7 @@ if (self.location.search.includes('tests')) {
 
 self.importScripts('thirdparty/libs.js');
 self.importScripts('lang.js');
-self.importScripts('store.js');
+self.importScripts('store2.js');
 self.importScripts('utils.js');
 self.importScripts('c2fmzq-client.js');
 self.importScripts('cache-manager.js');
@@ -68,8 +68,8 @@ class ServiceWorker {
     this.#state.initp = null;
     this.#state.rpcId = Math.floor(Math.random() * 1000000000);
     this.#state.rpcWait = {};
-    this.#store = new Store();
-    this.#notifs = new Store('notifications');
+    this.#store = new Store2();
+    this.#notifs = new Store2('notifications');
     this.#notifs.setPassphrase('notifications');
   }
 
@@ -101,32 +101,32 @@ class ServiceWorker {
     sw.#sendHello();
   }
 
-  async #initApp(storeKey, capabilities, reset) {
+  async #initApp(storeKey, storeName, capabilities, reset) {
     const p = new Promise(async (resolve, reject) => {
-      const dbName = storeKey.substring(0, 5);
       const dbList = await self.indexedDB.databases().then(list => list.filter(item => item.name !== 'notifications').map(item => item.name));
-      console.log(`SW dbName ${dbName} ${JSON.stringify(dbList)}`);
-      if (!reset && dbList.length && !dbList.includes(dbName)) {
-        console.log('SW Wrong passphrase');
-        this.#sendHello('Wrong passphrase');
-        return resolve();
-      }
-      this.#store.setName(dbName);
+      console.log(`SW storeName ${storeName} ${JSON.stringify(dbList)}`);
       try {
-        await this.#store.open(storeKey);
-      } catch (err) {
-        if (err.message === 'Wrong passphrase') {
-          console.log('SW Wrong passphrase:');
-          this.#sendHello(err.message);
+        if (!reset && dbList.length && !dbList.includes(storeName)) {
+          console.log('SW Wrong passphrase (new storeName)');
+          this.#sendHello('Wrong passphrase');
           return resolve();
         }
+        this.#store.setName(storeName);
+        this.#store.setPassphrase(storeKey);
+        await this.#store.open();
+        if (!await this.#store.check()) {
+          console.log('SW Wrong passphrase');
+          this.#sendHello('Wrong passphrase');
+          return resolve();
+        }
+      } catch (err) {
         return reject(err);
       }
       if (this.#state.appInitialized) {
         return resolve();
       }
       this.#state.appInitialized = true;
-      dbList.filter(item => item !== dbName).forEach(name => {
+      dbList.filter(item => item !== storeName).forEach(name => {
         console.log(`SW Delete database ${name}`);
         try {
           self.indexedDB.deleteDatabase(name);
@@ -393,15 +393,15 @@ class ServiceWorker {
         if (!event.data.storeKey) {
           this.#sendHello();
         } else {
-          this.#initApp(event.data.storeKey, event.data.capabilities, event.data.reset);
+          this.#initApp(event.data.storeKey, event.data.storeName, event.data.capabilities, event.data.reset);
         }
         break;
       case 'lock':
         console.log('SW Received lock');
-        this.#store.setPassphrase(null);
+        this.#store.lock();
         this.#app = null;
         this.#state.appInitialized = false;
-        this.#store = new Store();
+        this.#store = new Store2();
         break;
       case 'rpc':
         this.#handleRpcRequest(clientId, event);

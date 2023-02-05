@@ -25,13 +25,15 @@ let _T;
 const SHOW_ITEMS_INCREMENT = 25;
 
 class UI {
-  constructor() {
+  #main;
+  constructor(main) {
+    this.#main = main;
     this.uiStarted_ = false;
     this.promptingForPassphrase_ = false;
     this.addingFiles_ = false;
     this.popupZindex_ = 1000;
     this.galleryState_ = {
-      collection: main.getHash('collection', 'gallery'),
+      collection: this.#main.getHash('collection', 'gallery'),
       files: [],
       lastDate: '',
       shown: SHOW_ITEMS_INCREMENT,
@@ -135,7 +137,7 @@ class UI {
       });
     });
     this.resetDbButton_.addEventListener('click', () => {
-      main.resetPassphrase();
+      this.#main.resetPassphrase();
       this.resetDbButton_.className = 'hidden';
       window.location.reload();
     });
@@ -186,12 +188,12 @@ class UI {
   }
 
   promptForBackupPhrase_() {
-    return ui.prompt({
+    return this.prompt({
       message: _T('enter-backup-phrase'),
       getValue: true,
     })
     .then(v => {
-      return main.sendRPC('restoreSecretKey', v);
+      return this.#main.sendRPC('restoreSecretKey', v);
     })
     .then(() => {
       this.refresh_();
@@ -214,7 +216,7 @@ class UI {
     this.passphraseInput2_.disabled = true;
     this.resetDbButton_.className = 'hidden';
 
-    main.setPassphrase(this.passphraseInput_.value)
+    this.#main.setPassphrase(this.passphraseInput_.value)
       .finally(() => {
         this.passphraseInput_.value = '';
         this.passphraseInput2_.value = '';
@@ -244,7 +246,7 @@ class UI {
       e = UI.create('div', {id:'server-fingerprint', role:'none'});
       document.body.appendChild(e);
     }
-    return main.calcServerFingerPrint(n, '#server-fingerprint', commit);
+    return this.#main.calcServerFingerPrint(n, '#server-fingerprint', commit);
   }
 
   startUI() {
@@ -266,7 +268,7 @@ class UI {
     window.addEventListener('scroll', this.onScroll_.bind(this));
     window.addEventListener('resize', this.onScroll_.bind(this));
     window.addEventListener('hashchange', () => {
-      const c = main.getHash('collection');
+      const c = this.#main.getHash('collection');
       if (c && this.galleryState_.collection !== c) {
         this.switchView({collection: c});
       }
@@ -420,13 +422,13 @@ class UI {
       });
     }
 
-    main.sendRPC('isLoggedIn')
+    this.#main.sendRPC('isLoggedIn')
     .then(({account, isAdmin, needKey}) => {
       if (account !== '') {
         this.accountEmail_ = account;
         this.isAdmin_ = isAdmin;
         this.showLoggedIn_();
-        main.setServerFingerPrint('#server-fingerprint');
+        this.#main.setServerFingerPrint('#server-fingerprint');
         if (needKey) {
           return this.promptForBackupPhrase_();
         }
@@ -444,7 +446,7 @@ class UI {
   }
 
   showQuota_() {
-    main.sendRPC('quota')
+    this.#main.sendRPC('quota')
     .then(({usage, quota}) => {
       const pct = Math.floor(100 * usage / quota) + '%';
       document.querySelector('#quota').textContent = this.formatSizeMB_(usage) + ' / ' + this.formatSizeMB_(quota) + ' (' + pct + ')';
@@ -491,7 +493,7 @@ class UI {
       params.items.push({});
       params.items.push({
         text: _T('lock'),
-        onclick: () => main.lock(),
+        onclick: () => this.#main.lock(),
         id: 'account-menu-lock',
       });
     }
@@ -688,7 +690,7 @@ class UI {
     };
     this.backupPhraseInput_.value = this.backupPhraseInput_.value.replaceAll(/./g, 'X');
     const done = this.bitScroll_();
-    return main.sendRPC(this.tabs_[this.selectedTab_].rpc, args).finally(done)
+    return this.#main.sendRPC(this.tabs_[this.selectedTab_].rpc, args).finally(done)
     .then(({isAdmin, needKey}) => {
       this.accountEmail_ = this.emailInput_.value;
       this.isAdmin_ = isAdmin;
@@ -737,20 +739,20 @@ class UI {
   }
 
   async logout_() {
-    return main.sendRPC('logout')
+    return this.#main.sendRPC('logout')
     .finally(() => {
       window.localStorage.removeItem('_');
       window.localStorage.removeItem('salt');
-      main.lock();
+      this.#main.lock();
     });
   }
 
   async getUpdates_() {
-    return main.sendRPC('getUpdates')
+    return this.#main.sendRPC('getUpdates')
       .catch(err => {
         this.showError_(err);
       })
-      .then(() => main.sendRPC('getCollections'))
+      .then(() => this.#main.sendRPC('getCollections'))
       .then(v => {
         this.collections_ = v;
       });
@@ -784,7 +786,7 @@ class UI {
     if (this.galleryState_.collection !== c.collection) {
       this.galleryState_.collection = c.collection;
       this.galleryState_.shown = SHOW_ITEMS_INCREMENT;
-      main.setHash('collection', c.collection);
+      this.#main.setHash('collection', c.collection);
       this.refreshGallery_(true);
     } else {
       this.refreshGallery_(false);
@@ -815,7 +817,7 @@ class UI {
 
   async refreshGallery_(scrollToTop) {
     const EL = this.galleryState_.EL;
-    const cachePref = await main.sendRPC('cachePreference');
+    const cachePref = await this.#main.sendRPC('cachePreference');
     if (!this.galleryState_.format) {
       this.galleryState_.format = 'grid';
     }
@@ -824,7 +826,7 @@ class UI {
         delete it.elem;
       }
     }
-    this.galleryState_.content = await main.sendRPC('getFiles', this.galleryState_.collection);
+    this.galleryState_.content = await this.#main.sendRPC('getFiles', this.galleryState_.collection);
     if (!this.galleryState_.content) {
       this.galleryState_.content = {'total': 0, 'files': []};
     }
@@ -892,7 +894,7 @@ class UI {
         params.items.push({
           text: c.isOffline ? _T('offline-on') : _T('offline-off'),
           onclick: () => {
-             main.sendRPC('setCollectionOffline', c.collection, !c.isOffline)
+             this.#main.sendRPC('setCollectionOffline', c.collection, !c.isOffline)
              .then(() => {
                this.refresh_();
              });
@@ -1046,7 +1048,7 @@ class UI {
       return this.galleryState_.content.files.length;
     }
     while (this.galleryState_.content.files.length < max) {
-      let ff = await main.sendRPC('getFiles', this.galleryState_.collection, this.galleryState_.content.files.length);
+      let ff = await this.#main.sendRPC('getFiles', this.galleryState_.collection, this.galleryState_.content.files.length);
       this.galleryState_.content.files.push(...ff.files);
     }
     return this.galleryState_.content.files.length;
@@ -1318,7 +1320,7 @@ class UI {
         if (abort) {
           return Promise.reject(abort);
         }
-        return main.sendRPC('upload', collection, toUpload)
+        return this.#main.sendRPC('upload', collection, toUpload)
           .catch(err => {
             abort = err;
             this.cancelQueuedThumbnailRequests_();
@@ -1357,7 +1359,7 @@ class UI {
       this.popupMessage(_T('move-to-gallery-only'), 'info');
       return false;
     }
-    return main.sendRPC('moveFiles', file.collection, collection, files, file.move)
+    return this.#main.sendRPC('moveFiles', file.collection, collection, files, file.move)
       .then(() => {
         if (file.move) {
           this.popupMessage(files.length === 1 ? _T('moved-one-file') : _T('moved-many-files', files.length), 'info');
@@ -1389,7 +1391,7 @@ class UI {
     if (useSelected) {
       files = selected;
     }
-    return main.sendRPC('deleteFiles', files)
+    return this.#main.sendRPC('deleteFiles', files)
       .then(() => {
         this.popupMessage(files.length === 1 ? _T('deleted-one-file') : _T('deleted-many-files', files.length), 'info');
         this.refresh_();
@@ -1401,7 +1403,7 @@ class UI {
 
   async emptyTrash_(b) {
     b.disabled = true;
-    main.sendRPC('emptyTrash')
+    this.#main.sendRPC('emptyTrash')
     .then(() => {
       this.refresh_();
     })
@@ -1414,7 +1416,7 @@ class UI {
   }
 
   async changeCover_(collection, cover) {
-    return main.sendRPC('changeCover', collection, cover)
+    return this.#main.sendRPC('changeCover', collection, cover)
       .then(() => {
         this.refresh_();
       })
@@ -1425,7 +1427,7 @@ class UI {
 
   async leaveCollection_(collection) {
     return this.prompt({message: _T('confirm-leave')})
-    .then(() => main.sendRPC('leaveCollection', collection))
+    .then(() => this.#main.sendRPC('leaveCollection', collection))
     .then(() => {
       if (this.galleryState_.collection === collection) {
         this.switchView({collection: 'gallery'});
@@ -1436,7 +1438,7 @@ class UI {
 
   async deleteCollection_(collection) {
     return this.prompt({message: _T('confirm-delete')})
-    .then(() => main.sendRPC('deleteCollection', collection))
+    .then(() => this.#main.sendRPC('deleteCollection', collection))
     .then(() => {
       if (this.galleryState_.collection === collection) {
         this.switchView({collection: 'gallery'});
@@ -2088,7 +2090,7 @@ class UI {
       source: f.url,
       onSave: (img, state) => {
         console.log('saving', img.fullName);
-        const binary = main.base64DecodeToBytes(img.imageBase64.split(',')[1]);
+        const binary = this.#main.base64DecodeToBytes(img.imageBase64.split(',')[1]);
         const blob = new Blob([binary], { type: img.mimeType });
         this.makeThumbnail_(blob)
         .then(([data, duration]) => {
@@ -2100,7 +2102,7 @@ class UI {
             dateCreated: f.dateCreated,
             dateModified: Date.now(),
           }];
-          return main.sendRPC('upload', f.collection, up);
+          return this.#main.sendRPC('upload', f.collection, up);
         })
         .then(() => {
           close();
@@ -2130,9 +2132,9 @@ class UI {
     }
     let cover = null;
     if (c.collection) {
-      cover = await main.sendRPC('getCover', c.collection);
+      cover = await this.#main.sendRPC('getCover', c.collection);
     }
-    const contacts = await main.sendRPC('getContacts');
+    const contacts = await this.#main.sendRPC('getContacts');
     const {EL, content, close} = this.commonPopup_({
       title: _T('properties:', c.name !== '' ? c.name : _T('new-collection')),
     });
@@ -2206,9 +2208,9 @@ class UI {
         if (changes.name === undefined) {
           return false;
         }
-        c.collection = await main.sendRPC('createCollection', changes.name.trim());
+        c.collection = await this.#main.sendRPC('createCollection', changes.name.trim());
       } else if (changes.name !== undefined) {
-        await main.sendRPC('renameCollection', c.collection, changes.name.trim());
+        await this.#main.sendRPC('renameCollection', c.collection, changes.name.trim());
       }
 
       const perms = {
@@ -2218,23 +2220,23 @@ class UI {
       };
 
       if (changes.shared === true || changes.add !== undefined) {
-        await main.sendRPC('shareCollection', c.collection, perms, changes.add || []);
+        await this.#main.sendRPC('shareCollection', c.collection, perms, changes.add || []);
       }
 
       if (changes.shared === false) {
-        await main.sendRPC('unshareCollection', c.collection);
+        await this.#main.sendRPC('unshareCollection', c.collection);
       }
 
       if (changes.remove !== undefined) {
-        await main.sendRPC('removeMembers', c.collection, changes.remove);
+        await this.#main.sendRPC('removeMembers', c.collection, changes.remove);
       }
 
       if (changes.canAdd !== undefined || changes.canCopy !== undefined || changes.canShare !== undefined) {
-        await main.sendRPC('updatePermissions', c.collection, perms);
+        await this.#main.sendRPC('updatePermissions', c.collection, perms);
       }
 
       if (changes.coverCode !== undefined) {
-        await main.sendRPC('changeCover', c.collection, changes.coverCode);
+        await this.#main.sendRPC('changeCover', c.collection, changes.coverCode);
       }
       close();
       this.getUpdates_()
@@ -2297,7 +2299,7 @@ class UI {
       }
       EL.add(coverSelect, 'change', () => {
         if (c.collection) {
-          main.sendRPC('getCover', c.collection, coverSelect.options[coverSelect.options.selectedIndex].value)
+          this.#main.sendRPC('getCover', c.collection, coverSelect.options[coverSelect.options.selectedIndex].value)
           .then(cover => setImage(cover.url));
           onChange();
         }
@@ -2389,7 +2391,7 @@ class UI {
           }
           addButton.disabled = true;
           input.readonly = true;
-          main.sendRPC('getContact', input.value)
+          this.#main.sendRPC('getContact', input.value)
           .then(cc => {
             input.value = '';
             contacts.push(cc);
@@ -2495,7 +2497,7 @@ class UI {
       EL.add(button, 'click', () => {
         button.disabled = true;
         this.cancelDropUploads_();
-        main.sendRPC('cancelUpload');
+        this.#main.sendRPC('cancelUpload');
       });
       const r = this.popupMessage(msg, 'progress', {sticky: !progress.done});
       if (!progress.done) {
@@ -2628,7 +2630,7 @@ class UI {
           }
           uploadButton.disabled = true;
           uploadButton.textContent = _T('uploading');
-          main.sendRPC('upload', this.galleryState_.collection, toUpload)
+          this.#main.sendRPC('upload', this.galleryState_.collection, toUpload)
           .then(() => {
             close();
             this.refresh_();
@@ -2818,7 +2820,7 @@ class UI {
   }
 
   async showProfile_() {
-    const curr = await main.sendRPC('mfaStatus');
+    const curr = await this.#main.sendRPC('mfaStatus');
 
     const {EL, content, close} = this.commonPopup_({
       title: _T('profile'),
@@ -2882,7 +2884,7 @@ class UI {
     const testButton = UI.create('button', {id:'profile-form-test-mfa', className:'hide-no-mfa', text:_T('test'), parent:mfaDiv});
     EL.add(testButton, 'click', () => {
       testButton.disabled = true;
-      main.sendRPC('mfaCheck', passkey.checked).finally(() => {
+      this.#main.sendRPC('mfaCheck', passkey.checked).finally(() => {
         testButton.disabled = false;
       })
       .finally(() => {
@@ -2897,7 +2899,7 @@ class UI {
     EL.add(otp, 'change', () => {
       if (otp.checked && !curr.otpEnabled) {
         otp.disabled = true;
-        main.sendRPC('generateOTP')
+        this.#main.sendRPC('generateOTP')
         .then(({key, img}) => {
           otpKey = key;
           const image = new Image();
@@ -2935,7 +2937,7 @@ class UI {
     EL.add(addSkButton, 'click', () => {
       addSkButton.disabled = true;
       this.getCurrentPassword()
-      .then(pw => main.addSecurityKey(pw, passkey.checked))
+      .then(pw => this.#main.addSecurityKey(pw, passkey.checked))
       .finally(() => {
         addSkButton.disabled = false;
         addSkButton.focus();
@@ -2947,7 +2949,7 @@ class UI {
 
     let keyList = {};
     const updateKeyList = () => {
-      main.sendRPC('listSecurityKeys')
+      this.#main.sendRPC('listSecurityKeys')
       .then(keys => {
         UI.clearElement_(skList);
         keys = keys.filter(k => !passkey.checked || k.discoverable);
@@ -3012,7 +3014,7 @@ class UI {
         }
       }
       this.getCurrentPassword()
-      .then(pw => main.sendRPC('updateProfile', {
+      .then(pw => this.#main.sendRPC('updateProfile', {
         email: email.value,
         password: pw,
         newPassword: newPass.value,
@@ -3057,11 +3059,11 @@ class UI {
       button.disabled = true;
       delButton.disabled = true;
       this.prompt({message: _T('confirm-delete-account'), getValue: true, password: true})
-      .then(pw => main.sendRPC('deleteAccount', pw))
+      .then(pw => this.#main.sendRPC('deleteAccount', pw))
       .then(() => {
         window.localStorage.removeItem('_');
         window.localStorage.removeItem('salt');
-        main.lock();
+        this.#main.lock();
       })
       .finally(() => {
         email.disabled = false;
@@ -3079,7 +3081,7 @@ class UI {
       title: _T('key-backup'),
     });
     content.id = 'backup-phrase-content';
-    let keyBackupEnabled = await main.sendRPC('keyBackupEnabled');
+    let keyBackupEnabled = await this.#main.sendRPC('keyBackupEnabled');
 
     const warning = UI.create('div', {id:'backup-phrase-warning', className:'warning', html:_T('key-backup-warning'), parent:content});
     const phrase = UI.create('div', {id:'backup-phrase-value', parent:content});
@@ -3090,7 +3092,7 @@ class UI {
         button.disabled = true;
         button.textContent = _T('checking-password');
         this.getCurrentPassword()
-        .then(pw => main.sendRPC('backupPhrase', pw))
+        .then(pw => this.#main.sendRPC('backupPhrase', pw))
         .then(v => {
           phrase.textContent = v;
           button.textContent = _T('hide-backup-phrase');
@@ -3114,7 +3116,7 @@ class UI {
       inputYes.disabled = true;
       inputNo.disabled = true;
       this.getCurrentPassword()
-      .then(pw => main.sendRPC('changeKeyBackup', pw, choice))
+      .then(pw => this.#main.sendRPC('changeKeyBackup', pw, choice))
       .then(() => {
         keyBackupEnabled = choice;
         this.popupMessage(choice ? _T('enabled') : _T('disabled'), 'info');
@@ -3145,7 +3147,7 @@ class UI {
     const content = UI.create('div', {id:'preferences-content'});
     const text = UI.create('div', {id:'preferences-cache-text', html:_T('choose-cache-pref'), parent:content});
 
-    const current = await main.sendRPC('cachePreference');
+    const current = await this.#main.sendRPC('cachePreference');
     const choices = [
       {
         value: 'encrypted',
@@ -3170,7 +3172,7 @@ class UI {
       });
       mobile.disabled = true;
       cacheSize.disabled = true;
-      main.sendRPC('setCachePreference', {mode:mode,allthumbs:all,mobile:mob,maxSize:size})
+      this.#main.sendRPC('setCachePreference', {mode:mode,allthumbs:all,mobile:mob,maxSize:size})
       .then(() => {
         current.mode = mode;
         current.allthumbs = all;
@@ -3243,7 +3245,7 @@ class UI {
           const p = await window.Notification.requestPermission();
           input.checked = p === 'granted';
         }
-        main.sendRPC('enableNotifications', input.checked)
+        this.#main.sendRPC('enableNotifications', input.checked)
         .then(v => {
           input.checked = v;
           this.enableNotifications = v;
@@ -3268,7 +3270,7 @@ class UI {
   }
 
   async showAdminConsole_() {
-    const data = await main.sendRPC('adminUsers');
+    const data = await this.#main.sendRPC('adminUsers');
     const {EL, content} = this.commonPopup_({
       title: _T('admin-console'),
       className: 'popup admin-console-popup',
@@ -3441,7 +3443,7 @@ class UI {
       content.querySelectorAll('input,select').forEach(elem => {
         elem.disabled = true;
       });
-      main.sendRPC('adminUsers', c)
+      this.#main.sendRPC('adminUsers', c)
       .then(data => {
         this.popupMessage(_T('data-updated'), 'info');
         return this.showAdminConsoleData_(EL, content, data);
