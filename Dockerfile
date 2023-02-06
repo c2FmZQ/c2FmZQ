@@ -21,16 +21,36 @@ WORKDIR /app
 EXPOSE 80 443
 VOLUME ["/data", "/secrets"]
 
-ENV C2FMZQ_PASSPHRASE_FILE=/secrets/passphrase
-ENV C2FMZQ_DATABASE=/data
 ENV PATH=/app/bin:$PATH
 
-ENTRYPOINT ["/app/bin/c2FmZQ-server"]
-# For HTTPS with TLS certs fetched directly from letencrypt.org. Pass the
-# domain in env variable DOMAIN.
-CMD ["-address=:443", "--redirect-404=https://c2FmZQ.org/"]
-# For HTTP:
-#CMD ["-address=:80"]
-# For HTTPS with existing key and certs:
-#CMD ["-address=:443", "-tlskey=/secrets/privkey.pem", "-tlscert=/secrets/fullchain.pem"]
+#################################
+# Environment setting variables #
 
+# For HTTPS set to ":443", for HTTP set to ":80"
+ENV C2FMZQ_ADDRESS=":443"
+ENV C2FMZQ_ALLOW_NEW_ACCOUNTS
+ENV C2FMZQ_AUTO_APPROVE_NEW_ACCOUNTS
+ENV C2FMZQ_AUTOCERT_ADDRESS
+ENV C2FMZQ_BASE_URL
+ENV C2FMZQ_DATABASE=/data
+# To fetch TLS certs directly from letencrypt.org:
+ENV C2FMZQ_DOMAIN
+ENV C2FMZQ_ENABLE_WEBAPP
+ENV C2FMZQ_ENCRYPT_METADATA
+ENV C2FMZQ_HTDIGEST_FILE
+ENV C2FMZQ_MAX_CONCURRENT_REQUESTS
+ENV C2FMZQ_PASSPHRASE
+ENV C2FMZQ_PASSPHRASE_CMD
+ENV C2FMZQ_PASSPHRASE_FILE=/secrets/passphrase
+ENV C2FMZQ_PATH_PREFIX
+ENV C2FMZQ_REDIRECT_404="https://c2FmZQ.org/"
+# For existing tls/https cert, e.g. "/secrets/privkey.pem"
+ENV C2FMZQ_TLSCERT
+# For existing tls/https key, e.g. "/secrets/fullchain.pem"
+ENV C2FMZQ_TLSKEY
+ENV C2FMZQ_VERBOSE
+
+#################################
+
+ENTRYPOINT ["/app/bin/c2FmZQ-server"]
+CMD []

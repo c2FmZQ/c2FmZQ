@@ -199,23 +199,23 @@ USAGE:
 
 GLOBAL OPTIONS:
    --database DIR, --db DIR         Use the database in DIR (default: "$HOME/c2FmZQ-server/data") [$C2FMZQ_DATABASE]
-   --address value, --addr value    The local address to use. (default: "127.0.0.1:8080")
-   --path-prefix value              The API endpoints are <path-prefix>/v2/...
-   --base-url value                 The base URL of the generated download links. If empty, the links will generated using the Host headers of the incoming requests, i.e. https://HOST/.
-   --redirect-404 value             Requests to unknown endpoints are redirected to this URL.
-   --tlscert FILE                   The name of the FILE containing the TLS cert to use.
-   --tlskey FILE                    The name of the FILE containing the TLS private key to use.
+   --address value, --addr value    The local address to use. (default: "127.0.0.1:8080") [$C2FMZQ_ADDRESS]
+   --path-prefix value              The API endpoints are <path-prefix>/v2/... [$C2FMZQ_PATH_PREFIX]
+   --base-url value                 The base URL of the generated download links. If empty, the links will generated using the Host headers of the incoming requests, i.e. https://HOST/. [$C2FMZQ_BASE_URL]
+   --redirect-404 value             Requests to unknown endpoints are redirected to this URL. [$C2FMZQ_REDIRECT_404]
+   --tlscert FILE                   The name of the FILE containing the TLS cert to use. [$C2FMZQ_TLSCERT]
+   --tlskey FILE                    The name of the FILE containing the TLS private key to use. [$C2FMZQ_TLSKEY]
    --autocert-domain domain         Use autocert (letsencrypt.org) to get TLS credentials for this domain. The special value 'any' means accept any domain. The credentials are saved in the database. [$C2FMZQ_DOMAIN]
-   --autocert-address value         The autocert http server will listen on this address. It must be reachable externally on port 80. (default: ":http")
-   --allow-new-accounts             Allow new account registrations. (default: true)
-   --auto-approve-new-accounts      Newly created accounts are auto-approved. (default: true)
-   --verbose value, -v value        The level of logging verbosity: 1:Error 2:Info 3:Debug (default: 2 (info))
-   --encrypt-metadata               Encrypt the server metadata (strongly recommended). (default: true)
+   --autocert-address value         The autocert http server will listen on this address. It must be reachable externally on port 80. (default: ":http") [$C2FMZQ_AUTOCERT_ADDRESS]
+   --allow-new-accounts             Allow new account registrations. (default: true) [$C2FMZQ_ALLOW_NEW_ACCOUNTS]
+   --auto-approve-new-accounts      Newly created accounts are auto-approved. (default: true) [$C2FMZQ_AUTO_APPROVE_NEW_ACCOUNTS]
+   --verbose value, -v value        The level of logging verbosity: 1:Error 2:Info 3:Debug (default: 2 (info)) [$C2FMZQ_VERBOSE]
+   --encrypt-metadata               Encrypt the server metadata (strongly recommended). (default: true) [$C2FMZQ_ENCRYPT_METADATA]
    --passphrase-command COMMAND     Read the database passphrase from the standard output of COMMAND. [$C2FMZQ_PASSPHRASE_CMD]
    --passphrase-file FILE           Read the database passphrase from FILE. [$C2FMZQ_PASSPHRASE_FILE]
    --passphrase value               Use value as database passphrase. [$C2FMZQ_PASSPHRASE]
    --htdigest-file FILE             The name of the htdigest FILE to use for basic auth for some endpoints, e.g. /metrics [$C2FMZQ_HTDIGEST_FILE]
-   --max-concurrent-requests value  The maximum number of concurrent requests. (default: 10)
+   --max-concurrent-requests value  The maximum number of concurrent requests. (default: 10) [$C2FMZQ_MAX_CONCURRENT_REQUESTS]
    --enable-webapp                  Enable Progressive Web App. (default: true) [$C2FMZQ_ENABLE_WEBAPP]
    --licenses                       Show the software licenses. (default: false)
 ```
