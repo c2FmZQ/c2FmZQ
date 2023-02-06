@@ -87,6 +87,7 @@ func main() {
 				Aliases:     []string{"addr"},
 				Value:       "127.0.0.1:8080",
 				Usage:       "The local address to use.",
+				EnvVars:     []string{"C2FMZQ_ADDRESS"},
 				Destination: &flagAddress,
 			},
 			&cli.StringFlag{
