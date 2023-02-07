@@ -370,6 +370,7 @@ func (d *Database) DumpUsers(details bool) {
 }
 
 func (d *Database) FindOrphanFiles(del bool) error {
+	d.fixFileSets(del)
 	exist := make(map[string]struct{})
 	err := filepath.WalkDir(d.Dir(), func(path string, de fs.DirEntry, err error) error {
 		if err != nil {
@@ -431,8 +432,10 @@ func (d *Database) FileIterator() <-chan DFile {
 	go func() {
 		defer close(ch)
 		ch <- fp(quotaFile)
-		if _, err := os.Stat(filepath.Join(d.Dir(), d.filePath(cacheFile))); err == nil {
-			ch <- fp(cacheFile)
+		for _, f := range []string{cacheFile, pushServiceConfigFile} {
+			if _, err := os.Stat(filepath.Join(d.Dir(), d.filePath(f))); err == nil {
+				ch <- fp(f)
+			}
 		}
 
 		var ul []userList
@@ -498,4 +501,82 @@ func (d *Database) FileIterator() <-chan DFile {
 		}
 	}()
 	return ch
+}
+
+func (d *Database) fixFileSets(del bool) {
+	var ul []userList
+	if err := d.storage.ReadDataFile(d.filePath(userListFile), &ul); err != nil {
+		log.Errorf("ReadDataFile: %v", err)
+		return
+	}
+
+	for _, u := range ul {
+		user, err := d.UserByID(u.UserID)
+		if err != nil {
+			log.Errorf("User(%q): %v", u.Email, err)
+			continue
+		}
+		d.fixFileSetReferences(d.fileSetPath(user, stingle.TrashSet), stingle.TrashSet, del)
+		d.fixFileSetReferences(d.fileSetPath(user, stingle.GallerySet), stingle.GallerySet, del)
+
+		albums, err := d.AlbumRefs(user)
+		if err != nil {
+			log.Errorf("AlbumRefs(%q): %v", u.Email, err)
+			continue
+		}
+		for _, v := range albums {
+			d.fixFileSetReferences(v.File, stingle.AlbumSet, del)
+		}
+	}
+}
+
+func (d *Database) fixFileSetReferences(fsFile, set string, update bool) {
+	var fs FileSet
+	commit, err := d.storage.OpenForUpdate(fsFile, &fs)
+	if err != nil {
+		log.Errorf("FileSet: %s %v", fsFile, err)
+		return
+	}
+	defer commit(false, nil)
+
+	changed := false
+	for key, file := range fs.Files {
+		broken := false
+		for _, b := range []string{file.StoreFile, file.StoreThumb, d.blobRef(file.StoreFile), d.blobRef(file.StoreThumb)} {
+			if _, err := os.Stat(filepath.Join(d.Dir(), b)); err == os.ErrNotExist {
+				broken = true
+				break
+			}
+		}
+		if !broken {
+			continue
+		}
+		if !update {
+			log.Errorf("Broken reference in %s: %s", fsFile, key)
+			continue
+		}
+		changed = true
+		delete(fs.Files, key)
+		de := DeleteEvent{
+			File: key,
+			Date: nowInMS(),
+		}
+		switch set {
+		case stingle.TrashSet:
+			de.Type = stingle.DeleteEventTrashDelete
+		case stingle.GallerySet:
+			de.Type = stingle.DeleteEventGallery
+		case stingle.AlbumSet:
+			de.Type = stingle.DeleteEventAlbumFile
+		}
+		fs.Deletes = append(fs.Deletes, de)
+
+		log.Errorf("Removed broken reference in %s: %s", fsFile, key)
+	}
+	if !changed {
+		return
+	}
+	if err := commit(true, nil); err != nil {
+		log.Errorf("fixFileSetReferences commit: %v", err)
+	}
 }
