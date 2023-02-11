@@ -116,6 +116,7 @@ class ServiceWorker {
         await this.#store.open();
         if (!await this.#store.check()) {
           console.log('SW Wrong passphrase');
+          this.#store.lock();
           this.#sendHello('Wrong passphrase');
           return resolve();
         }
@@ -224,6 +225,7 @@ class ServiceWorker {
       version: VERSION,
     };
     if (err) {
+      msg.storeKey = null;
       msg.err = err;
     }
     this.sendMessage('', msg);
