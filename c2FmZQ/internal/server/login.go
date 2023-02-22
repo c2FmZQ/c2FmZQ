@@ -62,9 +62,9 @@ func (s *Server) handleCreateAccount(req *http.Request) *stingle.Response {
 	if err != nil {
 		return stingle.ResponseNOK()
 	}
-	hashed, err := bcrypt.GenerateFromPassword([]byte(req.PostFormValue("password")), 12)
+	hashed, err := bcryptGen([]byte(req.PostFormValue("password")), 12)
 	if err != nil {
-		log.Errorf("bcrypt.GenerateFromPassword: %v", err)
+		log.Errorf("bcryptGen: %v", err)
 		return stingle.ResponseNOK()
 	}
 	email := req.PostFormValue("email")
@@ -291,9 +291,9 @@ func (s *Server) handleChangePass(user database.User, req *http.Request) *stingl
 
 	var tok string
 	if err := s.db.MutateUser(user.UserID, func(user *database.User) error {
-		hashed, err := bcrypt.GenerateFromPassword([]byte(params["newPassword"]), 12)
+		hashed, err := bcryptGen([]byte(params["newPassword"]), 12)
 		if err != nil {
-			log.Errorf("bcrypt.GenerateFromPassword: %v", err)
+			log.Errorf("bcryptGen: %v", err)
 			return err
 		}
 		user.HashedPassword = base64.StdEncoding.EncodeToString(hashed)
@@ -443,9 +443,9 @@ func (s *Server) handleRecoverAccount(req *http.Request) *stingle.Response {
 	}
 
 	if err := s.db.MutateUser(user.UserID, func(user *database.User) error {
-		hashed, err := bcrypt.GenerateFromPassword([]byte(params["newPassword"]), 12)
+		hashed, err := bcryptGen([]byte(params["newPassword"]), 12)
 		if err != nil {
-			log.Errorf("bcrypt.GenerateFromPassword: %v", err)
+			log.Errorf("bcryptGen: %v", err)
 			return err
 		}
 		user.HashedPassword = base64.StdEncoding.EncodeToString(hashed)
@@ -610,4 +610,11 @@ func cleanUnicode(s string) string {
 		}
 		return -1
 	}, s)
+}
+
+func bcryptGen(password []byte, cost int) ([]byte, error) {
+	if len(password) > 72 {
+		password = password[:72]
+	}
+	return bcrypt.GenerateFromPassword(password, cost)
 }
