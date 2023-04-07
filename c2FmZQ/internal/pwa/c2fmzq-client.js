@@ -562,7 +562,7 @@ class c2FmZQClient {
     }
     if (args.newPassword !== '') {
       const salt = await so.randombytes(16);
-      const bundle = await this.makeKeyBundle_(args.newPassword, this.vars_.pk, this.vars_.keyIsBackedUp ? this.#sk() : undefined);
+      const bundle = await this.makeKeyBundle_(args.newPassword, this.vars_.pk, this.vars_.keyIsBackedUp ? await this.#sk() : undefined);
       const hashed = await this.passwordForLogin_(salt, args.newPassword);
       const params = {
         keyBundle: bundle,
