@@ -108,11 +108,9 @@ files, or directly from letsencrypt.org.
 
 ## <a name="stingle"></a>Connecting the Stingle Photos app to this server
 
-For the Stingle Photos app to connect to this server, it has to the recompiled to allow `api_server_url`
-to point to this server.
-See the [Stingle Photos App for Self-Hosted Server](https://github.com/c2FmZQ/stingle-photos-for-self-hosted-server) ([diff](https://github.com/stingle/stingle-photos-android/compare/master...c2FmZQ:master?diff=split)).
+Starting with v2.10.2, the [Stingle Photos](https://play.google.com/store/apps/details?id=org.stingle.photos) app can connect to this server without any code changes.
 
-Learn [how to build a compatible StinglePhotos app with docker](HOWTO-Build-android-app.md).
+On the _Welcome Screen_, click the setting button at the top right corner and then enter the URL of your server.
 
 ---
 
