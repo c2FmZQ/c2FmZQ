@@ -36,9 +36,9 @@ They use an API that's compatible with the Stingle Photos app
 which can also be used with c2FmZQ.
 
 _This project is **NOT** associated with stingle.org. This is not the code used
-by stingle.org. We have no knowledge of how their server is actually implemented.
-The code in this repo was developed by studying the client app's code and
-reverse engineering the API._
+by stingle.org. The code in this repo was developed by studying the client app's code and
+reverse engineering the API. Stingle eventually released their [server code](https://github.com/stingle/stingle-api)
+in April 2023._
 
 ---
 
