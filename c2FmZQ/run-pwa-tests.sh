@@ -8,11 +8,11 @@ export GOPATH=$(go env GOPATH)
 export USERID=$(id -u)
 export SRCDIR=$(realpath ..)
 export TESTS="$1"
-docker-compose -f docker-compose-browser-tests.yaml up \
+docker compose -f docker-compose-browser-tests.yaml up \
   --abort-on-container-exit \
   --exit-code-from=devtest
 RES=$?
-docker-compose -f docker-compose-browser-tests.yaml rm -f
+docker compose -f docker-compose-browser-tests.yaml rm -f
 
 if [[ $RES == 0 ]]; then
   echo PASS
