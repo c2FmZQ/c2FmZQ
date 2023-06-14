@@ -1,4 +1,4 @@
-FROM golang:1.20.4-alpine3.17 AS build
+FROM golang:1.20.5-alpine3.18 AS build
 MAINTAINER info@c2fmzq.org
 RUN apk update && apk upgrade
 
@@ -12,7 +12,7 @@ RUN CGO_ENABLED=0 go test ./internal/server/...
 RUN go install ./c2FmZQ-server
 RUN go install ./c2FmZQ-server/inspect
 
-FROM alpine:3.17
+FROM alpine:3.18
 RUN apk update && apk upgrade
 RUN mkdir -p /app/bin
 COPY --from=build /go/bin/c2FmZQ-server /go/bin/inspect /app/bin/

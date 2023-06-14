@@ -54,7 +54,7 @@ func TestEdit(t *testing.T) {
 		t.Fatalf("Sync: %v", err)
 	}
 
-	wd.setPassphrase("hello");
+	wd.setPassphrase("hello")
 
 	t.Log("Logging in")
 	wd.click("#login-tab")
@@ -66,7 +66,7 @@ func TestEdit(t *testing.T) {
 	wd.rightClick(".thumbdiv")
 	wd.click("#context-menu-edit")
 	wd.click(".FIE_topbar-save-button")
-	wd.sendKeys("input[placeholder=Name]", "blah")
+	wd.sendKeys(".FIE_save-file-name-input>input", "blah")
 	wd.click(".SfxModal-root button[color=primary]")
 
 	wd.waitPopupMessage("Upload: 1/1 [100%]")
