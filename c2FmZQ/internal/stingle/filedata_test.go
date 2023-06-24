@@ -19,23 +19,24 @@ package stingle
 
 import (
 	"bytes"
+	"crypto/rand"
 	"io"
 	"os"
 	"path/filepath"
 	"testing"
-
-	"github.com/jamesruan/sodium"
 )
 
 func TestFileEncryption(t *testing.T) {
 	sk := MakeSecretKeyForTest()
-	mk := sodium.MakeMasterKey()
 
 	header := &Header{
 		FileID:       []byte("ABCDEFGHIJKLMNOPQRSTUVWXYZ123456"),
 		Version:      1,
 		ChunkSize:    128,
-		SymmetricKey: []byte(mk.Bytes),
+		SymmetricKey: make([]byte, 32),
+	}
+	if _, err := rand.Read(header.SymmetricKey); err != nil {
+		t.Fatal(err)
 	}
 
 	orig := []byte(`Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Lorem ipsum dolor sit amet consectetur adipiscing. Porttitor lacus luctus accumsan tortor posuere ac ut consequat semper. Pulvinar etiam non quam lacus suspendisse faucibus interdum. Elementum facilisis leo vel fringilla est ullamcorper eget nulla. Cursus turpis massa tincidunt dui ut ornare lectus sit. Amet consectetur adipiscing elit duis tristique. Sed tempus urna et pharetra. Cursus metus aliquam eleifend mi in. Vulputate dignissim suspendisse in est ante in. Ultricies lacus sed turpis tincidunt id aliquet. Faucibus nisl tincidunt eget nullam. Sit amet commodo nulla facilisi nullam vehicula ipsum. Volutpat blandit aliquam etiam erat velit scelerisque in dictum non. Condimentum lacinia quis vel eros donec ac odio. Mattis nunc sed blandit libero volutpat. Lectus sit amet est placerat in egestas erat imperdiet. Rhoncus est pellentesque elit ullamcorper dignissim. Et ligula ullamcorper malesuada proin libero nunc consequat.
