@@ -40,19 +40,19 @@ import (
 // one for the image or video, and one for the thumbnail.
 //
 // Arguments:
-//  - req: The http request.
+//   - req: The http request.
 //
 // Form arguments
-//  - token: The signed session token.
-//  - headers: File metadata (encrypted key, etc)
-//  - set: The file set where this file is being uploaded.
-//  - albumId: The ID of the album where the file is being uploaded.
-//  - dateCreated: A timestamp in milliseconds.
-//  - dateModified: A timestamp in milliseconds.
-//  - version: The file format version (opaque to the server).
+//   - token: The signed session token.
+//   - headers: File metadata (encrypted key, etc)
+//   - set: The file set where this file is being uploaded.
+//   - albumId: The ID of the album where the file is being uploaded.
+//   - dateCreated: A timestamp in milliseconds.
+//   - dateModified: A timestamp in milliseconds.
+//   - version: The file format version (opaque to the server).
 //
 // Returns:
-//  - stingle.Response("ok")
+//   - stingle.Response("ok")
 func (s *Server) handleUpload(w http.ResponseWriter, req *http.Request) {
 	up, err := s.receiveUpload("uploads", req)
 	s.setDeadline(req.Context(), time.Now().Add(30*time.Second))
@@ -103,26 +103,26 @@ func (s *Server) handleUpload(w http.ResponseWriter, req *http.Request) {
 // or copy files between filesets/albums.
 //
 // Arguments:
-//  - user: The authenticated user.
-//  - req: The http request.
+//   - user: The authenticated user.
+//   - req: The http request.
 //
 // Form arguments
-//  - token: The signed session token.
-//  - params: The encrypted parameters
-//     - setFrom: The set from which the files are moving (or being copied)
-//     - setTo: The set to which the files are moving (or being copied)
-//     - albumIdFrom: The ID of the album from which the files are moving, or ""
-//                    if moving from Trash or Gallery.
-//     - albumIdTo: The ID of the album to which the files are moving, or "" if
-//                  moving to Trash or Gallery.
-//     - isMoving: "0" if the files are being copied, "1" if they are moving.
-//     - count: The number of files being copied or moved.
-//     - filename<int>: The filenames affected (filename0, filename1, etc)
-//     - headers<int>: The file headers, present only if the headers are
-//                     changing, i.e. when moving to/from albums.
+//   - token: The signed session token.
+//   - params: The encrypted parameters
+//   - setFrom: The set from which the files are moving (or being copied)
+//   - setTo: The set to which the files are moving (or being copied)
+//   - albumIdFrom: The ID of the album from which the files are moving, or ""
+//     if moving from Trash or Gallery.
+//   - albumIdTo: The ID of the album to which the files are moving, or "" if
+//     moving to Trash or Gallery.
+//   - isMoving: "0" if the files are being copied, "1" if they are moving.
+//   - count: The number of files being copied or moved.
+//   - filename<int>: The filenames affected (filename0, filename1, etc)
+//   - headers<int>: The file headers, present only if the headers are
+//     changing, i.e. when moving to/from albums.
 //
 // Returns:
-//  - stingle.Response(ok)
+//   - stingle.Response(ok)
 func (s *Server) handleMoveFile(user database.User, req *http.Request) *stingle.Response {
 	params, err := s.decodeParams(req.PostFormValue("params"), user)
 	if err != nil {
@@ -138,8 +138,11 @@ func (s *Server) handleMoveFile(user database.User, req *http.Request) *stingle.
 		IsMoving:    params["isMoving"] == "1",
 	}
 	count := parseInt(params["count"], 0)
+	if count > 100000 {
+		return stingle.ResponseNOK().AddError("Too many files")
+	}
 
-	for i := 0; i < int(count); i++ {
+	for i := int64(0); i < count; i++ {
 		filename := params[fmt.Sprintf("filename%d", i)]
 		p.Filenames = append(p.Filenames, filename)
 		hdr := params[fmt.Sprintf("headers%d", i)]
@@ -195,16 +198,16 @@ func (s *Server) handleMoveFile(user database.User, req *http.Request) *stingle.
 // delete all the files in the Trash set.
 //
 // Arguments:
-//  - user: The authenticated user.
-//  - req: The http request
+//   - user: The authenticated user.
+//   - req: The http request
 //
 // Form arguments
-//  - params: The encrypted parameters
-//     - time: A timestamp in milliseconds. All files added until that time
-//             should be removed.
+//   - params: The encrypted parameters
+//   - time: A timestamp in milliseconds. All files added until that time
+//     should be removed.
 //
 // Returns:
-//  - stingle.Response(ok)
+//   - stingle.Response(ok)
 func (s *Server) handleEmptyTrash(user database.User, req *http.Request) *stingle.Response {
 	params, err := s.decodeParams(req.PostFormValue("params"), user)
 	if err != nil {
@@ -222,25 +225,28 @@ func (s *Server) handleEmptyTrash(user database.User, req *http.Request) *stingl
 // the files in the Trash set.
 //
 // Arguments:
-//  - user: The authenticated user.
-//  - req: The http request
+//   - user: The authenticated user.
+//   - req: The http request
 //
 // Form arguments
-//  - params: The encrypted parameters
-//     - count: The number of files being deleted.
-//     - filename<int>: The filenames being deleted.
+//   - params: The encrypted parameters
+//   - count: The number of files being deleted.
+//   - filename<int>: The filenames being deleted.
 //
 // Returns:
-//  - stingle.Response(ok)
+//   - stingle.Response(ok)
 func (s *Server) handleDelete(user database.User, req *http.Request) *stingle.Response {
 	params, err := s.decodeParams(req.PostFormValue("params"), user)
 	if err != nil {
 		log.Errorf("decodeParams: %v", err)
 		return stingle.ResponseNOK()
 	}
-	count := int(parseInt(params["count"], 0))
+	count := parseInt(params["count"], 0)
+	if count > 100000 {
+		stingle.ResponseNOK().AddError("Too many files")
+	}
 	files := []string{}
-	for i := 0; i < count; i++ {
+	for i := int64(0); i < count; i++ {
 		files = append(files, params[fmt.Sprintf("filename%d", i)])
 	}
 	if err := s.db.DeleteFiles(user, files); err != nil {
@@ -254,13 +260,13 @@ func (s *Server) handleDelete(user database.User, req *http.Request) *stingle.Re
 // the content of a file.
 //
 // Arguments:
-//  - user: The authenticated user.
-//  - req: The http request
+//   - user: The authenticated user.
+//   - req: The http request
 //
 // Form arguments
-//  - file: The filename to download.
-//  - set: The file set where the file is.
-//  - thumb: "1" if downloading the thumbnail, "0" otherwise.
+//   - file: The filename to download.
+//   - set: The file set where the file is.
+//   - thumb: "1" if downloading the thumbnail, "0" otherwise.
 //
 // Returns:
 //   - The content of the file is streamed.
@@ -328,8 +334,8 @@ func (s *Server) tryToHandleRange(w http.ResponseWriter, rangeHdr string, f io.R
 // requested file.
 //
 // Arguments:
-//  - w: The http response writer.
-//  - req: The http request.
+//   - w: The http response writer.
+//   - req: The http request.
 //
 // Returns:
 //   - The content of the file is streamed.
@@ -431,17 +437,17 @@ func (s *Server) makeDownloadURL(user database.User, host, file, set string, isT
 // used to created multiple signed URLs to download files.
 //
 // Arguments:
-//  - user: The authenticated user.
-//  - req: The http request
+//   - user: The authenticated user.
+//   - req: The http request
 //
 // Form arguments
-//  - is_thumb: "1" if downloading thumbnails, "0" otherwise.
-//  - files[<int>][filename]: The filenames to download.
-//  - files[<int>][set]: The file sets where the files are.
+//   - is_thumb: "1" if downloading thumbnails, "0" otherwise.
+//   - files[<int>][filename]: The filenames to download.
+//   - files[<int>][set]: The file sets where the files are.
 //
 // Returns:
 //   - StringleResponse(ok).
-//        Parts("urls", list of signed urls)
+//     Parts("urls", list of signed urls)
 func (s *Server) handleGetDownloadUrls(user database.User, req *http.Request) *stingle.Response {
 	isThumb := req.PostFormValue("is_thumb") == "1"
 	urls := make(map[string]string)
@@ -465,16 +471,16 @@ func (s *Server) handleGetDownloadUrls(user database.User, req *http.Request) *s
 // a single signed URL to download a file.
 //
 // Arguments:
-//  - user: The authenticated user.
-//  - req: The http request
+//   - user: The authenticated user.
+//   - req: The http request
 //
 // Form arguments
-//  - file: The filename to download.
-//  - set: The file set where the file is.
+//   - file: The filename to download.
+//   - set: The file set where the file is.
 //
 // Returns:
 //   - StringleResponse(ok).
-//        Parts("url", signed url)
+//     Parts("url", signed url)
 func (s *Server) handleGetURL(user database.User, req *http.Request) *stingle.Response {
 	url, err := s.makeDownloadURL(user, req.Host, req.PostFormValue("file"), req.PostFormValue("set"), req.PostFormValue("thumb") == "1")
 	if err != nil {
