@@ -18,4 +18,5 @@ if [[ $RES == 0 ]]; then
   echo PASS
 else
   echo FAIL
+  exit 1
 fi

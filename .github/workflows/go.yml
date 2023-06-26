@@ -16,7 +16,27 @@ jobs:
         go-version-file: c2FmZQ/go.mod
     - name: Build
       run: cd c2FmZQ && go build ./...
-    - name: Run go tests
+    - name: Run go vet
+      run: cd c2FmZQ && go vet ./...
+    - name: Run go test
       run: cd c2FmZQ && go test ./...
-    - name: Build docker image
-      run: docker build -t c2fmzq/c2fmzq-server .
+
+  build-docker-image:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Build test docker image
+      run: docker build -t c2fmzq/c2fmzq-server:test .
+
+  run-pwa-tests:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version-file: c2FmZQ/go.mod
+    - name: Build
+      run: cd c2FmZQ && go build ./...
+    - name: Run PWA tests
+      run: ./c2FmZQ/run-pwa-tests.sh
