@@ -4,7 +4,7 @@ services:
     image: "selenium/standalone-chrome:108.0-chromedriver-108.0"
     shm_size: "2gb"
     ports:
-      - "7900:7900"
+      - "${VNCPORT:-127.0.0.1:7900}:7900"
     environment:
       - SE_SCREEN_WIDTH=1040
       - SE_SCREEN_HEIGHT=840
