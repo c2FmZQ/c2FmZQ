@@ -15,8 +15,8 @@
 // You should have received a copy of the GNU General Public License along with
 // c2FmZQ. If not, see <https://www.gnu.org/licenses/>.
 
-//go:build !windows
-// +build !windows
+//go:build fusetest
+// +build fusetest
 
 package fuse_test
 
