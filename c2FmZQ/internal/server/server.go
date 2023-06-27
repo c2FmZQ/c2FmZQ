@@ -248,6 +248,7 @@ func (s *Server) httpServer() *http.Server {
 		ErrorLog: log.Logger(),
 		TLSConfig: &tls.Config{
 			MinVersion: tls.VersionTLS12,
+			NextProtos: []string{"h2", "http/1.1"},
 		},
 	}
 	return s.srv
@@ -281,7 +282,8 @@ func (s *Server) RunWithAutocert(domain, addr string) error {
 	}()
 
 	s.srv = s.httpServer()
-	s.srv.TLSConfig.GetCertificate = certManager.GetCertificate
+	s.srv.TLSConfig = certManager.TLSConfig()
+	s.srv.TLSConfig.MinVersion = tls.VersionTLS12
 	return s.srv.ListenAndServeTLS("", "")
 }
 
