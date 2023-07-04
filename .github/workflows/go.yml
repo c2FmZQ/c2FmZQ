@@ -1,12 +1,11 @@
-# This workflow will build a golang project
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-go
-
 name: Go
 on: 
   - push
   - pull_request
 jobs:
   build-and-run-tests:
+    if: github.ref_type == 'branch'
+    name: Build & run tests
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
@@ -22,6 +21,8 @@ jobs:
       run: cd c2FmZQ && go test ./...
 
   build-docker-image:
+    if: github.ref_type == 'branch'
+    name: Build test docker image
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
@@ -29,6 +30,8 @@ jobs:
       run: docker build -t c2fmzq/c2fmzq-server:test .
 
   run-pwa-tests:
+    if: github.ref_type == 'branch'
+    name: Run PWA tests
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
