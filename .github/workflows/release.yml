@@ -73,8 +73,8 @@ jobs:
         generate_release_notes: true
         fail_on_unmatched_files: true
         files: |
-          c2FmZQ-server-*
-          inspect-*
+          c2FmZQ/c2FmZQ-server-*
+          c2FmZQ/inspect-*
 
   push-to-registry:
     name: Push image to docker hub
