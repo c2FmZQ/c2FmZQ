@@ -54,7 +54,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v4
       with:
-        go-version-file: go.mod
+        go-version-file: c2FmZQ/go.mod
     - name: Build release binaries
       run: |
         export CGO_ENABLED=0
