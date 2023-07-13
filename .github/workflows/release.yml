@@ -75,6 +75,7 @@ jobs:
         draft: false
         generate_release_notes: true
         fail_on_unmatched_files: true
+        discussion_category_name: Announcements
         files: |
           c2FmZQ/c2fmzq-server-*
           c2FmZQ/inspect-*
