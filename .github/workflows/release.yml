@@ -76,7 +76,7 @@ jobs:
         generate_release_notes: true
         fail_on_unmatched_files: true
         files: |
-          c2FmZQ/c2FmZQ-server-*
+          c2FmZQ/c2fmzq-server-*
           c2FmZQ/inspect-*
 
   push-to-registry:
