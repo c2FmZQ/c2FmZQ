@@ -45,7 +45,10 @@ jobs:
 
   create-release:
     name: Create release
-    needs: build-and-run-tests
+    needs:
+      - build-and-run-tests
+      - build-docker-image
+      - run-pwa-tests
     runs-on: ubuntu-latest
     permissions:
       contents: write
