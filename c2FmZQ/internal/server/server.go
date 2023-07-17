@@ -274,12 +274,11 @@ func (s *Server) RunWithAutocert(domain, addr string) error {
 	if domain != "any" && domain != "*" {
 		certManager.HostPolicy = autocert.HostWhitelist(strings.Split(domain, ",")...)
 	}
-	go func() {
-		if addr == "" {
-			addr = ":http"
-		}
-		log.Fatalf("autocert.Manager failed: %v", http.ListenAndServe(addr, certManager.HTTPHandler(nil)))
-	}()
+	if addr != "" {
+		go func() {
+			log.Fatalf("autocert.Manager failed: %v", http.ListenAndServe(addr, certManager.HTTPHandler(nil)))
+		}()
+	}
 
 	s.srv = s.httpServer()
 	s.srv.TLSConfig = certManager.TLSConfig()
