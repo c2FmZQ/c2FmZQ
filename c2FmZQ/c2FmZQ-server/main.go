@@ -33,9 +33,9 @@ import (
 
 	"github.com/urfave/cli/v2" // cli
 
-	"c2FmZQ/internal/crypto"
 	"c2FmZQ/internal/database"
 	"c2FmZQ/internal/log"
+	"c2FmZQ/internal/pp"
 	"c2FmZQ/internal/server"
 	"c2FmZQ/licenses"
 )
@@ -237,17 +237,17 @@ func startServer(c *cli.Context) error {
 	if (flagTLSCert == "") != (flagTLSKey == "") {
 		log.Fatal("--tlscert and --tlskey must either both be set or unset.")
 	}
-	var pp []byte
+	var pass []byte
 	if flagEncryptMetadata {
 		var err error
-		if pp, err = crypto.Passphrase(flagPassphraseCmd, flagPassphraseFile, flagPassphrase); err != nil {
+		if pass, err = pp.Passphrase(flagPassphraseCmd, flagPassphraseFile, flagPassphrase); err != nil {
 			return err
 		}
 	}
-	if pp == nil {
+	if pass == nil {
 		log.Info("WARNING: Metadata encryption is DISABLED")
 	}
-	db := database.New(flagDatabase, pp)
+	db := database.New(flagDatabase, pass)
 
 	s := server.New(db, flagAddress, flagHTDigestFile, flagPathPrefix)
 	s.AllowCreateAccount = flagAllowNewAccounts

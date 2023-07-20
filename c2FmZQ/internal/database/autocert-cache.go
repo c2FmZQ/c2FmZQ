@@ -18,7 +18,7 @@
 package database
 
 import (
-	"c2FmZQ/internal/autocertcache"
+	"github.com/c2FmZQ/storage/autocertcache"
 )
 
 const (

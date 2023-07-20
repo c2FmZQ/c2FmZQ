@@ -32,15 +32,16 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/c2FmZQ/storage"
+	"github.com/c2FmZQ/storage/crypto"
 	"github.com/mdp/qrterminal"
 	"github.com/pquerna/otp/totp"
 	"github.com/urfave/cli/v2" // cli
 	"golang.org/x/term"
 
-	"c2FmZQ/internal/crypto"
 	"c2FmZQ/internal/database"
 	"c2FmZQ/internal/log"
-	"c2FmZQ/internal/secure"
+	"c2FmZQ/internal/pp"
 	"c2FmZQ/internal/stingle"
 )
 
@@ -342,14 +343,14 @@ func main() {
 
 func initDB(c *cli.Context) (*database.Database, error) {
 	log.Level = flagLogLevel
-	var pp []byte
+	var pass []byte
 	if flagEncryptMetadata {
 		var err error
-		if pp, err = crypto.Passphrase(flagPassphraseCmd, flagPassphraseFile, flagPassphrase); err != nil {
+		if pass, err = pp.Passphrase(flagPassphraseCmd, flagPassphraseFile, flagPassphrase); err != nil {
 			return nil, err
 		}
 	}
-	return database.New(flagDatabase, pp), nil
+	return database.New(flagDatabase, pass), nil
 }
 
 func createParent(filename string) {
@@ -408,16 +409,27 @@ func findOrphanFiles(c *cli.Context) error {
 	return db.FindOrphanFiles(c.Bool("delete"))
 }
 
+func cryptoOptions() []crypto.Option {
+	opts := []crypto.Option{
+		crypto.WithAlgo(crypto.PickFastest),
+	}
+	if log.Level >= log.DebugLevel {
+		opts = append(opts, crypto.WithStrictWipe(true))
+		opts = append(opts, crypto.WithLogger(log.DefaultLogger()))
+	}
+	return opts
+}
+
 func changeMasterKey(c *cli.Context) error {
 	log.Level = flagLogLevel
 	log.Infof("Working on %s", flagDatabase)
 
-	pp, err := crypto.Passphrase(flagPassphraseCmd, flagPassphraseFile, flagPassphrase)
+	pp, err := pp.Passphrase(flagPassphraseCmd, flagPassphraseFile, flagPassphrase)
 	if err != nil {
 		return err
 	}
 	mkFile := filepath.Join(flagDatabase, "master.key")
-	mk1, err := crypto.ReadMasterKey(pp, mkFile)
+	mk1, err := crypto.ReadMasterKey(pp, mkFile, cryptoOptions()...)
 	if err != nil {
 		return err
 	}
@@ -434,7 +446,7 @@ func changeMasterKey(c *cli.Context) error {
 		log.Fatalf("Invalid format %q", f)
 	}
 
-	mk2, err := crypto.CreateMasterKey(alg)
+	mk2, err := crypto.CreateMasterKey(crypto.WithAlgo(alg), crypto.WithLogger(log.DefaultLogger()))
 	if err != nil {
 		return err
 	}
@@ -503,7 +515,7 @@ func changeMasterKey(c *cli.Context) error {
 			return errors.New("wrong encrypted header")
 		}
 		if hdr[4]&0x40 != 0 {
-			if err := secure.SkipPadding(r); err != nil {
+			if err := storage.SkipPadding(r); err != nil {
 				return err
 			}
 		}
@@ -544,7 +556,7 @@ func changeMasterKey(c *cli.Context) error {
 			out.Close()
 			return err
 		}
-		if err := secure.AddPadding(w, maxPadding); err != nil {
+		if err := storage.AddPadding(w, maxPadding); err != nil {
 			return err
 		}
 		var buf [4096]byte
@@ -1018,17 +1030,17 @@ func changePassphrase(c *cli.Context) error {
 	}
 	mkFile := filepath.Join(flagDatabase, "master.key")
 
-	oldPass, err := crypto.Passphrase(flagPassphraseCmd, flagPassphraseFile, flagPassphrase)
+	oldPass, err := pp.Passphrase(flagPassphraseCmd, flagPassphraseFile, flagPassphrase)
 	if err != nil {
 		return err
 	}
-	mk, err := crypto.ReadMasterKey(oldPass, mkFile)
+	mk, err := crypto.ReadMasterKey(oldPass, mkFile, cryptoOptions()...)
 	if err != nil {
 		return err
 	}
 	defer mk.Wipe()
 
-	newPass, err := crypto.NewPassphrase(c.String("new-passphrase-command"), c.String("new-passphrase-file"), c.String("new-passphrase"))
+	newPass, err := pp.NewPassphrase(c.String("new-passphrase-command"), c.String("new-passphrase-file"), c.String("new-passphrase"))
 	if err != nil {
 		return err
 	}

@@ -28,7 +28,6 @@
 //
 // // Check returns err=nil iff encryptedToken is valid.
 // tok, err := Check(key, encryptedToken)
-//
 package token
 
 import (

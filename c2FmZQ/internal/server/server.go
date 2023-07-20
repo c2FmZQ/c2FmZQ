@@ -245,7 +245,7 @@ func (s *Server) httpServer() *http.Server {
 		ConnContext: func(ctx context.Context, c net.Conn) context.Context {
 			return context.WithValue(ctx, connKey, c)
 		},
-		ErrorLog: log.Logger(),
+		ErrorLog: log.GoLogger(),
 		TLSConfig: &tls.Config{
 			MinVersion: tls.VersionTLS12,
 			NextProtos: []string{"h2", "http/1.1"},

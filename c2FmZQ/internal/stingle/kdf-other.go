@@ -15,6 +15,7 @@
 // You should have received a copy of the GNU General Public License along with
 // c2FmZQ. If not, see <https://www.gnu.org/licenses/>.
 
+//go:build !sodium
 // +build !sodium
 
 package stingle

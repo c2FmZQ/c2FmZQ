@@ -23,8 +23,8 @@ import (
 	"reflect"
 	"testing"
 
-	"c2FmZQ/internal/crypto"
-	"c2FmZQ/internal/secure"
+	"github.com/c2FmZQ/storage"
+	"github.com/c2FmZQ/storage/crypto"
 )
 
 func TestFindFilesToImport(t *testing.T) {
@@ -74,7 +74,7 @@ func newClient(dir string) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	storage := secure.NewStorage(dir, masterKey)
+	storage := storage.New(dir, masterKey)
 	c, err := Create(masterKey, storage)
 	if err != nil {
 		return nil, err

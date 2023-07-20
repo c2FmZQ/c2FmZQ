@@ -36,12 +36,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/c2FmZQ/storage"
+	"github.com/c2FmZQ/storage/crypto"
 	"github.com/hashicorp/golang-lru/simplelru"
 	"github.com/prometheus/client_golang/prometheus"
 
-	"c2FmZQ/internal/crypto"
 	"c2FmZQ/internal/log"
-	"c2FmZQ/internal/secure"
 	"c2FmZQ/internal/stingle"
 	"c2FmZQ/internal/webpush"
 )
@@ -78,9 +78,16 @@ func New(dir string, passphrase []byte) *Database {
 		if _, err := os.Stat(filepath.Join(dir, "metadata", "users.dat")); err == nil {
 			log.Fatal("Passphrase is set, but metadata/users.dat exists.")
 		}
+		opts := []crypto.Option{
+			crypto.WithAlgo(crypto.PickFastest),
+			crypto.WithLogger(log.DefaultLogger()),
+		}
+		if log.Level >= log.DebugLevel {
+			opts = append(opts, crypto.WithStrictWipe(true))
+		}
 		var err error
-		if db.masterKey, err = crypto.ReadMasterKey(passphrase, mkFile); errors.Is(err, os.ErrNotExist) {
-			if db.masterKey, err = crypto.CreateMasterKey(crypto.PickFastest); err != nil {
+		if db.masterKey, err = crypto.ReadMasterKey(passphrase, mkFile, opts...); errors.Is(err, os.ErrNotExist) {
+			if db.masterKey, err = crypto.CreateMasterKey(opts...); err != nil {
 				log.Fatal("Failed to create master key")
 			}
 			err = db.masterKey.Save(passphrase, mkFile)
@@ -88,12 +95,12 @@ func New(dir string, passphrase []byte) *Database {
 		if err != nil {
 			log.Fatalf("Failed to decrypt master key: %v", err)
 		}
-		db.storage = secure.NewStorage(dir, db.masterKey)
+		db.storage = storage.New(dir, db.masterKey)
 	} else {
 		if _, err := os.Stat(mkFile); err == nil {
 			log.Fatal("Passphrase is empty, but master.key exists.")
 		}
-		db.storage = secure.NewStorage(dir, nil)
+		db.storage = storage.New(dir, nil)
 	}
 
 	if _, err := os.Stat(filepath.Join(dir, "metadata")); err == nil {
@@ -125,7 +132,7 @@ func New(dir string, passphrase []byte) *Database {
 type Database struct {
 	dir       string
 	masterKey crypto.MasterKey
-	storage   *secure.Storage
+	storage   *storage.Storage
 
 	fileSetCache      *simplelru.LRU
 	fileSetCacheSize  int

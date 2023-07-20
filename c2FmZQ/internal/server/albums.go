@@ -30,20 +30,20 @@ import (
 // new album.
 //
 // Arguments:
-//  - user: The authenticated user.
-//  - req: The http request.
+//   - user: The authenticated user.
+//   - req: The http request.
 //
 // Form arguments
-//  - params: The encrypted parameters
-//     - albumId: The ID of the album.
-//     - dateCreated: A timestamp in milliseconds.
-//     - dateModified: A timestamp in milliseconds.
-//     - encPrivateKey: The encrypted private key for the album.
-//     - metadata: The encrypted metadata of the album, e.g. it's name.
-//     - publicKey: The public key of the album.
+//   - params: The encrypted parameters
+//   - albumId: The ID of the album.
+//   - dateCreated: A timestamp in milliseconds.
+//   - dateModified: A timestamp in milliseconds.
+//   - encPrivateKey: The encrypted private key for the album.
+//   - metadata: The encrypted metadata of the album, e.g. it's name.
+//   - publicKey: The public key of the album.
 //
 // Returns:
-//  - stingle.Response(ok)
+//   - stingle.Response(ok)
 func (s *Server) handleAddAlbum(user database.User, req *http.Request) *stingle.Response {
 	params, err := s.decodeParams(req.PostFormValue("params"), user)
 	if err != nil {
@@ -69,15 +69,15 @@ func (s *Server) handleAddAlbum(user database.User, req *http.Request) *stingle.
 // delete an album.
 //
 // Arguments:
-//  - user: The authenticated user.
-//  - req: The http request.
+//   - user: The authenticated user.
+//   - req: The http request.
 //
 // Form arguments
-//  - params: The encrypted parameters
-//     - albumId: The ID of the album.
+//   - params: The encrypted parameters
+//   - albumId: The ID of the album.
 //
 // Returns:
-//  - stingle.Response(ok)
+//   - stingle.Response(ok)
 func (s *Server) handleDeleteAlbum(user database.User, req *http.Request) *stingle.Response {
 	params, err := s.decodeParams(req.PostFormValue("params"), user)
 	if err != nil {
@@ -105,16 +105,16 @@ func (s *Server) handleDeleteAlbum(user database.User, req *http.Request) *sting
 // change the album cover.
 //
 // Arguments:
-//  - user: The authenticated user.
-//  - req: The http request.
+//   - user: The authenticated user.
+//   - req: The http request.
 //
 // Form arguments
-//  - params: The encrypted parameters
-//     - albumId: The ID of the album.
-//     - cover: The filename to use as cover.
+//   - params: The encrypted parameters
+//   - albumId: The ID of the album.
+//   - cover: The filename to use as cover.
 //
 // Returns:
-//  - stingle.Response(ok)
+//   - stingle.Response(ok)
 func (s *Server) handleChangeAlbumCover(user database.User, req *http.Request) *stingle.Response {
 	params, err := s.decodeParams(req.PostFormValue("params"), user)
 	if err != nil {
@@ -144,16 +144,16 @@ func (s *Server) handleChangeAlbumCover(user database.User, req *http.Request) *
 // rename an album.
 //
 // Arguments:
-//  - user: The authenticated user.
-//  - req: The http request.
+//   - user: The authenticated user.
+//   - req: The http request.
 //
 // Form arguments
-//  - params: The encrypted parameters
-//     - albumId: The ID of the album.
-//     - metadata: The encrypted metadata of the album.
+//   - params: The encrypted parameters
+//   - albumId: The ID of the album.
+//   - metadata: The encrypted metadata of the album.
 //
 // Returns:
-//  - stingle.Response(ok)
+//   - stingle.Response(ok)
 func (s *Server) handleRenameAlbum(user database.User, req *http.Request) *stingle.Response {
 	params, err := s.decodeParams(req.PostFormValue("params"), user)
 	if err != nil {
@@ -183,16 +183,16 @@ func (s *Server) handleRenameAlbum(user database.User, req *http.Request) *sting
 // get the contact information of another user.
 //
 // Arguments:
-//  - user: The authenticated user.
-//  - req: The http request.
+//   - user: The authenticated user.
+//   - req: The http request.
 //
 // Form arguments
-//  - params: The encrypted parameters
-//     - email: The email of the contact.
+//   - params: The encrypted parameters
+//   - email: The email of the contact.
 //
 // Returns:
-//  - stingle.Response(ok).
-//      Part(contact, contact object)
+//   - stingle.Response(ok).
+//     Part(contact, contact object)
 func (s *Server) handleGetContact(user database.User, req *http.Request) *stingle.Response {
 	if user.NeedApproval {
 		return stingle.ResponseNOK().
@@ -223,17 +223,17 @@ func (s *Server) parseAlbumJSON(b []byte) (*stingle.Album, error) {
 // album with some contacts.
 //
 // Arguments:
-//  - user: The authenticated user.
-//  - req: The http request.
+//   - user: The authenticated user.
+//   - req: The http request.
 //
 // Form arguments
-//  - params: The encrypted parameters
-//     - album: A JSON-encoded album object.
-//     - sharingKeys: A JSON-encoded map of UserID:SharingKey. The SharingKey is
-//                    the encPrivateKey to share with each member.
+//   - params: The encrypted parameters
+//   - album: A JSON-encoded album object.
+//   - sharingKeys: A JSON-encoded map of UserID:SharingKey. The SharingKey is
+//     the encPrivateKey to share with each member.
 //
 // Returns:
-//  - stingle.Response(ok).
+//   - stingle.Response(ok).
 func (s *Server) handleShare(user database.User, req *http.Request) *stingle.Response {
 	if user.NeedApproval {
 		return stingle.ResponseNOK().
@@ -276,15 +276,15 @@ func (s *Server) handleShare(user database.User, req *http.Request) *stingle.Res
 // change the album permissions.
 //
 // Arguments:
-//  - user: The authenticated user.
-//  - req: The http request.
+//   - user: The authenticated user.
+//   - req: The http request.
 //
 // Form arguments
-//  - params: The encrypted parameters
-//     - album: A JSON-encoded album object.
+//   - params: The encrypted parameters
+//   - album: A JSON-encoded album object.
 //
 // Returns:
-//  - stingle.Response(ok)
+//   - stingle.Response(ok)
 func (s *Server) handleEditPerms(user database.User, req *http.Request) *stingle.Response {
 	params, err := s.decodeParams(req.PostFormValue("params"), user)
 	if err != nil {
@@ -317,16 +317,16 @@ func (s *Server) handleEditPerms(user database.User, req *http.Request) *stingle
 // is used to remove a member from the album.
 //
 // Arguments:
-//  - user: The authenticated user.
-//  - req: The http request.
+//   - user: The authenticated user.
+//   - req: The http request.
 //
 // Form arguments
-//  - params: The encrypted parameters
-//     - album: A JSON-encoded album object.
-//     - memberUserId: The user ID to remove.
+//   - params: The encrypted parameters
+//   - album: A JSON-encoded album object.
+//   - memberUserId: The user ID to remove.
 //
 // Returns:
-//  - stingle.Response(ok)
+//   - stingle.Response(ok)
 func (s *Server) handleRemoveAlbumMember(user database.User, req *http.Request) *stingle.Response {
 	params, err := s.decodeParams(req.PostFormValue("params"), user)
 	if err != nil {
@@ -360,15 +360,15 @@ func (s *Server) handleRemoveAlbumMember(user database.User, req *http.Request) 
 // stop sharing an album.
 //
 // Arguments:
-//  - user: The authenticated user.
-//  - req: The http request.
+//   - user: The authenticated user.
+//   - req: The http request.
 //
 // Form arguments
-//  - params: The encrypted parameters
-//     - albumId: The ID of the album to stop sharing.
+//   - params: The encrypted parameters
+//   - albumId: The ID of the album to stop sharing.
 //
 // Returns:
-//  - stingle.Response(ok)
+//   - stingle.Response(ok)
 func (s *Server) handleUnshareAlbum(user database.User, req *http.Request) *stingle.Response {
 	params, err := s.decodeParams(req.PostFormValue("params"), user)
 	if err != nil {
@@ -398,15 +398,15 @@ func (s *Server) handleUnshareAlbum(user database.User, req *http.Request) *stin
 // remove oneself from an album that was shared.
 //
 // Arguments:
-//  - user: The authenticated user.
-//  - req: The http request.
+//   - user: The authenticated user.
+//   - req: The http request.
 //
 // Form arguments
-//  - params: The encrypted parameters
-//     - albumId: The ID of the album to leave.
+//   - params: The encrypted parameters
+//   - albumId: The ID of the album to leave.
 //
 // Returns:
-//  - stingle.Response(ok)
+//   - stingle.Response(ok)
 func (s *Server) handleLeaveAlbum(user database.User, req *http.Request) *stingle.Response {
 	params, err := s.decodeParams(req.PostFormValue("params"), user)
 	if err != nil {

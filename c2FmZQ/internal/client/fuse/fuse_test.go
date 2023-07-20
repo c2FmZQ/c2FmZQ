@@ -33,13 +33,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/c2FmZQ/storage"
+	"github.com/c2FmZQ/storage/crypto"
 	"github.com/go-test/deep"
 
 	"c2FmZQ/internal/client"
 	"c2FmZQ/internal/client/fuse"
-	"c2FmZQ/internal/crypto"
 	"c2FmZQ/internal/log"
-	"c2FmZQ/internal/secure"
 )
 
 func TestFuse(t *testing.T) {
@@ -212,7 +212,7 @@ func newClient(dir string) (*client.Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	storage := secure.NewStorage(dir, masterKey)
+	storage := storage.New(dir, masterKey)
 	c, err := client.Create(masterKey, storage)
 	if err != nil {
 		return nil, err

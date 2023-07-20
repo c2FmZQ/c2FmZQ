@@ -32,15 +32,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/c2FmZQ/storage"
+	"github.com/c2FmZQ/storage/crypto"
 	"github.com/tebeka/selenium"
 	"github.com/tebeka/selenium/chrome"
 	slog "github.com/tebeka/selenium/log"
 
 	"c2FmZQ/internal/client"
-	"c2FmZQ/internal/crypto"
 	"c2FmZQ/internal/database"
 	"c2FmZQ/internal/log"
-	"c2FmZQ/internal/secure"
 	"c2FmZQ/internal/server"
 )
 
@@ -84,7 +84,7 @@ func newClient(t *testing.T) *client.Client {
 	if err != nil {
 		t.Fatalf("crypto.CreateAESMasterKeyForTest: %v", err)
 	}
-	storage := secure.NewStorage(dir, masterKey)
+	storage := storage.New(dir, masterKey)
 	c, err := client.Create(masterKey, storage)
 	if err != nil {
 		t.Fatalf("client.Create: %v", err)

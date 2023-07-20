@@ -32,10 +32,11 @@ import (
 	"strings"
 	"time"
 
-	"c2FmZQ/internal/autocertcache"
-	"c2FmZQ/internal/crypto"
+	"github.com/c2FmZQ/storage"
+	"github.com/c2FmZQ/storage/autocertcache"
+	"github.com/c2FmZQ/storage/crypto"
+
 	"c2FmZQ/internal/log"
-	"c2FmZQ/internal/secure"
 	"c2FmZQ/internal/stingle"
 	"c2FmZQ/internal/stingle/token"
 )
@@ -57,7 +58,7 @@ var (
 )
 
 // Create creates a new client configuration, if one doesn't exist already.
-func Create(m crypto.MasterKey, s *secure.Storage) (*Client, error) {
+func Create(m crypto.MasterKey, s *storage.Storage) (*Client, error) {
 	var c Client
 	c.hc = &http.Client{}
 	c.masterKey = m
@@ -77,7 +78,7 @@ func Create(m crypto.MasterKey, s *secure.Storage) (*Client, error) {
 }
 
 // Load loads the existing client configuration.
-func Load(m crypto.MasterKey, s *secure.Storage) (*Client, error) {
+func Load(m crypto.MasterKey, s *storage.Storage) (*Client, error) {
 	var c Client
 	c.masterKey = m
 	c.storage = s
@@ -103,7 +104,7 @@ type Client struct {
 	hc *http.Client
 
 	masterKey crypto.MasterKey
-	storage   *secure.Storage
+	storage   *storage.Storage
 	writer    io.Writer
 	prompt    func(msg string) (string, error)
 }

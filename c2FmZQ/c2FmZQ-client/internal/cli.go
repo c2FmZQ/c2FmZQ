@@ -30,15 +30,16 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/c2FmZQ/storage"
+	"github.com/c2FmZQ/storage/crypto"
 	"github.com/mattn/go-shellwords" // shellwords
 	"github.com/urfave/cli/v2"       // cli
 	"golang.org/x/term"
 
 	"c2FmZQ/internal/client"
 	"c2FmZQ/internal/client/web"
-	"c2FmZQ/internal/crypto"
 	"c2FmZQ/internal/log"
-	"c2FmZQ/internal/secure"
+	"c2FmZQ/internal/pp"
 	"c2FmZQ/licenses"
 )
 
@@ -539,15 +540,23 @@ func (a *App) Run(args []string) error {
 func (a *App) init(ctx *cli.Context, update bool) error {
 	if a.client == nil {
 		log.Level = a.flagLogLevel
-		pp, err := crypto.Passphrase(a.flagPassphraseCmd, a.flagPassphraseFile, a.flagPassphrase)
+		pp, err := pp.Passphrase(a.flagPassphraseCmd, a.flagPassphraseFile, a.flagPassphrase)
 		if err != nil {
 			return err
 		}
 
+		opts := []crypto.Option{
+			crypto.WithAlgo(crypto.PickFastest),
+			crypto.WithLogger(log.DefaultLogger()),
+		}
+		if log.Level >= log.DebugLevel {
+			opts = append(opts, crypto.WithStrictWipe(true))
+		}
+
 		mkFile := filepath.Join(a.flagDataDir, "master.key")
-		masterKey, err := crypto.ReadMasterKey(pp, mkFile)
+		masterKey, err := crypto.ReadMasterKey(pp, mkFile, opts...)
 		if errors.Is(err, os.ErrNotExist) {
-			if masterKey, err = crypto.CreateMasterKey(crypto.PickFastest); err != nil {
+			if masterKey, err = crypto.CreateMasterKey(opts...); err != nil {
 				log.Fatal("Failed to create master key")
 			}
 			err = masterKey.Save(pp, mkFile)
@@ -555,7 +564,7 @@ func (a *App) init(ctx *cli.Context, update bool) error {
 		if err != nil {
 			log.Fatalf("Failed to decrypt master key: %v", err)
 		}
-		storage := secure.NewStorage(a.flagDataDir, masterKey)
+		storage := storage.New(a.flagDataDir, masterKey)
 
 		c, err := client.Load(masterKey, storage)
 		if err != nil {
