@@ -17,7 +17,7 @@ services:
 
   devtest:
     container_name: "devtest"
-    image: "golang:1.20.5-alpine3.18"
+    image: "golang:1.20.7-alpine3.18"
     #tty: true
     #stdin_open: true
     user: "${USERID:-1000}"
