@@ -103,7 +103,10 @@ class ServiceWorker {
 
   async #initApp(storeKey, storeName, capabilities, reset) {
     const p = new Promise(async (resolve, reject) => {
-      const dbList = await self.indexedDB.databases().then(list => list.filter(item => item.name !== 'notifications').map(item => item.name));
+      let dbList = [storeName];
+      if ('databases' in self.indexedDB) {
+        dbList = await self.indexedDB.databases().then(list => list.filter(item => item.name !== 'notifications').map(item => item.name));
+      }
       console.log(`SW storeName ${storeName} ${JSON.stringify(dbList)}`);
       try {
         if (!reset && dbList.length && !dbList.includes(storeName)) {
