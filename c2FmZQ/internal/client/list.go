@@ -32,6 +32,7 @@ import (
 
 	"github.com/rwcarlsen/goexif/exif"
 
+	"c2FmZQ/internal/log"
 	"c2FmZQ/internal/stingle"
 )
 
@@ -337,12 +338,14 @@ func (c *Client) glob(pattern string, opt GlobOptions) ([]ListItem, error) {
 		local := al.RemoteAlbums[albumID] == nil
 		ask, err := c.SKForAlbum(album)
 		if err != nil {
-			return nil, err
+			log.Errorf("Unable to decrypt the secret key for %s: %v", albumID, err)
+			continue
 		}
 		md, err := stingle.DecryptAlbumMetadata(album.Metadata, ask)
 		ask.Wipe()
 		if err != nil {
-			return nil, err
+			log.Errorf("Unable to decrypt the metadata for %s: %v", albumID, err)
+			md = &stingle.AlbumMetadata{Name: "###ERR###"}
 		}
 		name := sanitize(md.Name)
 		if album.IsShared == "1" && album.IsOwner != "1" {
@@ -362,6 +365,7 @@ func (c *Client) globStep(parent string, g *glob, n *node, li *[]ListItem) error
 	if n.dir != nil {
 		var fs FileSet
 		if err := c.storage.ReadDataFile(c.fileHash(n.dir.fileSet), &fs); err != nil {
+			log.Errorf("ReadDataFile: %v", err)
 			return err
 		}
 		var files []string
@@ -374,11 +378,13 @@ func (c *Client) globStep(parent string, g *glob, n *node, li *[]ListItem) error
 			local := fs.RemoteFiles[f.File] == nil
 			sk, err := c.SKForAlbum(n.dir.album)
 			if err != nil {
+				log.Errorf("SKForAlbum: %v", err)
 				return err
 			}
 			hdrs, err := stingle.DecryptBase64Headers(f.Headers, sk)
 			sk.Wipe()
 			if err != nil {
+				log.Errorf("DecryptBase64Headers: %v", err)
 				return err
 			}
 			fn := sanitize(string(hdrs[0].Filename))
