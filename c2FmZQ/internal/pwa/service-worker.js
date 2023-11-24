@@ -131,11 +131,11 @@ class ServiceWorker {
       }
       this.#state.appInitialized = true;
       dbList.filter(item => item !== storeName).forEach(name => {
-        console.log(`SW Delete database ${name}`);
+        console.log('SW Delete database', name);
         try {
           self.indexedDB.deleteDatabase(name);
         } catch (err) {
-          console.log(`SW deleteDatabase(${name}):`, err);
+          console.log('SW deleteDatabase', name, err);
         }
       });
       const app = new c2FmZQClient({
