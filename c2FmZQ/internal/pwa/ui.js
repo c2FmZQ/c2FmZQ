@@ -2764,10 +2764,11 @@ class UI {
         reader.readAsDataURL(file);
       });
     } else if (file.type.startsWith('video/')) {
-      return new Promise(resolve => {
+      return new Promise((resolve, reject) => {
         const video = document.createElement('video');
         video.muted = true;
         video.src = URL.createObjectURL(file);
+        video.addEventListener('error', reject);
         video.addEventListener('loadeddata', () => {
           setTimeout(() => {
             video.currentTime = Math.floor(Math.min(video.duration/2, 5));
