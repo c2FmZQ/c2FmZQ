@@ -379,13 +379,13 @@ func (c *Client) globStep(parent string, g *glob, n *node, li *[]ListItem) error
 			sk, err := c.SKForAlbum(n.dir.album)
 			if err != nil {
 				log.Errorf("SKForAlbum: %v", err)
-				return err
+				continue
 			}
 			hdrs, err := stingle.DecryptBase64Headers(f.Headers, sk)
 			sk.Wipe()
 			if err != nil {
 				log.Errorf("DecryptBase64Headers: %v", err)
-				return err
+				continue
 			}
 			fn := sanitize(string(hdrs[0].Filename))
 			n.insertFile(fn, hdrs[0].DataSize, f, n.dir.fileSet, n.dir.set, n.dir.album, local)
