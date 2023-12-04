@@ -270,7 +270,6 @@ func (c *Client) sendRequest(uri string, form url.Values, server string) (*sting
 	url := strings.TrimSuffix(server, "/") + uri
 
 	log.Debugf("SEND POST %s", url)
-	log.Debugf(" %v", form)
 
 	req, err := http.NewRequest("POST", url, strings.NewReader(form.Encode()))
 	if err != nil {
@@ -331,7 +330,6 @@ func (c *Client) download(file, set, thumb string) (io.ReadCloser, error) {
 	url := strings.TrimSuffix(c.Account.ServerBaseURL, "/") + "/v2/sync/download"
 
 	log.Debugf("SEND POST %v", url)
-	log.Debugf(" %v", form)
 
 	req, err := http.NewRequest("POST", url, strings.NewReader(form.Encode()))
 	if err != nil {
