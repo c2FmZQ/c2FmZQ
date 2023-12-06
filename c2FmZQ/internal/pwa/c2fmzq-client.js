@@ -1333,7 +1333,8 @@ class c2FmZQClient {
     if (chunkSize < 0 || chunkSize > 10485760) {
       throw new Error('invalid chunk size');
     }
-    const dataSize = hdr[5]<<56 | hdr[6]<<48 | hdr[7]<<40 | hdr[8]<<32 | hdr[9]<<24 | hdr[10]<<16 | hdr[11]<<8 | hdr[12];
+    // We can't use the << operator because it returns a 32-bit value.
+    const dataSize = ((((((hdr[5]*256 + hdr[6])*256 + hdr[7])*256 + hdr[8])*256 + hdr[9])*256 + hdr[10])*256 + hdr[11])*256 + hdr[12];
     if (dataSize < 0) {
       throw new Error('invalid data size');
     }
