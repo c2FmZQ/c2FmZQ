@@ -48,7 +48,7 @@ func (s *Server) receiveUpload(dir string, req *http.Request) (*upload, error) {
 	var upload upload
 
 	for {
-		s.setDeadline(ctx, time.Now().Add(time.Minute))
+		s.setDeadline(ctx, time.Now().Add(10*time.Minute))
 		p, err := mr.NextPart()
 		if err == io.EOF {
 			break

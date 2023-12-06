@@ -381,12 +381,12 @@ func (s *Server) copyWithCtx(ctx context.Context, dst io.Writer, src io.Reader) 
 			return
 		default:
 		}
-		s.setDeadline(ctx, time.Now().Add(time.Minute))
+		s.setDeadline(ctx, time.Now().Add(10*time.Minute))
 		t := time.Now()
 		nr, err := src.Read(buf)
 		readDur := time.Since(t)
 		if nr > 0 {
-			s.setDeadline(ctx, time.Now().Add(time.Minute))
+			s.setDeadline(ctx, time.Now().Add(10*time.Minute))
 			nw, err := dst.Write(buf[:nr])
 			n += int64(nw)
 			if nw != nr {
