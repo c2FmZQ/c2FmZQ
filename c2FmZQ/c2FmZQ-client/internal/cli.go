@@ -406,6 +406,13 @@ func New() *App {
 			},
 		},
 		&cli.Command{
+			Name:      "fix",
+			Usage:     "Delete files with broken headers.",
+			ArgsUsage: `<directory>`,
+			Action:    app.fixFiles,
+			Category:  "Misc",
+		},
+		&cli.Command{
 			Name:      "share",
 			Usage:     "Share a directory (album) with other people.",
 			ArgsUsage: `"<glob>" <email> ...`,
@@ -1139,6 +1146,19 @@ func (a *App) importFiles(ctx *cli.Context) error {
 	dir := args[len(args)-1]
 	_, err := a.client.ImportFiles(patterns, dir, ctx.Bool("recursive"))
 	return err
+}
+
+func (a *App) fixFiles(ctx *cli.Context) error {
+	if err := a.init(ctx, true); err != nil {
+		return err
+	}
+	args := ctx.Args().Slice()
+	if len(args) != 1 {
+		cli.ShowSubcommandHelp(ctx)
+		return nil
+	}
+	dir := args[0]
+	return a.client.FixFiles(dir)
 }
 
 func (a *App) shareAlbum(ctx *cli.Context) error {
