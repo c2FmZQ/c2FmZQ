@@ -46,12 +46,11 @@ import (
 )
 
 var (
-	flagDatabase        string
-	flagLogLevel        int
-	flagEncryptMetadata bool
-	flagPassphraseFile  string
-	flagPassphraseCmd   string
-	flagPassphrase      string
+	flagDatabase       string
+	flagLogLevel       int
+	flagPassphraseFile string
+	flagPassphraseCmd  string
+	flagPassphrase     string
 )
 
 func main() {
@@ -80,12 +79,6 @@ func main() {
 				DefaultText: "2 (info)",
 				Usage:       "The level of logging verbosity: 1:Error 2:Info 3:Debug",
 				Destination: &flagLogLevel,
-			},
-			&cli.BoolFlag{
-				Name:        "encrypt-metadata",
-				Value:       true,
-				Usage:       "Whether the metadata is encrypted.",
-				Destination: &flagEncryptMetadata,
 			},
 			&cli.StringFlag{
 				Name:        "passphrase-command",
@@ -343,12 +336,9 @@ func main() {
 
 func initDB(c *cli.Context) (*database.Database, error) {
 	log.Level = flagLogLevel
-	var pass []byte
-	if flagEncryptMetadata {
-		var err error
-		if pass, err = pp.Passphrase(flagPassphraseCmd, flagPassphraseFile, flagPassphrase); err != nil {
-			return nil, err
-		}
+	pass, err := pp.Passphrase(flagPassphraseCmd, flagPassphraseFile, flagPassphrase)
+	if err != nil {
+		return nil, err
 	}
 	return database.New(flagDatabase, pass), nil
 }
@@ -1024,10 +1014,6 @@ func changeUserDecoy(c *cli.Context) error {
 
 func changePassphrase(c *cli.Context) error {
 	log.Level = flagLogLevel
-
-	if !flagEncryptMetadata {
-		return errors.New("-encrypt-metadata must be true")
-	}
 	mkFile := filepath.Join(flagDatabase, "master.key")
 
 	oldPass, err := pp.Passphrase(flagPassphraseCmd, flagPassphraseFile, flagPassphrase)

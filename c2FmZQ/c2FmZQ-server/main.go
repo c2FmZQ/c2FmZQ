@@ -51,7 +51,6 @@ var (
 	flagAllowNewAccounts        bool
 	flagsAutoApproveNewAccounts bool
 	flagLogLevel                int
-	flagEncryptMetadata         bool
 	flagPassphraseFile          string
 	flagPassphraseCmd           string
 	flagPassphrase              string
@@ -163,13 +162,6 @@ func main() {
 				EnvVars:     []string{"C2FMZQ_VERBOSE"},
 				Destination: &flagLogLevel,
 			},
-			&cli.BoolFlag{
-				Name:        "encrypt-metadata",
-				Value:       true,
-				Usage:       "Encrypt the server metadata (strongly recommended).",
-				EnvVars:     []string{"C2FMZQ_ENCRYPT_METADATA"},
-				Destination: &flagEncryptMetadata,
-			},
 			&cli.StringFlag{
 				Name:        "passphrase-command",
 				Value:       "",
@@ -237,15 +229,9 @@ func startServer(c *cli.Context) error {
 	if (flagTLSCert == "") != (flagTLSKey == "") {
 		log.Fatal("--tlscert and --tlskey must either both be set or unset.")
 	}
-	var pass []byte
-	if flagEncryptMetadata {
-		var err error
-		if pass, err = pp.Passphrase(flagPassphraseCmd, flagPassphraseFile, flagPassphrase); err != nil {
-			return err
-		}
-	}
-	if pass == nil {
-		log.Info("WARNING: Metadata encryption is DISABLED")
+	pass, err := pp.Passphrase(flagPassphraseCmd, flagPassphraseFile, flagPassphrase)
+	if err != nil {
+		return err
 	}
 	db := database.New(flagDatabase, pass)
 
