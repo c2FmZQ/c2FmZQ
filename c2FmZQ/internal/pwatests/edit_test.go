@@ -66,8 +66,8 @@ func TestEdit(t *testing.T) {
 	wd.rightClick(".thumbdiv")
 	wd.click("#context-menu-edit")
 	wd.click(".FIE_topbar-save-button")
-	wd.sendKeys(".FIE_save-file-name-input>input", "blah")
-	wd.click(".SfxModal-root button[color=primary]")
+	wd.sendKeys(".FIE_save-file-name-input>div>input", "blah")
+	wd.click(".FIE_save-modal button[color=primary]")
 
 	wd.waitPopupMessage("Upload: 1/1 [100%]")
 
