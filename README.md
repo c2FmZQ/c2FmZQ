@@ -208,7 +208,6 @@ GLOBAL OPTIONS:
    --allow-new-accounts             Allow new account registrations. (default: true) [$C2FMZQ_ALLOW_NEW_ACCOUNTS]
    --auto-approve-new-accounts      Newly created accounts are auto-approved. (default: true) [$C2FMZQ_AUTO_APPROVE_NEW_ACCOUNTS]
    --verbose value, -v value        The level of logging verbosity: 1:Error 2:Info 3:Debug (default: 2 (info)) [$C2FMZQ_VERBOSE]
-   --encrypt-metadata               Encrypt the server metadata (strongly recommended). (default: true) [$C2FMZQ_ENCRYPT_METADATA]
    --passphrase-command COMMAND     Read the database passphrase from the standard output of COMMAND. [$C2FMZQ_PASSPHRASE_CMD]
    --passphrase-file FILE           Read the database passphrase from FILE. [$C2FMZQ_PASSPHRASE_FILE]
    --passphrase value               Use value as database passphrase. [$C2FMZQ_PASSPHRASE]
