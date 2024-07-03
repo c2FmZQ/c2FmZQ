@@ -1,4 +1,4 @@
-FROM golang:1.22.3-alpine3.19 AS build
+FROM golang:1.22.5-alpine3.20 AS build
 MAINTAINER info@c2fmzq.org
 RUN apk update && apk upgrade
 
