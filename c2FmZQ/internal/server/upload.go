@@ -18,6 +18,7 @@
 package server
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -50,7 +51,7 @@ func (s *Server) receiveUpload(dir string, req *http.Request) (*upload, error) {
 	for {
 		s.setDeadline(ctx, time.Now().Add(10*time.Minute))
 		p, err := mr.NextPart()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
