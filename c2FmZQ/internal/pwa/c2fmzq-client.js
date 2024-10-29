@@ -864,6 +864,9 @@ class c2FmZQClient {
         }
 
         /* deletes */
+        if (resp.parts.deletes === null) {
+          resp.parts.deletes = [];
+        }
         for (let d of resp.parts.deletes) {
           try {
             let f;
