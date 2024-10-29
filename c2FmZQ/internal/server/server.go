@@ -36,6 +36,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"golang.org/x/crypto/acme/autocert"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
 	"golang.org/x/time/rate"
 
 	"c2FmZQ/internal/database"
@@ -256,7 +258,9 @@ func (s *Server) httpServer() *http.Server {
 
 // Run runs the HTTP server on the configured address.
 func (s *Server) Run() error {
-	return s.httpServer().ListenAndServe()
+	srv := s.httpServer()
+	srv.Handler = h2c.NewHandler(srv.Handler, &http2.Server{})
+	return srv.ListenAndServe()
 }
 
 // RunWithTLS runs the HTTP server with TLS.
