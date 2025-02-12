@@ -1,4 +1,4 @@
-FROM golang:1.24rc2-alpine3.20 AS build
+FROM golang:1.24.0-alpine3.21 AS build
 MAINTAINER info@c2fmzq.org
 RUN apk update && apk upgrade
 
@@ -12,7 +12,7 @@ RUN CGO_ENABLED=0 go test ./internal/server/...
 RUN go install ./c2FmZQ-server
 RUN go install ./c2FmZQ-server/inspect
 
-FROM alpine:3.19
+FROM alpine:3.21
 RUN apk update && apk upgrade
 RUN apk add ca-certificates
 RUN mkdir -p /app/bin
