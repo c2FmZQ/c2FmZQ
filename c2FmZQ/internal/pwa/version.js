@@ -18,7 +18,7 @@
 
 'use strict';
 
-const VERSION = 'v0.4.28';
+const VERSION = 'v0.4.29';
 
 // Indicates that the PWA is only allowed to connect to the server from which
 // it was loaded. Set to false to allow cross-origin connections.
